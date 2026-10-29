@@ -706,6 +706,8 @@ function artArcTool(
 
 export interface NativeBondToolOptions {
   bondStyle?: NativeBondDisplayStyle;
+  /** The bond being drawn will be triple (the triple bond tool): grow it straight on, at 180°. */
+  growsTripleBond?: boolean;
 }
 
 export interface NativeFreeformBondGrowthOptions extends NativeBondToolOptions {
@@ -9299,7 +9301,8 @@ export function previewNativeMoleculeBondGrowth(
   molecule: MoleculeObject,
   point: PagePoint,
   pageWidth: number,
-  pageHeight: number
+  pageHeight: number,
+  options: Pick<NativeBondToolOptions, "growsTripleBond"> = {}
 ): NativeBondGrowthPreview | undefined {
   if (!isEditableNativeMoleculeGraph(molecule)) {
     return undefined;
@@ -9336,6 +9339,24 @@ export function previewNativeMoleculeBondGrowth(
     return undefined;
   }
 
+  const straight = extension.targetAtomId
+    ? undefined
+    : straightNativeGrowthDirection(molecule, extension.sourceAtomId, options.growsTripleBond === true);
+  if (straight) {
+    const source = molecule.atoms.find((atom) => atom.id === extension.sourceAtomId)!;
+    return {
+      atomId: extension.sourceAtomId,
+      direction: straight,
+      candidateDirections: [straight],
+      newAtomPoint: {
+        x: source.x + straight.x * drawingStyle.bondLengthPx,
+        y: source.y + straight.y * drawingStyle.bondLengthPx
+      },
+      distanceToPointer: extension.distanceToClick,
+      availableBonds: atomHit.availableBonds
+    };
+  }
+
   return {
     atomId: extension.sourceAtomId,
     targetAtomId: extension.targetAtomId,
@@ -9350,6 +9371,32 @@ export function previewNativeMoleculeBondGrowth(
     distanceToPointer: extension.distanceToClick,
     availableBonds: atomHit.availableBonds
   };
+}
+
+/**
+ * Triple bonds are linear: a bond grown from an atom that carries a triple bond, or a triple bond
+ * grown from an atom with one bond, continues straight on from that atom's one existing bond (180°)
+ * instead of zig-zagging. Undefined when the atom has no single existing bond to line up with.
+ */
+function straightNativeGrowthDirection(
+  molecule: MoleculeObject,
+  atomId: string,
+  growsTripleBond: boolean
+): PagePoint | undefined {
+  const bonds = molecule.bonds.filter((bond) => bond.fromAtomId === atomId || bond.toAtomId === atomId);
+  // A triple bond needs the atom's other bond to be single; past a double bond it would stay single.
+  const lines = bonds.length === 1 && (bonds[0]!.order === "triple" || (growsTripleBond && bonds[0]!.order === "single"));
+  if (!lines) {
+    return undefined;
+  }
+  const atom = molecule.atoms.find((candidate) => candidate.id === atomId);
+  const neighborId = bonds[0]!.fromAtomId === atomId ? bonds[0]!.toAtomId : bonds[0]!.fromAtomId;
+  const neighbor = molecule.atoms.find((candidate) => candidate.id === neighborId);
+  if (!atom || !neighbor) {
+    return undefined;
+  }
+  const length = Math.hypot(atom.x - neighbor.x, atom.y - neighbor.y);
+  return length > 0 ? { x: (atom.x - neighbor.x) / length, y: (atom.y - neighbor.y) / length } : undefined;
 }
 
 function nativeBondGrowthCandidateDirections(
@@ -18890,7 +18937,7 @@ function extendNativeCarbonChain(
   pageHeight: number,
   options: NativeBondToolOptions = {}
 ): MoleculeObject | undefined {
-  const preview = previewNativeMoleculeBondGrowth(molecule, point, pageWidth, pageHeight);
+  const preview = previewNativeMoleculeBondGrowth(molecule, point, pageWidth, pageHeight, options);
   if (!preview) {
     return undefined;
   }

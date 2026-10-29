@@ -46,6 +46,40 @@ describe("double and triple bond tools", () => {
   });
 });
 
+describe("triple bonds are linear", () => {
+  function angleAt(mol: MoleculeObject, centreId: string, aId: string, bId: string): number {
+    const at = (id: string) => mol.atoms.find((atom) => atom.id === id)!;
+    const c = at(centreId), a = at(aId), b = at(bId);
+    const v1 = { x: a.x - c.x, y: a.y - c.y }, v2 = { x: b.x - c.x, y: b.y - c.y };
+    return Math.acos((v1.x * v2.x + v1.y * v2.y) / (Math.hypot(v1.x, v1.y) * Math.hypot(v2.x, v2.y))) * 180 / Math.PI;
+  }
+
+  it("draws a triple bond straight on from an atom's single bond", () => {
+    const empty = createPhase4Document("Alkyne");
+    const first = applySingleBondToolAtPoint(empty, { x: 200, y: 200 });
+    const [a, b] = molecule(first).atoms;
+    const grown = applySingleBondToolAtPoint(first, { x: b!.x, y: b!.y }, { growsTripleBond: true });
+    const triple = molecule(applyOrderToNewNativeBonds(first, grown, "triple"));
+    const added = triple.atoms.find((atom) => atom.id !== a!.id && atom.id !== b!.id)!;
+    expect(triple.bonds.find((bond) => bond.toAtomId === added.id || bond.fromAtomId === added.id)!.order).toBe("triple");
+    expect(angleAt(triple, b!.id, a!.id, added.id)).toBeCloseTo(180, 3);
+  });
+
+  it("continues straight through a triple-bonded atom when the next bond is grown", () => {
+    const empty = createPhase4Document("Alkyne");
+    const placed = applySingleBondToolAtPoint(empty, { x: 200, y: 200 });
+    const triple = applyOrderToNewNativeBonds(empty, placed, "triple");
+    const [a, b] = molecule(triple).atoms;
+    const grown = molecule(applySingleBondToolAtPoint(triple, { x: b!.x, y: b!.y }));
+    const added = grown.atoms.find((atom) => atom.id !== a!.id && atom.id !== b!.id)!;
+    expect(angleAt(grown, b!.id, a!.id, added.id)).toBeCloseTo(180, 3);
+    // A plain single bond still zig-zags.
+    const zigzag = molecule(applySingleBondToolAtPoint(placed, { x: b!.x, y: b!.y }));
+    const zigAdded = zigzag.atoms.find((atom) => atom.id !== a!.id && atom.id !== b!.id)!;
+    expect(angleAt(zigzag, b!.id, a!.id, zigAdded.id)).toBeLessThan(170);
+  });
+});
+
 describe("clicking a bond to raise its order", () => {
   it("centres the double bond when asked, even in a ring whose default is the inside", () => {
     const ring = insertNativeTemplateMolecule(createPhase4Document("Ring"), { x: 300, y: 300 }, "cyclohexane");

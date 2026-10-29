@@ -1624,7 +1624,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.29.13.50-opus";
+const CURRENT_BUILD_STAMP = "10.29.14.30-opus";
 /** Starts in the background for the document webview under the existing probe gate. */
 export function startMainWindowPerfProbe(): void {
   perfHook(() => startPerfProbe(CURRENT_BUILD_STAMP));
@@ -13470,7 +13470,7 @@ export function MainWindow({
   ) => {
     const nextDocument = withActiveBondToolOrder(
       sourceDocument,
-      applySingleBondToolAtPoint(sourceDocument, point, { bondStyle }),
+      applySingleBondToolAtPoint(sourceDocument, point, { bondStyle, growsTripleBond: activeBondToolOrderRef.current === "triple" }),
       activeBondToolOrderRef.current
     );
     const selected = getSelectedMolecule(nextDocument);
@@ -13537,7 +13537,10 @@ export function MainWindow({
             ? applyNativeArtLineToolDefaultAtPoint(startDocument, point, placement.commandId)
             : withActiveBondToolOrder(
               startDocument,
-              applySingleBondToolAtPoint(startDocument, point, { bondStyle: placement.bondStyle }),
+              applySingleBondToolAtPoint(startDocument, point, {
+                bondStyle: placement.bondStyle,
+                growsTripleBond: activeBondToolOrderRef.current === "triple"
+              }),
               activeBondToolOrderRef.current
             );
     const objectId = placementDocument.selection.objectIds[0];
@@ -13707,7 +13710,9 @@ export function MainWindow({
       .filter((object): object is MoleculeObject => object.type === "molecule")
       .map((object) => ({
         object,
-        preview: previewNativeMoleculeBondGrowth(object, point, page.width, page.height)
+        preview: previewNativeMoleculeBondGrowth(object, point, page.width, page.height, {
+          growsTripleBond: activeBondToolOrderRef.current === "triple"
+        })
       }))
       .filter((entry): entry is { object: MoleculeObject; preview: NonNullable<ReturnType<typeof previewNativeMoleculeBondGrowth>> } =>
         entry.preview !== undefined
@@ -17676,7 +17681,9 @@ export function MainWindow({
       }
 
       const page = document.pages[0];
-      const preview = previewNativeMoleculeBondGrowth(object, point, page.width, page.height);
+      const preview = previewNativeMoleculeBondGrowth(object, point, page.width, page.height, {
+        growsTripleBond: activeBondToolOrderRef.current === "triple"
+      });
       if (!preview) {
         applySingleBondDocumentAtPoint(selectDocumentObject(document, objectId), point, activeNativeBondDisplayStyle);
         return;
