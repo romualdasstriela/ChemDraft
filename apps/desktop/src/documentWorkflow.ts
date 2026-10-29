@@ -819,7 +819,7 @@ const freeformCustomLengthBreakawayDistance = nativeBondLength * 1.4;
 export const nativeSingleLetterElements = ["H", "B", "C", "N", "O", "F", "P", "S", "I"] as const;
 export type NativeSingleLetterElement = typeof nativeSingleLetterElements[number];
 /** Elements reachable by keyboard hotkey. The single letters type themselves in the ChemDraft
- *  scheme, where Shift+B→Br and Shift+S→Si as well; the two-letter symbols are reachable through
+ *  scheme, where Shift+B→Br, Shift+C→Cl and Shift+S→Si as well; the two-letter symbols are reachable through
  *  the ChemDraw-compatible scheme's hover hotkeys (b→Br, C/l→Cl, L→Li, S→Si) and through
  *  command-bound toolbar buttons. */
 export const nativeHotkeyElements = [...nativeSingleLetterElements, "Cl", "Br", "Li", "Si"] as const;

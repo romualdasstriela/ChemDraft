@@ -348,7 +348,9 @@ describe("hover label typing over a long chain (stress)", () => {
     const before = molecule();
     const atom = before.atoms[atomIndex]!;
     expect(await pointAt(atom)).toMatchObject({ kind: "atom", atomId: atom.id });
-    for (const key of label) await press(key);
+    // Labels start from the plain key: Shift+C is Cl, not the C of CF3.
+    await press(label[0]!.toLowerCase());
+    for (const key of label.slice(1)) await press(key);
     await press("Enter");
     expect(container.querySelector('[data-atom-label-editor="true"]')).toBeNull();
     const committed = molecule();
@@ -374,7 +376,8 @@ describe("hover label typing over a long chain (stress)", () => {
     await press("O");
     const atom = molecule().atoms[atomIndex]!;
     expect(await pointAt(atom)).toMatchObject({ kind: "atom", atomId: atom.id });
-    for (const key of label) await press(key);
+    await press(label[0]!.toLowerCase());
+    for (const key of label.slice(1)) await press(key);
     await press("Enter");
     const committed = molecule();
     expect(committed.atoms.some(candidate => candidate.element === label && candidate.labelLiteral)).toBe(true);

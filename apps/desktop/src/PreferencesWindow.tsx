@@ -40,7 +40,7 @@ const KEYBINDING_SCHEMES: RadioOption<KeybindingScheme>[] = [
   {
     value: "chemdraft",
     title: "ChemDraft",
-    description: "The native ChemDraft shortcuts. Recommended for new users. Hover an atom and press an element letter to relabel it; Shift+B gives Br and Shift+S gives Si."
+    description: "The native ChemDraft shortcuts. Recommended for new users. Hover an atom and press an element letter to relabel it; Shift+B gives Br, Shift+C gives Cl and Shift+S gives Si."
   },
   {
     value: "chemdraw",

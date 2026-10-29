@@ -297,7 +297,7 @@ describe.each(["macos", "windows"] as const)("ring label commits (%s)", platform
     expect(current().pages[0].objects[1]).toEqual(other);
     expect(priorStatus).toContain("inserted structure");
     await pointer("pointermove", source);
-    await key(label[0]!);
+    await key(label[0]!.toLowerCase()); // Shift+C would be Cl; labels start from the plain key.
     expect(molecule()).toEqual(before); // The instant key really is a no-op.
     for (const char of label.slice(1)) await key(char);
     await key("Enter");

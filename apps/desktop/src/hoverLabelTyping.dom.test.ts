@@ -133,7 +133,8 @@ describe("hover label typing", () => {
   it.each(["OMe", "OEt", "CF3", "NO2", "OBn", "CH3"])("types %s through the existing label editor without erasing", async (label) => {
     const before = molecule();
     await hover(0);
-    await press(label[0]!);
+    // Labels start from the lower-case key: Shift+C is Cl, not the C of CF3.
+    await press(label[0]!.toLowerCase());
     expect(molecule().atoms[0]!.element).toBe(label[0]);
     expect(editor()).toBeNull(); // Single-letter assignment is still immediate.
     await press(label[1]!);
@@ -303,7 +304,7 @@ describe("hover label typing", () => {
   it("keeps CF3 when the pointer drifts onto empty page right after the first letter", async () => {
     const before = molecule();
     await hover(0);
-    await press("C");
+    await press("c");
     await hoverPoint({ x: 40, y: 40 });
     expect(snapshot().hoveredNativeTarget).toBeUndefined();
     await press("F");
@@ -321,7 +322,7 @@ describe("hover label typing", () => {
 
   it("starts a new label on the neighbouring atom for a capital element letter typed right after the first letter", async () => {
     await hover(0);
-    await press("C");
+    await press("c");
     await hover(1);
     await press("F");
     expect(molecule().atoms[0]!.element).toBe("C");
@@ -412,7 +413,7 @@ describe("hover label typing", () => {
     expectIntact();
   });
 
-  it("gives boron and sulfur for b and s, bromine and silicon for Shift+B and Shift+S", async () => {
+  it("gives boron and sulfur for b and s; bromine, chlorine and silicon for Shift+B, Shift+C and Shift+S", async () => {
     await hover(0);
     await press("b");
     await hover(1);
@@ -421,7 +422,9 @@ describe("hover label typing", () => {
     await press("s");
     await hover(3);
     await press("S");
-    expect(molecule().atoms.slice(0, 4).map((atom) => atom.element)).toEqual(["B", "Br", "S", "Si"]);
+    await hover(4);
+    await press("C");
+    expect(molecule().atoms.slice(0, 5).map((atom) => atom.element)).toEqual(["B", "Br", "S", "Si", "Cl"]);
     expect(editor()).toBeNull();
     expectIntact();
   });

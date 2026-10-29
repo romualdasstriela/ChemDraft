@@ -1621,7 +1621,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.29.11.10-opus";
+const CURRENT_BUILD_STAMP = "10.29.12.00-opus";
 /** Starts in the background for the document webview under the existing probe gate. */
 export function startMainWindowPerfProbe(): void {
   perfHook(() => startPerfProbe(CURRENT_BUILD_STAMP));
@@ -22579,13 +22579,13 @@ export function hoveredNativeTargetShortcutCommand(
 }
 
 /** Shift picks the two-letter element that shares a single-letter element's key. */
-const CHEMDRAFT_SHIFTED_ELEMENT_KEYS: Readonly<Record<string, NativeHotkeyElement>> = { B: "Br", S: "Si" };
+const CHEMDRAFT_SHIFTED_ELEMENT_KEYS: Readonly<Record<string, NativeHotkeyElement>> = { B: "Br", C: "Cl", S: "Si" };
 
 /**
  * The element a ChemDraft-scheme hover key assigns to an atom. Element letters are case-blind
  * ("o" and "O" are both oxygen) except where Shift reaches a two-letter element: B = boron but
- * Shift+B = Br, S = sulfur but Shift+S = Si. A label that starts with B or S ("Bn", "SO3H") is
- * typed from the lower-case key.
+ * Shift+B = Br, C = carbon but Shift+C = Cl, S = sulfur but Shift+S = Si. A label that starts with
+ * B, C or S ("Bn", "CF3", "SO3H") is typed from the lower-case key.
  */
 export function chemDraftHoverElementForKey(key: string): NativeHotkeyElement | undefined {
   return Object.prototype.hasOwnProperty.call(CHEMDRAFT_SHIFTED_ELEMENT_KEYS, key)
