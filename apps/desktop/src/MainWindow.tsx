@@ -1624,7 +1624,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.29.13.10-opus";
+const CURRENT_BUILD_STAMP = "10.29.13.50-opus";
 /** Starts in the background for the document webview under the existing probe gate. */
 export function startMainWindowPerfProbe(): void {
   perfHook(() => startPerfProbe(CURRENT_BUILD_STAMP));
@@ -4193,15 +4193,16 @@ export function MainWindow({
   }, [assignHoveredNativeDeleteTarget, commitDocumentChange]);
 
   // Clicking a bond with a bond tool: the single bond tool steps its order (single → double →
-  // triple → single), the double and triple bond tools set theirs. A bond made double this way gets
-  // its second line centred; drag the line to move it to a side.
+  // triple → single), the double and triple bond tools set theirs. A bond made double this way puts
+  // its second line inside its ring, or centred off a ring; drag the line to move it.
   const cycleNativeBondOrder = useCallback((target: NativeBondOrderTarget) => {
     const currentDocument = documentRef.current;
     const selectedDocument = selectDocumentObject(currentDocument, target.objectId);
     const toolOrder = activeBondToolOrderRef.current;
+    const placement = { doubleBondSide: "ring-inside-else-center" } as const;
     const nextDocument = toolOrder
-      ? applyNativeMoleculeBondOrderValueTarget(selectedDocument, target, toolOrder, { doubleBondSide: "center" })
-      : applyNativeMoleculeBondOrderTarget(selectedDocument, target, { doubleBondSide: "center" });
+      ? applyNativeMoleculeBondOrderValueTarget(selectedDocument, target, toolOrder, placement)
+      : applyNativeMoleculeBondOrderTarget(selectedDocument, target, placement);
     if (nextDocument === selectedDocument) {
       setStatus(toolOrder ? `Cannot make that bond ${toolOrder}` : "Bond is already at its maximum allowed order");
       return;

@@ -146,7 +146,8 @@ import {
   mechanismArrowGeometry,
   nativeBondOrderResolution,
   nativeGroupLabelDisplay,
-  resolvePageAnchorPoint
+  resolvePageAnchorPoint,
+  ringInteriorDoubleBondSides
 } from "@chemdraft/layout-engine";
 import {
   extractRxnMolfileBlocks,
@@ -1423,8 +1424,8 @@ export function nativeBondOrderForToolCommand(commandId: string): Exclude<Native
 
 /**
  * Raise every single bond that `after` has and `before` did not to `order`, where valence allows,
- * with a double bond's second line centred. A bond whose atoms cannot take the extra order stays
- * single rather than producing an over-valent atom.
+ * with a double bond's second line inside its ring, or centred off a ring. A bond whose atoms cannot
+ * take the extra order stays single rather than producing an over-valent atom.
  */
 export function applyOrderToNewNativeBonds(
   before: ChemDraftDocument,
@@ -1449,7 +1450,7 @@ export function applyOrderToNewNativeBonds(
         continue;
       }
       const bonds = molecule.bonds.map((candidate) =>
-        candidate.id === bond.id ? nativeBondWithOrderAndDisplay(molecule, candidate, order, "center") : candidate
+        candidate.id === bond.id ? nativeBondWithOrderAndDisplay(molecule, candidate, order, "ring-inside-else-center") : candidate
       );
       molecule = { ...molecule, bonds };
     }
@@ -8813,7 +8814,7 @@ export function applyNativeMoleculeBondOrderTarget(
 
 export interface NativeBondOrderOptions {
   /** Where a bond that becomes double puts its second line; omitted, the automatic default. */
-  doubleBondSide?: NativeDoubleBondSide;
+  doubleBondSide?: NativeNewDoubleBondSide;
 }
 
 export function applyNativeMoleculeBondOrderValueTarget(
@@ -19399,11 +19400,14 @@ function nativeBondWithOrderAndDisplay(
   bond: MoleculeBond,
   order: MoleculeBond["order"],
   /** Where a bond that becomes double puts its second line, over the automatic default. */
-  newDoubleBondSide?: NativeDoubleBondSide
+  newDoubleBondSide?: NativeNewDoubleBondSide
 ): MoleculeBond {
   const bondStyle = bond.display?.bondStyle;
   if (order === "double") {
-    const doubleBondSide = bond.display?.doubleBondSide ?? newDoubleBondSide ?? defaultDoubleBondSide(molecule, { ...bond, order });
+    const requestedSide = newDoubleBondSide === "ring-inside-else-center"
+      ? ringInsideElseCenterDoubleBondSide(molecule, bond)
+      : newDoubleBondSide;
+    const doubleBondSide = bond.display?.doubleBondSide ?? requestedSide ?? defaultDoubleBondSide(molecule, { ...bond, order });
     const { doubleBondSide: _side, ...restDisplay } = bond.display ?? {};
     const display = { ...restDisplay, ...(doubleBondSide !== undefined ? { doubleBondSide } : {}) };
     return {
@@ -19419,6 +19423,19 @@ function nativeBondWithOrderAndDisplay(
     order,
     ...nativeBondDisplayObject(bondStyle)
   };
+}
+
+/**
+ * A side for a double bond, or `ring-inside-else-center`: inside the ring for a bond on one, its
+ * second line centred on the bond everywhere else. What a bond-tool click or a double bond tool
+ * gives a bond it makes double.
+ */
+export type NativeNewDoubleBondSide = NativeDoubleBondSide | "ring-inside-else-center";
+
+function ringInsideElseCenterDoubleBondSide(molecule: MoleculeObject, bond: MoleculeBond): NativeDoubleBondSide {
+  // The ring map only lists double bonds, so ask it with this bond already double.
+  const asDouble = { ...molecule, bonds: molecule.bonds.map((candidate) => candidate.id === bond.id ? { ...candidate, order: "double" as const } : candidate) };
+  return ringInteriorDoubleBondSides(asDouble).get(bond.id) ?? "center";
 }
 
 function nativeBondWithDisplayStyle(

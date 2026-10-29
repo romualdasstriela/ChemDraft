@@ -3540,8 +3540,8 @@ function ToolbarPaletteItem({
 }) {
   const defaultPrimaryCommand = item.primary.type === "command" ? item.primary.command : undefined;
   const [selectedFlyoutCommandId, setSelectedFlyoutCommandId] = useState<string>();
-  const followsSelectedTool = defaultPrimaryCommand?.id === "tool.symbol"
-    || defaultPrimaryCommand?.id === "tool.charge";
+  const followsSelectedTool = defaultPrimaryCommand !== undefined
+    && FLYOUT_OWNERS_FOLLOWING_SELECTION.has(defaultPrimaryCommand.id);
   const activeFlyoutCommand = followsSelectedTool
     ? item.submenu?.items.find((command) => command.id === activeTool)
     : undefined;
@@ -4004,6 +4004,13 @@ function ToolbarItemTooltip({
   );
 }
 
+/**
+ * Flyout owners that become the tool last picked from their flyout: the button shows that tool's
+ * icon, is active while it is, and a plain click re-arms it. Picking Double Bond from the bond
+ * flyout leaves the button showing (and drawing) a double bond until another bond is picked.
+ */
+const FLYOUT_OWNERS_FOLLOWING_SELECTION: ReadonlySet<string> = new Set(["tool.symbol", "tool.charge", "tool.bond"]);
+
 export function ToolbarItemIcon({
   item,
   command
@@ -4014,9 +4021,9 @@ export function ToolbarItemIcon({
   if (item.iconDataUri) {
     return <img className="tool-icon-image" src={item.iconDataUri} alt="" aria-hidden="true" />;
   }
-  // Only the Symbol/charge group previews its selected command instead of its shared asset.
+  // A flyout owner that follows its selection previews the selected command instead of its own asset.
   const primaryId = item.primary.type === "command" ? item.primary.command.id : undefined;
-  if (command && (primaryId === "tool.symbol" || primaryId === "tool.charge")) {
+  if (command && primaryId !== undefined && FLYOUT_OWNERS_FOLLOWING_SELECTION.has(primaryId)) {
     return <ToolbarCommandIcon command={command} />;
   }
   // toolbarAsset() returns undefined for an unknown key (e.g. a plugin's unregistered assetName);

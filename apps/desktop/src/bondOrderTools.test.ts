@@ -61,4 +61,37 @@ describe("clicking a bond to raise its order", () => {
     const centred = molecule(applyNativeMoleculeBondOrderTarget(ring, target, { doubleBondSide: "center" })).bonds[0]!;
     expect(centred).toMatchObject({ order: "double", display: { doubleBondSide: "center" } });
   });
+
+  it("puts a clicked ring bond's second line inside the ring, and a chain bond's centred", () => {
+    const ring = insertNativeTemplateMolecule(createPhase4Document("Ring"), { x: 300, y: 300 }, "cyclohexane");
+    const ringBond = molecule(ring).bonds[0]!;
+    const ringTarget = {
+      objectId: molecule(ring).id, kind: "bond" as const, bondId: ringBond.id,
+      fromAtomId: ringBond.fromAtomId, toAtomId: ringBond.toAtomId, distanceToPointer: 0
+    };
+    const inside = molecule(applyNativeMoleculeBondOrderTarget(ring, ringTarget)).bonds[0]!.display?.doubleBondSide;
+    expect(["left", "right"]).toContain(inside);
+    const clicked = molecule(applyNativeMoleculeBondOrderTarget(ring, ringTarget, { doubleBondSide: "ring-inside-else-center" })).bonds[0]!;
+    expect(clicked).toMatchObject({ order: "double", display: { doubleBondSide: inside } });
+
+    const chain = applySingleBondToolAtPoint(createPhase4Document("Chain"), { x: 200, y: 200 });
+    const chainBond = molecule(chain).bonds[0]!;
+    const chainTarget = {
+      objectId: molecule(chain).id, kind: "bond" as const, bondId: chainBond.id,
+      fromAtomId: chainBond.fromAtomId, toAtomId: chainBond.toAtomId, distanceToPointer: 0
+    };
+    expect(molecule(applyNativeMoleculeBondOrderTarget(chain, chainTarget, { doubleBondSide: "ring-inside-else-center" })).bonds[0])
+      .toMatchObject({ order: "double", display: { doubleBondSide: "center" } });
+  });
+
+  it("gives a double bond drawn into a ring by the double bond tool the inside line", () => {
+    const ring = insertNativeTemplateMolecule(createPhase4Document("Ring"), { x: 300, y: 300 }, "cyclohexane");
+    const withoutBond = molecule(ring);
+    const removed = withoutBond.bonds[0]!;
+    // A ring missing one bond, then the same bond added back as if drawn: it closes the ring.
+    const open = { ...ring, pages: [{ ...ring.pages[0]!, objects: [{ ...withoutBond, bonds: withoutBond.bonds.slice(1) }] }] };
+    const raised = molecule(applyOrderToNewNativeBonds(open, ring, "double")).bonds.find((bond) => bond.id === removed.id)!;
+    expect(raised.order).toBe("double");
+    expect(["left", "right"]).toContain(raised.display?.doubleBondSide);
+  });
 });
