@@ -405,10 +405,36 @@ describe("hover label typing", () => {
 
   it("still continues a lower-case letter on the labelled atom's own bond", async () => {
     await hover(0);
-    await press("S");
+    await press("s");
     await hoverBond(0, 0.45);
     await press("i");
     expect(editor()?.value).toBe("Si");
+    expectIntact();
+  });
+
+  it("gives boron and sulfur for b and s, bromine and silicon for Shift+B and Shift+S", async () => {
+    await hover(0);
+    await press("b");
+    await hover(1);
+    await press("B");
+    await hover(2);
+    await press("s");
+    await hover(3);
+    await press("S");
+    expect(molecule().atoms.slice(0, 4).map((atom) => atom.element)).toEqual(["B", "Br", "S", "Si"]);
+    expect(editor()).toBeNull();
+    expectIntact();
+  });
+
+  it("continues a label typed after Shift+S, so SiMe3 can be typed in one go", async () => {
+    await hover(0);
+    await press("S");
+    expect(molecule().atoms[0]!.element).toBe("Si");
+    await press("M");
+    expect(editor()?.value).toBe("SiM");
+    await press("e");
+    await press("3");
+    expect(editor()?.value).toBe("SiMe3");
     expectIntact();
   });
 
@@ -416,9 +442,9 @@ describe("hover label typing", () => {
     await hover(0);
     await press("O");
     const { near, far } = await hoverBond(3, 0.4);
-    await press("S");
+    await press("P");
     expect(molecule().atoms[0]!.element).toBe("O");
-    expect(molecule().atoms.find((atom) => atom.id === near.id)!.element).toBe("S");
+    expect(molecule().atoms.find((atom) => atom.id === near.id)!.element).toBe("P");
     expect(molecule().atoms.find((atom) => atom.id === far.id)!.element).toBe("C");
     expect(editor()).toBeNull();
     expectIntact();
