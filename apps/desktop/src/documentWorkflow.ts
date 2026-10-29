@@ -1389,6 +1389,8 @@ export function applyNativeChainTool(
 export function nativeBondStyleForToolCommand(commandId: string): NativeBondToolStyle | undefined {
   switch (commandId) {
     case "tool.bond":
+    case "tool.doubleBond":
+    case "tool.tripleBond":
       return "solid";
     case "tool.wedgeBond":
       return "wedge";
@@ -1401,6 +1403,65 @@ export function nativeBondStyleForToolCommand(commandId: string): NativeBondTool
     default:
       return undefined;
   }
+}
+
+/**
+ * The order the double and triple bond tools give the bonds they draw. They place, extend and drag
+ * exactly like the single bond tool (`nativeBondStyleForToolCommand` reads them as solid); the
+ * bonds that gesture adds are then raised with {@link applyOrderToNewNativeBonds}.
+ */
+export function nativeBondOrderForToolCommand(commandId: string): Exclude<NativeBondOrderValue, "single"> | undefined {
+  switch (commandId) {
+    case "tool.doubleBond":
+      return "double";
+    case "tool.tripleBond":
+      return "triple";
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Raise every single bond that `after` has and `before` did not to `order`, where valence allows,
+ * with a double bond's second line centred. A bond whose atoms cannot take the extra order stays
+ * single rather than producing an over-valent atom.
+ */
+export function applyOrderToNewNativeBonds(
+  before: ChemDraftDocument,
+  after: ChemDraftDocument,
+  order: Exclude<NativeBondOrderValue, "single">
+): ChemDraftDocument {
+  if (after === before) {
+    return after;
+  }
+  const beforeBondIds = new Map(firstPage(before).objects
+    .filter((object): object is MoleculeObject => object.type === "molecule")
+    .map((molecule) => [molecule.id, new Set(molecule.bonds.map((bond) => bond.id))]));
+  return firstPage(after).objects.reduce((current, object) => {
+    if (object.type !== "molecule" || !isEditableNativeMoleculeGraph(object)) {
+      return current;
+    }
+    const known = beforeBondIds.get(object.id);
+    let molecule = object;
+    for (const bond of object.bonds) {
+      const latest = molecule.bonds.find((candidate) => candidate.id === bond.id)!;
+      if (known?.has(bond.id) || latest.order !== "single" || !canSetNativeBondOrder(molecule, latest, order)) {
+        continue;
+      }
+      const bonds = molecule.bonds.map((candidate) =>
+        candidate.id === bond.id ? nativeBondWithOrderAndDisplay(molecule, candidate, order, "center") : candidate
+      );
+      molecule = { ...molecule, bonds };
+    }
+    if (molecule === object) {
+      return current;
+    }
+    return applyPatch(
+      current,
+      { op: "updateObject", objectId: object.id, changes: refreshNativeSingleBondGraph(object, molecule.atoms, molecule.bonds) },
+      { now: phase4Timestamp }
+    );
+  }, after);
 }
 
 export function nativeTemplateForToolCommand(commandId: string): NativeMoleculeTemplateId | undefined {
@@ -8728,7 +8789,8 @@ export function applyNativeMoleculePartDeleteTarget(
 
 export function applyNativeMoleculeBondOrderTarget(
   document: ChemDraftDocument,
-  target: NativeBondOrderTarget
+  target: NativeBondOrderTarget,
+  options: NativeBondOrderOptions = {}
 ): ChemDraftDocument {
   const page = firstPage(document);
   const molecule = page.objects.find((object): object is MoleculeObject =>
@@ -8745,14 +8807,20 @@ export function applyNativeMoleculeBondOrderTarget(
 
   const nextOrder = nextNativeBondOrder(molecule, bond);
   return isNativeBondOrderValue(nextOrder)
-    ? applyNativeMoleculeBondOrderValueTarget(document, target, nextOrder)
+    ? applyNativeMoleculeBondOrderValueTarget(document, target, nextOrder, options)
     : document;
+}
+
+export interface NativeBondOrderOptions {
+  /** Where a bond that becomes double puts its second line; omitted, the automatic default. */
+  doubleBondSide?: NativeDoubleBondSide;
 }
 
 export function applyNativeMoleculeBondOrderValueTarget(
   document: ChemDraftDocument,
   target: NativeBondOrderTarget,
-  order: NativeBondOrderValue
+  order: NativeBondOrderValue,
+  options: NativeBondOrderOptions = {}
 ): ChemDraftDocument {
   const page = firstPage(document);
   const molecule = page.objects.find((object): object is MoleculeObject =>
@@ -8772,7 +8840,7 @@ export function applyNativeMoleculeBondOrderValueTarget(
   }
 
   const bonds = molecule.bonds.map((candidate) =>
-    candidate.id === bond.id ? nativeBondWithOrderAndDisplay(molecule, candidate, order) : candidate
+    candidate.id === bond.id ? nativeBondWithOrderAndDisplay(molecule, candidate, order, options.doubleBondSide) : candidate
   );
   const nextMolecule = refreshNativeSingleBondGraph(molecule, molecule.atoms, bonds);
 
@@ -19329,11 +19397,13 @@ function nextNativeBondOrder(molecule: MoleculeObject, bond: MoleculeBond): Mole
 function nativeBondWithOrderAndDisplay(
   molecule: MoleculeObject,
   bond: MoleculeBond,
-  order: MoleculeBond["order"]
+  order: MoleculeBond["order"],
+  /** Where a bond that becomes double puts its second line, over the automatic default. */
+  newDoubleBondSide?: NativeDoubleBondSide
 ): MoleculeBond {
   const bondStyle = bond.display?.bondStyle;
   if (order === "double") {
-    const doubleBondSide = bond.display?.doubleBondSide ?? defaultDoubleBondSide(molecule, { ...bond, order });
+    const doubleBondSide = bond.display?.doubleBondSide ?? newDoubleBondSide ?? defaultDoubleBondSide(molecule, { ...bond, order });
     const { doubleBondSide: _side, ...restDisplay } = bond.display ?? {};
     const display = { ...restDisplay, ...(doubleBondSide !== undefined ? { doubleBondSide } : {}) };
     return {

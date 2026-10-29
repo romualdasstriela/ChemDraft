@@ -159,6 +159,18 @@
                     }
                   },
                   {
+                    "commandId": "tool.doubleBond",
+                    "label": "Double Bond",
+                    "icon": "bond",
+                    "assetName": "Custom_Bond_Double"
+                  },
+                  {
+                    "commandId": "tool.tripleBond",
+                    "label": "Triple Bond",
+                    "icon": "bond",
+                    "assetName": "Custom_Bond_Triple"
+                  },
+                  {
                     "commandId": "tool.wedgeBond",
                     "label": "Solid Wedge Bond",
                     "icon": "bond",
@@ -1984,6 +1996,18 @@
                       "title": "Single Bond",
                       "shortcut": "M"
                     }
+                  },
+                  {
+                    "commandId": "tool.doubleBond",
+                    "label": "Double Bond",
+                    "icon": "bond",
+                    "assetName": "Custom_Bond_Double"
+                  },
+                  {
+                    "commandId": "tool.tripleBond",
+                    "label": "Triple Bond",
+                    "icon": "bond",
+                    "assetName": "Custom_Bond_Triple"
                   },
                   {
                     "commandId": "tool.wedgeBond",

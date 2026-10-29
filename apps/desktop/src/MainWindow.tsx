@@ -437,6 +437,8 @@ import {
   applyMoleculeDoubleBondPosition,
   applyNativeMoleculeBondOrderTarget,
   applyNativeMoleculeBondOrderValueTarget,
+  applyOrderToNewNativeBonds,
+  nativeBondOrderForToolCommand,
   applyNativeMoleculeDeleteTarget,
   nativeAtomHasExplicitLabel,
   applyNativeMoleculePartDeleteTarget,
@@ -1622,7 +1624,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.29.12.30-opus";
+const CURRENT_BUILD_STAMP = "10.29.13.10-opus";
 /** Starts in the background for the document webview under the existing probe gate. */
 export function startMainWindowPerfProbe(): void {
   perfHook(() => startPerfProbe(CURRENT_BUILD_STAMP));
@@ -2940,6 +2942,9 @@ export function MainWindow({
     : undefined;
   const activeNativeTemplateId = nativeTemplateForToolCommand(activeToolState.activeCommandId);
   const bondToolActive = activeNativeBondToolStyle !== undefined;
+  // The double/triple bond tools draw like the single bond tool; their bonds are raised on commit.
+  const activeBondToolOrderRef = useRef(nativeBondOrderForToolCommand(activeToolState.activeCommandId));
+  activeBondToolOrderRef.current = nativeBondOrderForToolCommand(activeToolState.activeCommandId);
   const activeChargeToolValue = chargeValueForToolCommand(activeToolState.activeCommandId);
   const activeMechanismArrowKind = mechanismArrowKindForToolCommand(activeToolState.activeCommandId);
   const activeNativeArtTool = nativeArtToolForCommand(activeToolState.activeCommandId);
@@ -4187,12 +4192,18 @@ export function MainWindow({
     return true;
   }, [assignHoveredNativeDeleteTarget, commitDocumentChange]);
 
+  // Clicking a bond with a bond tool: the single bond tool steps its order (single → double →
+  // triple → single), the double and triple bond tools set theirs. A bond made double this way gets
+  // its second line centred; drag the line to move it to a side.
   const cycleNativeBondOrder = useCallback((target: NativeBondOrderTarget) => {
     const currentDocument = documentRef.current;
     const selectedDocument = selectDocumentObject(currentDocument, target.objectId);
-    const nextDocument = applyNativeMoleculeBondOrderTarget(selectedDocument, target);
+    const toolOrder = activeBondToolOrderRef.current;
+    const nextDocument = toolOrder
+      ? applyNativeMoleculeBondOrderValueTarget(selectedDocument, target, toolOrder, { doubleBondSide: "center" })
+      : applyNativeMoleculeBondOrderTarget(selectedDocument, target, { doubleBondSide: "center" });
     if (nextDocument === selectedDocument) {
-      setStatus("Bond is already at its maximum allowed order");
+      setStatus(toolOrder ? `Cannot make that bond ${toolOrder}` : "Bond is already at its maximum allowed order");
       return;
     }
 
@@ -13456,7 +13467,11 @@ export function MainWindow({
     point: ClientPoint,
     bondStyle?: NativeBondDisplayStyle
   ) => {
-    const nextDocument = applySingleBondToolAtPoint(sourceDocument, point, { bondStyle });
+    const nextDocument = withActiveBondToolOrder(
+      sourceDocument,
+      applySingleBondToolAtPoint(sourceDocument, point, { bondStyle }),
+      activeBondToolOrderRef.current
+    );
     const selected = getSelectedMolecule(nextDocument);
     const atomCount = selected?.atoms.length ?? 0;
     commitDocumentChange(nextDocument);
@@ -13519,7 +13534,11 @@ export function MainWindow({
           ? applyNativeChainTool(startDocument, point, undefined, placement.anchor)
           : placement.kind === "art-line"
             ? applyNativeArtLineToolDefaultAtPoint(startDocument, point, placement.commandId)
-            : applySingleBondToolAtPoint(startDocument, point, { bondStyle: placement.bondStyle });
+            : withActiveBondToolOrder(
+              startDocument,
+              applySingleBondToolAtPoint(startDocument, point, { bondStyle: placement.bondStyle }),
+              activeBondToolOrderRef.current
+            );
     const objectId = placementDocument.selection.objectIds[0];
     // Anchored chains grow an existing molecule, so the placed object legitimately pre-exists.
     const growsExistingObject = placement.kind === "chain" && placement.anchor !== undefined;
@@ -13647,11 +13666,11 @@ export function MainWindow({
     placementAltKey = false
   ) => {
     const previousMolecule = findDocumentObject(sourceDocument, objectId);
-    const nextDocument = applyFreeformSingleBondToolAtPoint(sourceDocument, objectId, atomId, point, {
+    const nextDocument = withActiveBondToolOrder(sourceDocument, applyFreeformSingleBondToolAtPoint(sourceDocument, objectId, atomId, point, {
       forceCustomLength,
       bondStyle,
       placementAltKey
-    });
+    }), activeBondToolOrderRef.current);
     const selected = getSelectedMolecule(nextDocument);
     const atomCount = selected?.atoms.length ?? 0;
     const connectedExistingAtoms =
@@ -22536,6 +22555,15 @@ export function nativeTemplatePreviewKey(
 
 function nativeAtomBondCount(molecule: MoleculeObject, atomId: string): number {
   return molecule.bonds.filter((bond) => bond.fromAtomId === atomId || bond.toAtomId === atomId).length;
+}
+
+/** A gesture's result with the bonds it drew raised to the double/triple bond tool's order. */
+function withActiveBondToolOrder(
+  before: ChemDraftDocument,
+  after: ChemDraftDocument,
+  order: ReturnType<typeof nativeBondOrderForToolCommand>
+): ChemDraftDocument {
+  return order ? applyOrderToNewNativeBonds(before, after, order) : after;
 }
 
 function nativeDoubleBondSidePreviewFromHit(

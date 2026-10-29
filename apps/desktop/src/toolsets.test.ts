@@ -270,6 +270,8 @@ describe("desktop toolset mapping", () => {
 
     expect(item?.submenu?.items.map((command) => command.id)).toEqual([
       "tool.bond",
+      "tool.doubleBond",
+      "tool.tripleBond",
       "tool.wedgeBond",
       "tool.hashedBond",
       "tool.dashedBond",
