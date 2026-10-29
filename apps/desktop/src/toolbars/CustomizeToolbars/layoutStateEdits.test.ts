@@ -21,10 +21,21 @@ import {
   resetAllLayouts,
   resetToolsetLayout,
   setItemHidden,
+  setToolsetOrientation,
   setToolsetVisible,
   setUserToolsetGroups,
   userToolsetId
 } from "./layoutStateEdits";
+
+describe("setToolsetOrientation", () => {
+  it("stores a flip away from the authored axis and clears it when flipped back", () => {
+    const flipped = setToolsetOrientation(emptyLayoutState(), "core.main", "vertical", "horizontal");
+    expect(flipped.toolsetOverrides).toEqual([{ toolsetId: "core.main", orientation: "vertical" }]);
+
+    const restored = setToolsetOrientation(flipped, "core.main", "horizontal", "horizontal");
+    expect(restored.toolsetOverrides).toEqual([]);
+  });
+});
 
 // A tiny fixture toolset with two command items and one widget (control) item.
 const baseToolset: ToolsetDefinition = {

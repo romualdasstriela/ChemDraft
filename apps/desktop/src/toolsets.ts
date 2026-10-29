@@ -1,7 +1,9 @@
 import {
   ToolsetRegistry,
   applyToolsetLayoutState,
+  authoredToolsetOrientation,
   createToolbarsMenuModel,
+  effectiveToolsetOrientation,
   createToolsetToggleCommandDefinitions,
   mergeToolsetItemAdditions,
   normalizeToolsetDefinition,
@@ -13,12 +15,18 @@ import {
   type ToolsetDefinition,
   type ToolsetGroupDefinition,
   type ToolsetItemAddition,
-  type ToolsetItemDefinition
+  type ToolsetItemDefinition,
+  type ToolsetOrientation
 } from "@chemdraft/toolset-registry";
 import { detectShortcutPlatform, parseShortcutDisplay, type ShortcutPlatform } from "@chemdraft/shortcut-engine";
 import { isCompoundLayoutCommand, loadCompoundLayoutSettings } from "./compoundLayoutSettings";
 import manifest from "./toolsets/desktop-toolsets.json";
-import { isGridWidgetItem, isToolbarWidgetItem } from "./toolbars/toolbarWidgets";
+import {
+  TOOLBAR_WIDGET_IDS,
+  WIDGET_CONTROL_ID_PREFIX,
+  isGridWidgetItem,
+  isToolbarWidgetItem
+} from "./toolbars/toolbarWidgets";
 import type { CommandSpec } from "./commands";
 import { renamedCommandId } from "./renamedCommands";
 import type { IconName } from "./icons";
@@ -439,6 +447,68 @@ export const PALETTE_GRID_METRIC_DEFAULTS = {
   gap: 2,
   padding: 4
 } as const;
+
+/**
+ * Widgets whose toolbar may be flipped to the other axis: the Main style widget reflows into the
+ * narrow column and the Art style panel docks beside it. A toolbar carrying any other section widget
+ * (the Text style rows, the inspectors) keeps the axis it was authored for.
+ */
+const ORIENTABLE_WIDGET_IDS: ReadonlySet<string> = new Set([
+  TOOLBAR_WIDGET_IDS.mainStyleControls,
+  TOOLBAR_WIDGET_IDS.artStyleControls
+]);
+
+export function toolsetSupportsOrientation(toolset: Pick<DesktopToolsetDefinition, "groups">): boolean {
+  return toolset.groups.every((group) => group.items.every((item) => (
+    item.primary?.type !== "control"
+    || !item.primary.controlId.startsWith(WIDGET_CONTROL_ID_PREFIX)
+    || ORIENTABLE_WIDGET_IDS.has(item.primary.controlId)
+  )));
+}
+
+/** The axis a palette renders along: the user's choice where the toolset supports flipping. */
+export function paletteOrientation(
+  toolset: Pick<DesktopToolsetDefinition, "gridLayout" | "orientation" | "groups">
+): ToolsetOrientation {
+  return toolsetSupportsOrientation(toolset) ? effectiveToolsetOrientation(toolset) : authoredToolsetOrientation(toolset);
+}
+
+/** True when a palette renders across the axis its items were laid out for (rows ↔ columns swap). */
+export function isGridTransposed(
+  gridLayout: DesktopToolsetDefinition["gridLayout"] | undefined,
+  orientation: ToolsetOrientation
+): boolean {
+  return (gridLayout?.orientation ?? "vertical") !== orientation;
+}
+
+/** The grid as rendered along `orientation`: rows and columns (and cell sides) swap on a flip. */
+export function orientedGridLayout(
+  gridLayout: DesktopToolsetDefinition["gridLayout"] | undefined,
+  orientation: ToolsetOrientation
+): DesktopToolsetDefinition["gridLayout"] | undefined {
+  if (!gridLayout || !isGridTransposed(gridLayout, orientation)) {
+    return gridLayout;
+  }
+  return {
+    ...gridLayout,
+    orientation,
+    rows: gridLayout.columns,
+    columns: gridLayout.rows,
+    cellWidth: gridLayout.cellHeight,
+    cellHeight: gridLayout.cellWidth
+  };
+}
+
+/** An item's grid footprint mirrored across the diagonal, for a transposed palette. */
+export function transposeItemLayout(layout: ToolbarPaletteItemModel["layout"]): ToolbarPaletteItemModel["layout"] {
+  return {
+    ...layout,
+    row: layout.column,
+    column: layout.row,
+    rowSpan: layout.colSpan,
+    colSpan: layout.rowSpan
+  };
+}
 
 export function computePaletteGridSize(
   gridLayout: DesktopToolsetDefinition["gridLayout"] | undefined,

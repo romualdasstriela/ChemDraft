@@ -291,7 +291,8 @@ export function buildAppMenuModel(context: AppMenuContext): AppMenuSection[] {
         separator(),
         toolbarsSubmenu,
         command("view.customizeToolbars", "Customize Toolbars…"),
-        command("view.customizeMainToolbar", "Customize Main Toolbar…")
+        command("view.customizeMainToolbar", "Customize Main Toolbar…"),
+        command("view.arrangeToolbars", "Arrange Toolbars Top to Bottom")
       ]
     },
     {

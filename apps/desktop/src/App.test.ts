@@ -2735,6 +2735,7 @@ describe("ChemDraft desktop shell", () => {
     // through layoutStateEdits; the standalone view.toolset.* redirect commands are retired
     // (docs/shipped/README.md, Toolbar Wiring and Honesty).
     expect(toolbarCustomizationActions.map((command) => command.id).sort()).toEqual([
+      "view.arrangeToolbars",
       "view.customizeMainToolbar",
       "view.customizeToolbars"
     ]);

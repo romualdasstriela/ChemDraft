@@ -4,6 +4,7 @@ import type {
   ToolsetGroupDefinition,
   ToolsetItemDefinition,
   ToolsetLayoutState,
+  ToolsetOrientation,
   UserToolsetDefinition,
   UserToolsetOverride
 } from "@chemdraft/toolset-registry";
@@ -40,6 +41,7 @@ function isEmptyOverride(override: UserToolsetOverride): boolean {
     override.mode === undefined &&
     override.preferredWindowSize === undefined &&
     override.gridLayout === undefined &&
+    override.orientation === undefined &&
     (override.groupOrder?.length ?? 0) === 0 &&
     (override.hiddenCommandIds?.length ?? 0) === 0 &&
     (override.itemOverrides?.length ?? 0) === 0 &&
@@ -85,6 +87,19 @@ export function renameToolset<I extends string, A extends string>(
   const trimmed = title.trim();
   return withOverride(state, toolsetId, (draft) => {
     draft.title = trimmed.length > 0 ? trimmed : undefined;
+  });
+}
+
+/** Lay a toolset out horizontally or vertically (persisted as `toolsetOverrides[].orientation`).
+ *  Choosing the axis the toolset was authored for clears the override instead of storing it. */
+export function setToolsetOrientation<I extends string, A extends string>(
+  state: ToolsetLayoutState<I, A>,
+  toolsetId: string,
+  orientation: ToolsetOrientation,
+  authoredOrientation: ToolsetOrientation
+): ToolsetLayoutState<I, A> {
+  return withOverride(state, toolsetId, (draft) => {
+    draft.orientation = orientation === authoredOrientation ? undefined : orientation;
   });
 }
 
@@ -352,6 +367,7 @@ export function cloneToolset<I extends string, A extends string>(
     defaultMode: source.defaultMode,
     preferredWindowSize: source.preferredWindowSize,
     gridLayout: source.gridLayout,
+    orientation: source.orientation,
     category: source.category,
     clonedFromToolsetId: source.id,
     groups

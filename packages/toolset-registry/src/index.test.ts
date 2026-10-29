@@ -6,6 +6,8 @@ import {
   ToolsetLayoutStateSchema,
   ToolsetRegistry,
   applyToolsetLayoutState,
+  authoredToolsetOrientation,
+  effectiveToolsetOrientation,
   createToolbarsMenuModel,
   createToolsetToggleCommandDefinitions,
   createToolsetToggleCommandId,
@@ -275,6 +277,20 @@ describe("toolset registry", () => {
       visible: false,
       mode: "hidden"
     });
+  });
+
+  it("applies a display orientation override without touching the authored grid", () => {
+    const horizontal = { ...fixtureToolset, gridLayout: { orientation: "horizontal" as const, rows: 2 } };
+    const [flipped] = applyToolsetLayoutState([horizontal], {
+      version: 1,
+      toolsetOverrides: [{ toolsetId: "core.fixture", orientation: "vertical" }]
+    });
+
+    expect(flipped.gridLayout).toEqual({ orientation: "horizontal", rows: 2 });
+    expect(authoredToolsetOrientation(flipped)).toBe("horizontal");
+    expect(effectiveToolsetOrientation(flipped)).toBe("vertical");
+    expect(effectiveToolsetOrientation(horizontal)).toBe("horizontal");
+    expect(effectiveToolsetOrientation({ gridLayout: undefined })).toBe("vertical");
   });
 
   it("applies visibility, mode, and item overrides without mutating source toolsets", () => {

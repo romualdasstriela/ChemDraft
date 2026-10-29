@@ -236,6 +236,17 @@
   color: var(--text-muted, rgba(0, 0, 0, 0.45));
 }
 
+.customize-toolset-orientation {
+  flex: 0 0 auto;
+  max-width: 84px;
+  font-size: 11px;
+}
+
+/* Keep the name readable beside the layout picker instead of collapsing to nothing. */
+.customize-toolset-row:has(.customize-toolset-orientation) .customize-toolset-title {
+  min-width: 72px;
+}
+
 .customize-toolset-action {
   border: 1px solid var(--border, rgba(0, 0, 0, 0.14));
   background: transparent;

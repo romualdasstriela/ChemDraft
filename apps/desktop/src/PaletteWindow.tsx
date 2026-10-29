@@ -27,6 +27,8 @@ import {
   desktopToolsetRegistry,
   compoundLayoutRegistry,
   computePaletteGridSize,
+  orientedGridLayout,
+  paletteOrientation,
   getToolsetCommandSpecs,
   getToolsetPaletteGroups,
   paletteCommandGroupsFromItemGroups,
@@ -194,7 +196,10 @@ export function PaletteWindow({
     [knownToolset, commandOverrides, toolset.id, toolsetRegistry, compoundLayoutsEnabled]
   );
   const itemGroups = useMemo(() => paletteGroups.map((group) => group.items), [paletteGroups]);
-  const gridWindowSize = useMemo(() => computePaletteGridSize(toolset.gridLayout, itemGroups), [itemGroups, toolset.gridLayout]);
+  const gridWindowSize = useMemo(
+    () => computePaletteGridSize(orientedGridLayout(toolset.gridLayout, paletteOrientation(toolset)), itemGroups),
+    [itemGroups, toolset]
+  );
   // The main window owns live command metadata/availability and publishes snapshots to detached
   // palettes. The state initializer above is only a first-paint fallback before that handshake.
   // Snapshots arrive already remapped for the active keybinding scheme; re-applying here covers the
@@ -946,7 +951,7 @@ export function PaletteWindow({
         gridLayout={toolset.gridLayout}
         activeTool={activeTool}
         mode="floating"
-        orientation={toolset.gridLayout?.orientation ?? "vertical"}
+        orientation={paletteOrientation(toolset)}
         title={toolset.title}
         onRequestFlyout={openFlyoutPopover}
         onInvoke={invokeCommand}

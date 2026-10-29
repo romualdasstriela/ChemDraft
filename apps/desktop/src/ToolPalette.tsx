@@ -137,7 +137,10 @@ import { getDrawingToolDefinition } from "./drawingTools";
 import { toolbarAsset } from "./toolbarAssets";
 import {
   commandShortcutDisplay,
+  isGridTransposed,
+  orientedGridLayout,
   PALETTE_GRID_METRIC_DEFAULTS,
+  transposeItemLayout,
   type ToolbarPaletteItemModel
 } from "./toolsets";
 import type { ArtInspectorEffectKind } from "./artInspectorModel";
@@ -254,7 +257,20 @@ export function ToolPalette({
     clearTooltip
   } = usePaletteTooltipState();
 
-  const effectiveItemGroups = itemGroups ?? commandGroupsToPaletteItemGroups(groups ?? []);
+  // A palette shown across the axis its items were authored for mirrors every footprint (a 2-row
+  // divider becomes a 2-column one). A grid-citizen widget instead takes one full-width row that grows
+  // to its reflowed content, since its controls do not transpose cell by cell.
+  const transposed = isGridTransposed(gridLayout, orientation);
+  const authoredItemGroups = itemGroups ?? commandGroupsToPaletteItemGroups(groups ?? []);
+  const effectiveItemGroups = transposed
+    ? authoredItemGroups.map((group) => group.map((item) => {
+        const layout = transposeItemLayout(item.layout);
+        return {
+          ...item,
+          layout: isGridWidgetItem(item) ? { ...layout, row: undefined, rowSpan: 1 } : layout
+        };
+      }))
+    : authoredItemGroups;
   const renderPaletteItem = (
     item: ToolbarPaletteItemModel,
     tooltipId: string,
@@ -274,7 +290,7 @@ export function ToolPalette({
     />
   );
 
-  const gridStyle = toolPaletteGridStyle(gridLayout);
+  const gridStyle = toolPaletteGridStyle(orientedGridLayout(gridLayout, orientation), transposed);
   // Widget items (manifest `control` items) don't render as grid slots — they drive the widget
   // sections below and can replace/hide the grid. Strip them from the grid content + sizing so a
   // widget placeholder never shows as a disabled button. Pair each group's id (from `customize`,
@@ -642,7 +658,7 @@ function commandGroupsToPaletteItemGroups(groups: CommandSpec[][]): ToolbarPalet
   })));
 }
 
-function toolPaletteGridStyle(gridLayout: ToolsetGridLayout | undefined): CSSProperties | undefined {
+function toolPaletteGridStyle(gridLayout: ToolsetGridLayout | undefined, transposed = false): CSSProperties | undefined {
   if (!gridLayout) {
     return undefined;
   }
@@ -658,7 +674,8 @@ function toolPaletteGridStyle(gridLayout: ToolsetGridLayout | undefined): CSSPro
     "--toolbar-grid-gap": `${gap}px`,
     "--toolbar-grid-padding": `${padding}px`,
     gridTemplateColumns: gridLayout.columns ? `repeat(${gridLayout.columns}, var(--toolbar-cell-width))` : undefined,
-    gridAutoRows: "var(--toolbar-cell-height)"
+    // Transposed, a grid-citizen widget sits in one row that must grow to its reflowed height.
+    gridAutoRows: transposed ? "minmax(var(--toolbar-cell-height), auto)" : "var(--toolbar-cell-height)"
   } as CSSProperties;
 }
 

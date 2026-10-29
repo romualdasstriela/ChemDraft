@@ -154,6 +154,10 @@ export const ToolsetDefinitionSchema = z
     preferredWindowSize: ToolsetWindowSizeSchema.optional(),
     category: z.string().optional(),
     gridLayout: ToolsetGridLayoutSchema.optional(),
+    // The axis the palette is DISPLAYED along, when the user flipped it. `gridLayout.orientation`
+    // stays the axis the items' rows/spans were authored for; the palette transposes those at render
+    // time (see effectiveToolsetOrientation), so stored layouts never need rewriting on a flip.
+    orientation: ToolsetOrientationSchema.optional(),
     clonedFromToolsetId: NonEmptyStringSchema.optional()
   })
   .strict();
@@ -201,7 +205,8 @@ export const UserToolsetOverrideSchema = z
     itemOverrides: z.array(ToolsetItemOverrideSchema).optional(),
     itemAdditions: z.array(ToolsetItemAdditionSchema).optional(),
     preferredWindowSize: ToolsetWindowSizeSchema.optional(),
-    gridLayout: ToolsetGridLayoutSchema.optional()
+    gridLayout: ToolsetGridLayoutSchema.optional(),
+    orientation: ToolsetOrientationSchema.optional()
   })
   .strict();
 
@@ -860,8 +865,21 @@ function applyUserToolsetOverride<TIcon extends string, TAssetName extends strin
     defaultMode: override.mode ?? toolset.defaultMode,
     preferredWindowSize: override.preferredWindowSize ?? toolset.preferredWindowSize,
     gridLayout: override.gridLayout ?? toolset.gridLayout,
+    orientation: override.orientation ?? toolset.orientation,
     groups
   };
+}
+
+/** The axis a toolset's items were laid out for: its grid's declared orientation, else vertical. */
+export function authoredToolsetOrientation(toolset: Pick<ToolsetDefinition, "gridLayout">): ToolsetOrientation {
+  return toolset.gridLayout?.orientation ?? "vertical";
+}
+
+/** The axis a toolset is displayed along: the user's choice when set, else its authored axis. */
+export function effectiveToolsetOrientation(
+  toolset: Pick<ToolsetDefinition, "gridLayout" | "orientation">
+): ToolsetOrientation {
+  return toolset.orientation ?? authoredToolsetOrientation(toolset);
 }
 
 function orderToolsets<TIcon extends string, TAssetName extends string>(

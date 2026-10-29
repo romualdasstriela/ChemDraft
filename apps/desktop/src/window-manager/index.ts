@@ -10,6 +10,7 @@ import { isSpin3dSettings, type Spin3dSettings } from "../spin3dSettings";
 import { isCompoundLayoutSettings, COMPOUND_LAYOUT_STORAGE_KEY, loadCompoundLayoutSettings, type CompoundLayoutSettings } from "../compoundLayoutSettings";
 import { isKeybindingSettings, type KeybindingScheme, type KeybindingSettings } from "../keybindingSettings";
 import { migrateLegacyToolsetIds } from "../toolbars/legacyToolsetIds";
+import { stackToolsetWindows, toolsetWindowLabel } from "../toolbars/arrangeToolsets";
 import { listenCurrentWindowEvent, listenTauriEvent } from "./tauriEvents";
 
 export const PALETTE_COMMAND_EVENT = "chemdraft://palette-command";
@@ -841,6 +842,54 @@ export async function setCurrentWindowLogicalSize(size: ToolsetWindowSize): Prom
 
   const { getCurrentWindow, LogicalSize } = await import("@tauri-apps/api/window");
   await getCurrentWindow().setSize(new LogicalSize(size.width, size.height));
+}
+
+/** Logical-pixel inset of the stacked column from the document window's top-left corner (clears its
+ *  title and menu bar), and the gap between stacked palettes. */
+const ARRANGE_TOOLSETS_INSET = { left: 8, top: 72 } as const;
+const ARRANGE_TOOLSETS_GAP = 6;
+
+/**
+ * Stack the given open palette windows top to bottom (in the order given) down the left edge of the
+ * calling document window, wrapping into further columns at the bottom of its monitor. Everything is
+ * measured and placed in physical pixels on the document window's monitor, so the measured sizes and
+ * the target positions share one unit. Rust persists each new position from the windows' Moved events.
+ * Returns how many windows were moved.
+ */
+export async function arrangeToolsetWindowsTopToBottom(toolsetIds: readonly string[]): Promise<number> {
+  if (!isDesktopRuntime()) {
+    return 0;
+  }
+
+  const { Window, getCurrentWindow, currentMonitor, PhysicalPosition } = await import("@tauri-apps/api/window");
+  const documentWindow = getCurrentWindow();
+  const [origin, scale, monitor] = await Promise.all([
+    documentWindow.outerPosition(),
+    documentWindow.scaleFactor(),
+    currentMonitor()
+  ]);
+
+  const windows: { id: string; window: InstanceType<typeof Window>; width: number; height: number }[] = [];
+  for (const toolsetId of toolsetIds) {
+    const window = await Window.getByLabel(toolsetWindowLabel(toolsetId));
+    if (!window || !(await window.isVisible())) {
+      continue;
+    }
+    const size = await window.outerSize();
+    windows.push({ id: toolsetId, window, width: size.width, height: size.height });
+  }
+
+  const workArea = monitor?.workArea ?? (monitor ? { position: monitor.position, size: monitor.size } : undefined);
+  const left = Math.max(origin.x, workArea?.position.x ?? origin.x) + Math.round(ARRANGE_TOOLSETS_INSET.left * scale);
+  const top = Math.max(origin.y, workArea?.position.y ?? origin.y) + Math.round(ARRANGE_TOOLSETS_INSET.top * scale);
+  const bottom = workArea ? workArea.position.y + workArea.size.height : Number.POSITIVE_INFINITY;
+  const placements = stackToolsetWindows(windows, { left, top, bottom }, Math.round(ARRANGE_TOOLSETS_GAP * scale));
+
+  for (const placement of placements) {
+    const entry = windows.find((candidate) => candidate.id === placement.id);
+    await entry?.window.setPosition(new PhysicalPosition(placement.x, placement.y));
+  }
+  return placements.length;
 }
 
 /**

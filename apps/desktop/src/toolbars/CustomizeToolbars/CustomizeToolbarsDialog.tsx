@@ -18,13 +18,15 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   applyToolsetLayoutState,
+  authoredToolsetOrientation,
   mergeToolsetItemAdditions,
   toolsetItemCustomizationId,
   type ToolsetGroupDefinition,
   type ToolsetItemDefinition,
-  type ToolsetLayoutState
+  type ToolsetLayoutState,
+  type ToolsetOrientation
 } from "@chemdraft/toolset-registry";
-import type { DesktopToolsetDefinition } from "../../toolsets";
+import { paletteOrientation, toolsetSupportsOrientation, type DesktopToolsetDefinition } from "../../toolsets";
 import { SHELL_COMMAND_IDS } from "../../shellCommandIds";
 import { WIDGET_CONTROL_ID_PREFIX } from "../toolbarWidgets";
 import {
@@ -37,6 +39,7 @@ import {
   reorderToolsets,
   resetToolsetLayout,
   setItemHidden,
+  setToolsetOrientation,
   setToolsetVisible,
   setUserToolsetGroups
 } from "./layoutStateEdits";
@@ -128,13 +131,15 @@ function SortableToolsetRow({
   onRename,
   onReset,
   onClone,
-  onDelete
+  onDelete,
+  onSetOrientation
 }: {
   toolset: DesktopToolsetDefinition;
   selected: boolean;
   onSelect: () => void;
   onToggleVisible: (visible: boolean) => void;
   onRename: (title: string) => void;
+  onSetOrientation: (orientation: ToolsetOrientation) => void;
   onReset: () => void;
   onClone: () => void;
   onDelete: () => void;
@@ -198,6 +203,18 @@ function SortableToolsetRow({
       <span className="customize-toolset-source" data-source={toolset.source}>
         {toolset.source === "user" ? "custom" : toolset.source}
       </span>
+      {toolsetSupportsOrientation(toolset) ? (
+        <select
+          className="customize-toolset-orientation"
+          aria-label={`Layout of ${toolset.title}`}
+          title="Lay this toolbar out left to right or top to bottom"
+          value={paletteOrientation(toolset)}
+          onChange={(event) => onSetOrientation(event.currentTarget.value as ToolsetOrientation)}
+        >
+          <option value="horizontal">Horizontal</option>
+          <option value="vertical">Vertical</option>
+        </select>
+      ) : null}
       <button type="button" className="customize-toolset-action" onClick={onClone} title={`Duplicate ${toolset.title}`}>
         Duplicate
       </button>
@@ -426,6 +443,9 @@ export function CustomizeToolbarsDialog({
                       onSelect={() => setSelectedToolsetId(toolset.id)}
                       onToggleVisible={(visible) => setDraft((current) => setToolsetVisible(current, toolset.id, visible))}
                       onRename={(title) => setDraft((current) => renameToolset(current, toolset.id, title))}
+                      onSetOrientation={(orientation) => setDraft((current) => (
+                        setToolsetOrientation(current, toolset.id, orientation, authoredToolsetOrientation(toolset))
+                      ))}
                       onReset={() => setDraft((current) => resetToolsetLayout(current, toolset.id))}
                       onClone={() => handleClone(toolset.id)}
                       onDelete={() => {

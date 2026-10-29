@@ -7,6 +7,10 @@ import {
   desktopToolsets,
   getToolsetCommandGroups,
   getToolsetItemGroups,
+  isGridTransposed,
+  orientedGridLayout,
+  paletteOrientation,
+  transposeItemLayout,
   migrateLegacyMainToolbarLayoutState,
   migrateRenamedCommandIdsInLayoutState,
   type DesktopToolsetRegistry,
@@ -16,6 +20,37 @@ import {
   platformShortcutLabel
 } from "./toolsets";
 import { formatMenuShortcut } from "./appMenu";
+
+describe("palette orientation", () => {
+  const byId = (id: string) => desktopToolsets.find((toolset) => toolset.id === id)!;
+
+  it("lets Main, Art and plain toolbars flip, but keeps widget-panel toolbars on their authored axis", () => {
+    expect(paletteOrientation({ ...byId("core.main"), orientation: "vertical" })).toBe("vertical");
+    expect(paletteOrientation({ ...byId("core.art"), orientation: "vertical" })).toBe("vertical");
+    expect(paletteOrientation({ ...byId("core.structure"), orientation: "horizontal" })).toBe("horizontal");
+    expect(paletteOrientation({ ...byId("core.text"), orientation: "vertical" })).toBe("horizontal");
+    expect(paletteOrientation({ ...byId("core.molecularInspector"), orientation: "vertical" })).toBe("horizontal");
+  });
+
+  it("swaps rows and columns, and item spans, when a grid is shown across its authored axis", () => {
+    const grid = { orientation: "horizontal" as const, rows: 2, cellWidth: 24, cellHeight: 24 };
+    expect(isGridTransposed(grid, "horizontal")).toBe(false);
+    expect(orientedGridLayout(grid, "horizontal")).toBe(grid);
+    expect(orientedGridLayout(grid, "vertical")).toEqual({
+      orientation: "vertical",
+      rows: undefined,
+      columns: 2,
+      cellWidth: 24,
+      cellHeight: 24
+    });
+    expect(transposeItemLayout({ colSpan: 1, rowSpan: 2, row: 0, column: 3 })).toEqual({
+      colSpan: 2,
+      rowSpan: 1,
+      row: 3,
+      column: 0
+    });
+  });
+});
 
 describe("platform shortcut labels", () => {
   it("keeps the macOS glyph labels exactly", () => {

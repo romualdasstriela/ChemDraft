@@ -2813,6 +2813,110 @@ textarea:focus-visible,
   min-width: 1px;
 }
 
+/* A vertical toolbar's divider is a centered horizontal hairline across its full width. */
+.tool-palette.vertical .toolbar-item-separator {
+  align-self: center;
+  height: 1px;
+  min-height: 1px;
+}
+
+/* Main toolbar laid out vertically: the style widget takes one full-width row (see ToolPalette's
+   transposed layout) and reflows its cells into the same 2-column, 24px grid as the icons. Groups
+   dissolve so each button is a grid cell; selects span the full width; spacing gaps drop out. */
+.tool-palette.vertical .main-toolbar-style-controls {
+  display: grid;
+  grid-template-columns: repeat(2, 24px);
+  grid-template-rows: none;
+  grid-auto-rows: 24px;
+  width: auto;
+  padding: var(--cd-space-2) 0 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.tool-palette.vertical .main-toolbar-style-controls .toolbar-style-row,
+.tool-palette.vertical .main-toolbar-style-controls .toolbar-swatch-group,
+.tool-palette.vertical .main-toolbar-style-controls .toolbar-align-group,
+.tool-palette.vertical .main-toolbar-style-controls .toolbar-type-group {
+  display: contents;
+}
+
+.tool-palette.vertical .main-toolbar-style-controls .toolbar-cell-gap {
+  display: none;
+}
+
+.tool-palette.vertical .main-toolbar-style-controls .toolbar-cell-shell:has(label) {
+  grid-column: 1 / -1;
+}
+
+.tool-palette.vertical .main-toolbar-style-controls label {
+  /* Beats the inline cell-count width (spanStyle) so a select fits the 2-cell column. */
+  width: 100% !important;
+  min-width: 0;
+}
+
+.tool-palette.vertical .main-toolbar-style-controls select {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Art toolbar laid out vertically: a 2-wide column of its command groups, stacked top to bottom,
+   with the style panel docked to the right (its gradient and effect rows cannot fold into 2 cells). */
+.tool-palette.vertical.art-style-palette,
+.tool-palette.floating.vertical.art-style-palette {
+  display: grid;
+  grid-template-columns: max-content minmax(260px, max-content);
+  grid-template-rows: auto auto;
+  align-items: start;
+  justify-items: stretch;
+  gap: var(--cd-space-2);
+  width: max-content;
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius-panel);
+  background: var(--cd-bg-panel);
+  box-shadow: var(--cd-shadow-panel);
+}
+
+.tool-palette.vertical.art-style-palette .palette-content-drag-grip {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.tool-palette.vertical.art-style-palette .art-toolbar-command-band {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 0;
+  padding: 0 5px 0 0;
+  border-bottom: 0;
+  border-right: 1px solid var(--line-soft);
+}
+
+.tool-palette.vertical.art-style-palette .art-toolbar-command-grid {
+  grid-template-columns: max-content;
+  row-gap: var(--cd-space-3);
+  min-height: 0;
+}
+
+.tool-palette.vertical.art-style-palette .art-toolbar-command-column {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(2, 24px);
+  grid-template-rows: none;
+  grid-auto-rows: 24px;
+  padding: 0 0 7px;
+  border-right: 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.tool-palette.vertical.art-style-palette .art-toolbar-command-column:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.tool-palette.vertical.art-style-palette .art-toolbar-style-controls {
+  grid-column: 2;
+  grid-row: 2;
+  width: 320px;
+}
+
 /* A grid-citizen widget's slot: the live widget renders inside its colSpan×rowSpan span, centered so
    the sub-cell remainder splits into symmetric breathing room instead of piling up on one edge. */
 .toolbar-widget-grid-slot {

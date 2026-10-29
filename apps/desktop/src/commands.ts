@@ -2263,6 +2263,15 @@ export const toolbarCustomizationActions: CommandSpec[] = [
     category: "view",
     enabled: true,
     description: "Customize the Main toolbar in place — drag to reorder, add, or remove items"
+  },
+  {
+    id: "view.arrangeToolbars",
+    title: "Arrange Toolbars Top to Bottom",
+    icon: "palette",
+    source: "core",
+    category: "view",
+    enabled: true,
+    description: "Stack the open toolbars in a column down the left of the document window"
   }
 ];
 

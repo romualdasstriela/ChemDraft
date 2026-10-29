@@ -1,0 +1,71 @@
+name: Windows dev build
+
+# Personal test builds for a fork: an unsigned "ChemDraft (dev)" NSIS installer, uploaded as a
+# workflow artifact. It installs beside the stable app (own identifier, app data and lock) and is
+# never published as a release or an update. Releases stay with windows-release.yml upstream.
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-dev-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.repository != 'jgassens/ChemDraft'
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+          shared-key: windows-dev-build
+      - run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build host-native OPSIN runtime
+        run: node scripts/build-opsin-runtime.mjs
+
+      - name: Build dev NSIS installer
+        env:
+          CHEMDRAFT_SKIP_UPDATER_SIGNING: '1'
+        run: pnpm --filter @chemdraft/desktop build --bundles nsis
+
+      - name: Collect installer
+        run: |
+          $installers = @(Get-ChildItem apps/desktop/src-tauri/target/release/bundle/nsis/*.exe)
+          if ($installers.Count -ne 1) { throw "Expected one installer, found $($installers.Count)." }
+          New-Item -ItemType Directory -Path installer | Out-Null
+          Copy-Item -LiteralPath $installers[0].FullName -Destination installer
+          $hash = (Get-FileHash -LiteralPath $installers[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "$hash  $($installers[0].Length) bytes  $($installers[0].Name)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chemdraft-dev-windows-installer
+          path: installer/*.exe
+          if-no-files-found: error

@@ -738,11 +738,15 @@ import {
   listenForSpin3dSettings,
   pushKeybindingSchemeToNativeMenu,
   closeToolsetWindow,
+  arrangeToolsetWindowsTopToBottom,
   type ToolsetWindowGeometry,
   type ToolsetArtPaintTarget
 } from "./window-manager";
+import { stackToolsetWindows } from "./toolbars/arrangeToolsets";
 import {
   createDefaultVisibleToolsetIds,
+  isGridTransposed,
+  paletteOrientation,
   defaultVisibleToolsetIds,
   desktopToolsetRegistry,
   compoundLayoutRegistry,
@@ -1617,7 +1621,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.28.15.30-codex";
+const CURRENT_BUILD_STAMP = "10.29.09.30-opus";
 /** Starts in the background for the document webview under the existing probe gate. */
 export function startMainWindowPerfProbe(): void {
   perfHook(() => startPerfProbe(CURRENT_BUILD_STAMP));
@@ -3945,6 +3949,35 @@ export function MainWindow({
     }
     void broadcastToolsetCustomizeMode({ toolsetId: DEFAULT_TOOLSET_ID, active }).catch(() => undefined);
   }, [effectiveNativePalette, toolsetWindowGeometry]);
+
+  // View ▸ Arrange Toolbars Top to Bottom: stack the open palettes in registry (= Customize Toolbars)
+  // order down the left of the document, wrapping into a new column at the bottom.
+  const arrangeToolbars = useCallback(async () => {
+    const openIds = toolsetRegistry.listToolsets()
+      .map((toolset) => toolset.id)
+      .filter((toolsetId) => visibleToolsetIdsRef.current.has(toolsetId));
+    if (effectiveNativePalette) {
+      const moved = await arrangeToolsetWindowsTopToBottom(openIds).catch(() => 0);
+      setStatus(moved > 0 ? "Toolbars arranged top to bottom" : "No open toolbars to arrange");
+      return;
+    }
+    const sizes = openIds.flatMap((toolsetId) => {
+      const element = window.document.querySelector<HTMLElement>(
+        `[data-floating-palette="web-preview"][data-toolset-id="${CSS.escape(toolsetId)}"]`
+      );
+      const rect = element?.getBoundingClientRect();
+      return rect ? [{ id: toolsetId, width: rect.width, height: rect.height }] : [];
+    });
+    const base = defaultToolsetPosition(DEFAULT_TOOLSET_ID, toolsetRegistry);
+    const placements = stackToolsetWindows(sizes, { left: base.x, top: base.y, bottom: window.innerHeight - 8 }, 6);
+    setWebPalettePositions((current) => ({
+      ...current,
+      ...Object.fromEntries(placements.map((placement) => [placement.id, { x: placement.x, y: placement.y }]))
+    }));
+    setStatus(placements.length > 0 ? "Toolbars arranged top to bottom" : "No open toolbars to arrange");
+  }, [effectiveNativePalette, toolsetRegistry]);
+  const arrangeToolbarsRef = useRef(arrangeToolbars);
+  arrangeToolbarsRef.current = arrangeToolbars;
 
   // JS owns toolset visibility, so it also owns the native menu's checkmarks. Mirror the
   // current visible set onto every toggle item after each change (no-op in the browser).
@@ -11271,6 +11304,11 @@ export function MainWindow({
 
     if (commandId === "view.customizeMainToolbar") {
       setCustomizeMode(!customizeMainToolbarActiveRef.current);
+      return;
+    }
+
+    if (commandId === "view.arrangeToolbars") {
+      await arrangeToolbarsRef.current();
       return;
     }
 
@@ -19883,7 +19921,7 @@ export function MainWindow({
                 activeTool={activeTool}
                 currentDistributeMode={distributeMode}
                 mode="floating"
-                orientation={toolset.gridLayout?.orientation ?? "vertical"}
+                orientation={paletteOrientation(toolset)}
                 title={toolset.title}
                 onInvoke={invoke}
                 customize={customizingThis ? { groupIds: renderGroups.map((group) => group.id) } : undefined}
@@ -19921,7 +19959,10 @@ export function MainWindow({
                   {
                     "--palette-x": `${position.x}px`,
                     "--palette-y": `${position.y}px`,
-                    "--palette-width": `${toolset.preferredWindowSize?.width ?? 96}px`
+                    // The manifest width is sized for the authored axis; a flipped palette hugs its content.
+                    "--palette-width": isGridTransposed(toolset.gridLayout, paletteOrientation(toolset))
+                      ? "max-content"
+                      : `${toolset.preferredWindowSize?.width ?? 96}px`
                   } as CSSProperties
                 }
                 onPointerDown={(event) => startWebPaletteDrag(toolset.id, event)}
