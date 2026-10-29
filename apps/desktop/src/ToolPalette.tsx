@@ -40,6 +40,7 @@ import {
   usePaletteButtonInvoke
 } from "./toolbars/toolbarCells";
 import { MainStyleWidget } from "./toolbars/mainStyleWidget";
+import { PeriodicTableWidget } from "./toolbars/PeriodicTableWidget";
 import {
   TOOLTIP_DELAY_MS,
   useNativeFloatingTooltip,
@@ -384,8 +385,8 @@ export function ToolPalette({
   // Widgets learn about customize mode through the context so variant-swapping widgets can pin
   // themselves to their default layout while being dragged around.
   const effectiveWidgetState = useMemo<ToolbarWidgetState>(
-    () => ({ ...(widgetState ?? { onInvoke }), customizing: customize !== undefined }),
-    [customize, onInvoke, widgetState]
+    () => ({ ...(widgetState ?? { onInvoke }), customizing: customize !== undefined, activeTool }),
+    [activeTool, customize, onInvoke, widgetState]
   );
 
   return (
@@ -594,6 +595,12 @@ const TOOLBAR_WIDGET_REGISTRY: Record<
     className: "molecular-inspector-palette",
     title: "Molecular Inspector",
     render: () => <MolecularInspectorPaneWidget />
+  },
+  [TOOLBAR_WIDGET_IDS.periodicTable]: {
+    gridMode: "hide-grid",
+    className: "periodic-table-palette",
+    title: "Periodic Table",
+    render: () => <PeriodicTableWidget />
   }
 };
 

@@ -5407,6 +5407,43 @@
           ]
         }
       ]
+    },
+    {
+      "id": "core.periodicTable",
+      "title": "Periodic Table",
+      "source": "core",
+      "defaultVisible": false,
+      "defaultMode": "floating",
+      "preferredWindowSize": {
+        "width": 500,
+        "height": 300,
+        "minWidth": 460,
+        "minHeight": 260
+      },
+      "category": "core",
+      "gridLayout": {
+        "orientation": "horizontal",
+        "rows": 1,
+        "cellWidth": 24,
+        "cellHeight": 24
+      },
+      "groups": [
+        {
+          "id": "core.periodicTable.elements",
+          "items": [
+            {
+              "id": "widget.core.periodicTable",
+              "kind": "control",
+              "label": "Periodic Table",
+              "primary": {
+                "type": "control",
+                "controlId": "widget.core.periodicTable"
+              },
+              "submenu": null
+            }
+          ]
+        }
+      ]
     }
   ]
 }

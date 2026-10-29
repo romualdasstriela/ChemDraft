@@ -32,6 +32,8 @@ export interface ToolbarWidgetState {
   /** True while the palette is in customize mode. Variant-swapping widgets pin themselves to their
    *  default layout so the user always customizes against the layout they'll see most. */
   customizing?: boolean;
+  /** The active tool's command id, so a widget of tool buttons (the periodic table) can mark it. */
+  activeTool?: string;
   /** The latest analysis report, for the Molecular Inspector palette. Absent until one has run. */
   currentMolecularInspector?: AnalysisReport;
   /** True while a newer analysis for the same selection is in flight. */
@@ -80,7 +82,8 @@ export const TOOLBAR_WIDGET_IDS = {
   artStyleControls: "widget.core.artStyleControls",
   ringInspector: "widget.core.ringInspector",
   drawnStructureSettings: "widget.core.drawnStructureSettings",
-  molecularInspector: "widget.core.molecularInspector"
+  molecularInspector: "widget.core.molecularInspector",
+  periodicTable: "widget.core.periodicTable"
 } as const;
 
 export type ToolbarWidgetId = (typeof TOOLBAR_WIDGET_IDS)[keyof typeof TOOLBAR_WIDGET_IDS];

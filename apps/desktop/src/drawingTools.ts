@@ -2,6 +2,7 @@ import type { CommandSpec } from "./commands";
 import { canonicalCommandId } from "./renamedCommands";
 import { detectShortcutPlatform, type ShortcutPlatform } from "@chemdraft/shortcut-engine";
 import { modifierLabels } from "./modifierLabels";
+import { elementToolCommandId, periodicTableElements } from "./periodicTable";
 
 export type DrawingToolKind = "selection" | "bond" | "atom" | "ring" | "text" | "arrow" | "charge" | "bracket" | "art";
 export type ToolActivationOutcome = "activated" | "unavailable" | "ignored";
@@ -394,7 +395,8 @@ export const coreDrawingToolDefinitions = [
     icon: "export",
     usageHint: usageHint("click or drag on canvas", "drag sets length and angle", "Esc exits")
   },
-  ...artDrawingToolDefinitions()
+  ...artDrawingToolDefinitions(),
+  ...elementDrawingToolDefinitions()
 ] as const satisfies readonly DrawingToolDefinition[];
 
 const drawingToolDefinitionByCommandId: ReadonlyMap<string, DrawingToolDefinition> = new Map(
@@ -624,6 +626,18 @@ function dedupeCommandSpecs(commands: readonly CommandSpec[]): CommandSpec[] {
   });
 
   return [...byId.values()];
+}
+
+/** One element tool per element, armed from the Periodic Table toolbar: click an atom to set it. */
+function elementDrawingToolDefinitions(): DrawingToolDefinition[] {
+  return periodicTableElements.map((element) => ({
+    commandId: elementToolCommandId(element.symbol),
+    title: `${element.name} (${element.symbol})`,
+    kind: "atom",
+    category: "structure",
+    icon: "atom",
+    usageHint: usageHint(`click atom to make it ${element.symbol}`, "click more atoms", "Esc exits")
+  }));
 }
 
 function artDrawingToolDefinitions(): DrawingToolDefinition[] {

@@ -393,6 +393,7 @@ import {
   withStandaloneDrawingToolCommands,
   type ActiveToolState
 } from "./drawingTools";
+import { elementSymbolForToolCommand } from "./periodicTable";
 import {
   clipboardPayloadFromDataTransfer,
   readClipboardPayload,
@@ -1621,7 +1622,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.29.12.00-opus";
+const CURRENT_BUILD_STAMP = "10.29.12.30-opus";
 /** Starts in the background for the document webview under the existing probe gate. */
 export function startMainWindowPerfProbe(): void {
   perfHook(() => startPerfProbe(CURRENT_BUILD_STAMP));
@@ -4289,6 +4290,22 @@ export function MainWindow({
     setFreeformNativeBond(undefined);
     setStatus(`Set hovered atom to ${element}`);
   }, [commitDocumentChange, selectedNativeMoleculePart]);
+
+  // A Periodic Table element tool: clicking an atom sets it to the armed element, one undo step each.
+  const applyElementToolToAtom = useCallback((target: NativeMoleculeDeleteTarget, element: string) => {
+    const currentDocument = documentRef.current;
+    const nextDocument = applyNativeAtomElementTarget(currentDocument, target, element);
+    if (nextDocument === currentDocument) {
+      const object = target.kind === "atom" ? findDocumentObject(currentDocument, target.objectId) : undefined;
+      const atom = object?.type === "molecule" && target.kind === "atom"
+        ? object.atoms.find((candidate) => candidate.id === target.atomId)
+        : undefined;
+      setStatus(atom?.element === element ? `Atom is already ${element}` : `Cannot set atom to ${element}`);
+      return;
+    }
+    commitDocumentChange(nextDocument, `Set atom to ${element}`);
+    setStatus(`Set atom to ${element}`);
+  }, [commitDocumentChange]);
 
   const setHoveredNativeAtomLabel = useCallback((label: string) => {
     const target = hoveredNativeDeleteTargetRef.current
@@ -15704,6 +15721,25 @@ export function MainWindow({
       }
     }
 
+    {
+      const element = elementSymbolForToolCommand(activeToolState.activeCommandId);
+      if (element) {
+        event.preventDefault();
+        event.stopPropagation();
+        // The atom under the click itself, not only the last hover: a pen tap or a click with no
+        // move before it has no hover yet.
+        const target = nativeMoleculeCanvasHoverTarget(
+          documentRef.current, point, event.target, hitToleranceForScale(viewportRef.current.scale)
+        ) ?? hoveredNativeDeleteTargetRef.current;
+        if (target?.kind === "atom") {
+          applyElementToolToAtom(target, element);
+        } else {
+          setStatus(`${element} tool: click an atom to make it ${element}`);
+        }
+        return;
+      }
+    }
+
     if (activeToolState.activeCommandId === "tool.atom") {
       event.preventDefault();
       event.stopPropagation();
@@ -15747,6 +15783,7 @@ export function MainWindow({
     activeToolState.activeKind,
     addChargeToHoveredNativeAtom,
     applyChargeDocumentAtPoint,
+    applyElementToolToAtom,
     applyNativeArtDocumentAtPoint,
     applyNativeTemplateDocumentAtPoint,
     applySingleBondDocumentAtPoint,
@@ -17078,6 +17115,20 @@ export function MainWindow({
       }
     }
 
+    {
+      const element = elementSymbolForToolCommand(activeToolState.activeCommandId);
+      if (element && object?.type === "molecule" && point) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (nativeMoleculeHit?.kind === "atom") {
+          applyElementToolToAtom({ objectId, ...nativeMoleculeHit }, element);
+        } else {
+          setStatus(`${element} tool: click an atom to make it ${element}`);
+        }
+        return;
+      }
+    }
+
     if (activeToolState.activeCommandId === "tool.atom" && object?.type === "molecule" && point) {
       if (nativeMoleculeHit?.kind === "atom") {
         // preventDefault, or the pointerdown's companion mousedown moves focus to the clicked
@@ -17685,6 +17736,7 @@ export function MainWindow({
     assignHoveredNativeDeleteTarget,
     applyChargeDocumentAtPoint,
     applyBracketAtPoint,
+    applyElementToolToAtom,
     applyNativeArtDocumentAtPoint,
     applyNativeBondDisplayStyleDocumentTarget,
     applyNativeTemplateDocumentAtPoint,
