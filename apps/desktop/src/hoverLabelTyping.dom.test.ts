@@ -373,6 +373,45 @@ describe("hover label typing", () => {
     expectIntact();
   });
 
+  // Relabelling atom after atom with plain (lower-case) keys: the second key used to type "On" onto
+  // the first atom instead of making the hovered carbon N.
+  it("starts a new label for a lower-case element letter over another atom", async () => {
+    await hover(0);
+    await press("o");
+    expect(molecule().atoms[0]!.element).toBe("O");
+    await hover(1);
+    await press("n");
+    expect(molecule().atoms[0]!.element).toBe("O");
+    expect(molecule().atoms[1]!.element).toBe("N");
+    expect(editor()).toBeNull();
+    await hover(2);
+    await press("s");
+    expect(molecule().atoms[1]!.element).toBe("N");
+    expect(molecule().atoms[2]!.element).toBe("S");
+    expect(editor()).toBeNull();
+    expectIntact();
+  });
+
+  it("labels the nearer end of another atom's bond for a lower-case element letter after a drift", async () => {
+    await hover(0);
+    await press("o");
+    const { near } = await hoverBond(3, 0.4);
+    await press("n");
+    expect(molecule().atoms[0]!.element).toBe("O");
+    expect(molecule().atoms.find((atom) => atom.id === near.id)!.element).toBe("N");
+    expect(editor()).toBeNull();
+    expectIntact();
+  });
+
+  it("still continues a lower-case letter on the labelled atom's own bond", async () => {
+    await hover(0);
+    await press("S");
+    await hoverBond(0, 0.45);
+    await press("i");
+    expect(editor()?.value).toBe("Si");
+    expectIntact();
+  });
+
   it("labels the nearer end of another atom's bond for a capital element letter after a drift", async () => {
     await hover(0);
     await press("O");

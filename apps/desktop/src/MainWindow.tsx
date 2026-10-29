@@ -1621,7 +1621,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.29.09.30-opus";
+const CURRENT_BUILD_STAMP = "10.29.10.20-opus";
 /** Starts in the background for the document webview under the existing probe gate. */
 export function startMainWindowPerfProbe(): void {
   perfHook(() => startPerfProbe(CURRENT_BUILD_STAMP));
@@ -22609,11 +22609,13 @@ export function hoverTargetKeepsLabelContinuation(
 
 /**
  * Whether a letter or digit typed mid-label continues that label, wherever the pointer has drifted.
- * Lower-case letters, digits and capitals that are not elements ("M" in OMe) cannot start a label,
- * so they always continue. A capital element letter continues only while the pointer has stayed on
- * the labelled atom and its own bonds ("CF3"); once the pointer has left them, it starts a new label
- * on whatever atom or bond it is over, even the same atom again. Nothing continues once the labelled
- * atom no longer carries the label (undone, or changed some other way).
+ * Digits and letters that are not elements in either case ("M" and "e" in OMe) cannot start a label,
+ * so they always continue. An element letter continues only while the pointer has stayed on the
+ * labelled atom and its own bonds ("CF3", "Si"). Once the pointer has left them, an element letter
+ * starts a new label on whatever other atom or bond it is over, in either case: hovering the next
+ * carbon and pressing "n" makes it N rather than typing "On" onto the atom labelled before. A capital
+ * does so even back on the same atom. Nothing continues once the labelled atom no longer carries the
+ * label (undone, or changed some other way).
  */
 export function hoverLabelContinuesForKey(
   document: ChemDraftDocument,
@@ -22632,7 +22634,8 @@ export function hoverLabelContinuesForKey(
   if (!assignment.leftAtom && hoverTargetKeepsLabelContinuation(target, assignment)) {
     return true;
   }
-  const startsNewLabel = /^[A-Z]$/.test(key) && nativeElementFromKeyboardKey(key) !== undefined && target !== undefined;
+  const startsNewLabel = nativeElementFromKeyboardKey(key) !== undefined && target !== undefined &&
+    (/^[A-Z]$/.test(key) || !hoverTargetKeepsLabelContinuation(target, assignment));
   return !startsNewLabel;
 }
 
