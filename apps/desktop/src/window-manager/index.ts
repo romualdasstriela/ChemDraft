@@ -856,7 +856,11 @@ const ARRANGE_TOOLSETS_GAP = 6;
  * the target positions share one unit. Rust persists each new position from the windows' Moved events.
  * Returns how many windows were moved.
  */
-export async function arrangeToolsetWindowsTopToBottom(toolsetIds: readonly string[]): Promise<number> {
+export async function arrangeToolsetWindowsTopToBottom(
+  toolsetIds: readonly string[],
+  /** Logical px the document window's own content (the docked toolbar) takes below the menu. */
+  dockedHeight = 0
+): Promise<number> {
   if (!isDesktopRuntime()) {
     return 0;
   }
@@ -881,7 +885,7 @@ export async function arrangeToolsetWindowsTopToBottom(toolsetIds: readonly stri
 
   const workArea = monitor?.workArea ?? (monitor ? { position: monitor.position, size: monitor.size } : undefined);
   const left = Math.max(origin.x, workArea?.position.x ?? origin.x) + Math.round(ARRANGE_TOOLSETS_INSET.left * scale);
-  const top = Math.max(origin.y, workArea?.position.y ?? origin.y) + Math.round(ARRANGE_TOOLSETS_INSET.top * scale);
+  const top = Math.max(origin.y, workArea?.position.y ?? origin.y) + Math.round((ARRANGE_TOOLSETS_INSET.top + Math.max(0, dockedHeight)) * scale);
   const bottom = workArea ? workArea.position.y + workArea.size.height : Number.POSITIVE_INFINITY;
   const placements = stackToolsetWindows(windows, { left, top, bottom }, Math.round(ARRANGE_TOOLSETS_GAP * scale));
 

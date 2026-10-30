@@ -10,7 +10,11 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
 1. Vertical toolbars
    - Each toolbar can be laid out horizontally or vertically: View > Customize Toolbars,
      Horizontal/Vertical choice on each toolbar's row.
-   - View > Arrange Toolbars stacks the toolbar windows top to bottom down the side.
+   - View > Arrange Toolbars stacks the toolbar windows top to bottom down the side,
+     starting below the docked Main toolbar.
+   - The Main toolbar is no longer a floating window: it is docked as a fixed strip across
+     the top of the document window, right under the File menu row. Its pop-out menus open
+     downward. View > Toolbars still shows or hides it. All other toolbars still float.
 
 2. Relabelling atoms by hovering and typing
    - Fixed: after relabelling one hovered carbon with a key, pressing a key over the next

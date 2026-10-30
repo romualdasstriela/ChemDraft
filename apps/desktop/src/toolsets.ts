@@ -466,6 +466,16 @@ export function toolsetSupportsOrientation(toolset: Pick<DesktopToolsetDefinitio
   )));
 }
 
+/**
+ * Toolsets drawn as a fixed strip across the top of the document window, under the menu, instead of
+ * in a floating window of their own. Every other toolset still floats.
+ */
+const DOCKED_TOOLSET_IDS: ReadonlySet<string> = new Set(["core.main"]);
+
+export function isDockedToolset(toolsetId: string): boolean {
+  return DOCKED_TOOLSET_IDS.has(toolsetId);
+}
+
 /** The axis a palette renders along: the user's choice where the toolset supports flipping. */
 export function paletteOrientation(
   toolset: Pick<DesktopToolsetDefinition, "gridLayout" | "orientation" | "groups">

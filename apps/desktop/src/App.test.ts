@@ -592,7 +592,9 @@ describe("ChemDraft desktop shell", () => {
       expect(markup).toContain("document-board without-rulers");
       expect(markup).not.toContain("menu-bar");
       expect(markup).not.toContain("command-bar");
-      expect(markup).not.toContain("tool-palette");
+      // Only the Main toolbar lives in the document window, docked under the menu.
+      expect(markup).toContain('data-docked-toolbar="true" data-toolset-id="core.main"');
+      expect(markup).not.toContain("web-floating-palette");
       expect(markup).not.toContain("drawer-rail");
       expect(markup).not.toContain("statusbar");
     } finally {
@@ -712,7 +714,8 @@ describe("ChemDraft desktop shell", () => {
   it("renders in-window fallback palette titles as explicit drag surfaces", () => {
     const markup = renderToStaticMarkup(createElement(MainWindow, { nativePalette: false }));
 
-    expect(markup).toContain('aria-label="Floating Main Toolbar"');
+    expect(markup).not.toContain('aria-label="Floating Main Toolbar"');
+    expect(markup).toContain('data-docked-toolbar="true" data-toolset-id="core.main"');
     expect(markup).toContain('aria-label="Floating Art Toolbar"');
     expect(markup).toContain('data-palette-title-drag-surface="true"');
     expect(markup).toContain('data-web-palette-drag-region="true"');
@@ -4341,9 +4344,12 @@ describe("ChemDraft desktop shell", () => {
   });
 
   it("does not show fake chemistry objects on a blank document", () => {
-    const markup = renderToStaticMarkup(
+    // The document workspace only: the docked Main toolbar's tool names (reaction arrows) are not
+    // chemistry objects.
+    const fullMarkup = renderToStaticMarkup(
       createElement(MainWindow, { initialPaletteMode: "floating", nativePalette: true })
     );
+    const markup = fullMarkup.slice(fullMarkup.indexOf('class="workspace'));
 
     expect(markup).not.toContain("molecule-object");
     expect(markup).not.toContain("reaction");

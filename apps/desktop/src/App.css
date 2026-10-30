@@ -548,8 +548,37 @@ textarea:focus-visible,
 }
 
 /* In-viewport application menu bar (browser build; the desktop build uses the native OS menu). */
-.app-shell.has-app-menu-bar {
+.app-shell.has-app-menu-bar,
+.app-shell.has-docked-toolbar {
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+.app-shell.has-app-menu-bar.has-docked-toolbar {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+/* The Main toolbar, docked as a fixed strip across the top of the document window under the menu.
+   It reuses the floating palette's styles; only the drag grip goes, since it cannot move. Overflow
+   stays visible so inline flyouts and tooltips can drop over the document below. */
+.docked-toolbar-strip {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  border-bottom: 1px solid var(--cd-border);
+  background: var(--cd-bg-panel);
+  overflow: visible;
+}
+
+.docked-toolbar {
+  display: grid;
+  min-width: 0;
+  overflow: visible;
+}
+
+.docked-toolbar .palette-content-drag-grip {
+  display: none;
 }
 
 .menu-bar {
@@ -3380,6 +3409,13 @@ textarea:focus-visible,
 .tool-palette.floating.horizontal .toolbar-command-flyout-menu {
   top: auto;
   bottom: calc(100% + 5px);
+}
+
+/* The docked strip sits at the top of the window: its menus drop down over the document instead. */
+.docked-toolbar .tool-palette.floating.horizontal .toolbar-distribute-menu,
+.docked-toolbar .tool-palette.floating.horizontal .toolbar-command-flyout-menu {
+  top: calc(100% + 5px);
+  bottom: auto;
 }
 
 .tool-tooltip {

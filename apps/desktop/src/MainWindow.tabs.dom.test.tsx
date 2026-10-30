@@ -1908,6 +1908,8 @@ describe("documents in one window", () => {
       version: 1, toolsetOrder: [], userToolsets: [],
       toolsetOverrides: ["core.main", "core.art", "core.structure"].map(toolsetId => ({ toolsetId, visible: true }))
     };
+    // The Main toolbar is docked in the document window; only the others get native windows.
+    const nativeStartupToolsetIds = ["core.art", "core.structure"];
 
     it("waits for saved toolbar layout and native window creation before suspending for the launch box", async () => {
       vi.useFakeTimers();
@@ -1929,7 +1931,7 @@ describe("documents in one window", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(200); });
 
       await act(async () => finishLayout(startupLayout));
-      expect(native.openToolset).toHaveBeenCalledWith("core.main", expect.anything());
+      expect(native.openToolset).not.toHaveBeenCalledWith("core.main", expect.anything());
       expect(native.openToolset).toHaveBeenCalledWith("core.art", expect.anything());
       expect(pendingPrompt).toBeUndefined();
       expect(native.suspensionDepth).toBe(0);
@@ -1941,7 +1943,7 @@ describe("documents in one window", () => {
       expect(pendingPrompt?.prompt.message).toMatch(/^Its drawing is kept,/);
       expect(pendingPrompt?.prompt.message).not.toContain("1 drawing didn't open");
       expectSuspended();
-      for (const { toolsetId } of startupLayout.toolsetOverrides) {
+      for (const toolsetId of nativeStartupToolsetIds) {
         expect(native.toolsetWindows.has(toolsetId)).toBe(true);
         expect(native.toolsetWindows.get(toolsetId)).toBe(false);
       }
@@ -1960,7 +1962,7 @@ describe("documents in one window", () => {
       expect(container.querySelector('[role="status"]')?.textContent).not.toContain("unavailable");
       await modalButton("Cancel");
       expectReleased();
-      for (const { toolsetId } of startupLayout.toolsetOverrides) {
+      for (const toolsetId of nativeStartupToolsetIds) {
         expect(native.toolsetWindows.get(toolsetId)).toBe(true);
       }
       expect(container.querySelector(".native-shell")).not.toBeNull();
@@ -1979,7 +1981,7 @@ describe("documents in one window", () => {
       for (let attempt = 0; attempt < 3; attempt++) {
         await act(async () => { await vi.advanceTimersByTimeAsync(220); });
       }
-      expect(native.openToolset.mock.calls.filter(([id]) => id === "core.main")).toHaveLength(3);
+      expect(native.openToolset.mock.calls.filter(([id]) => id === "core.art")).toHaveLength(3);
       expect(container.querySelector(".web-shell")).not.toBeNull();
       expect(container.querySelector('[role="status"]')?.textContent).toContain("Native toolset windows unavailable; using in-window toolbars");
       expect(pendingPrompt?.prompt.title).toBe("1 drawing didn't open");
@@ -2070,7 +2072,7 @@ describe("documents in one window", () => {
       }
       expect(container.querySelector(".native-shell")).not.toBeNull();
       expectReleased();
-      for (const { toolsetId } of startupLayout.toolsetOverrides) {
+      for (const toolsetId of nativeStartupToolsetIds) {
         expect(native.toolsetWindows.get(toolsetId)).toBe(true);
       }
       await act(async () => { await vi.advanceTimersByTimeAsync(1000); });

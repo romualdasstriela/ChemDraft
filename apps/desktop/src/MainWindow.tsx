@@ -690,7 +690,7 @@ import { exportStructureListSdf, exportStructureListSmi } from "./structureListE
 import { KetcherEditorHost } from "./KetcherEditorHost";
 import { initialInteractionState, interactionReducer, type InteractionState } from "./interaction/machine";
 import { APPENDABLE_TOOLBAR_WIDGETS, TOOLBAR_WIDGET_TITLES, ToolPalette } from "./ToolPalette";
-import { TOOLBAR_WIDGET_GRID_SPANS } from "./toolbars/toolbarWidgets";
+import { TOOLBAR_WIDGET_GRID_SPANS, type ToolbarWidgetState } from "./toolbars/toolbarWidgets";
 import {
   DEFAULT_TOOLSET_ID,
   broadcastToolsetActiveTool,
@@ -749,6 +749,7 @@ import {
 import { stackToolsetWindows } from "./toolbars/arrangeToolsets";
 import {
   createDefaultVisibleToolsetIds,
+  isDockedToolset,
   isGridTransposed,
   paletteOrientation,
   defaultVisibleToolsetIds,
@@ -1625,7 +1626,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.30.10.00-opus";
+const CURRENT_BUILD_STAMP = "10.30.12.00-opus";
 /** Starts in the background for the document webview under the existing probe gate. */
 export function startMainWindowPerfProbe(): void {
   perfHook(() => startPerfProbe(CURRENT_BUILD_STAMP));
@@ -3036,7 +3037,11 @@ export function MainWindow({
     [activePage.height, pageRulerUnit]
   );
   const visibleFloatingToolsets = useMemo(
-    () => toolsetRegistry.listToolsets().filter((toolset) => visibleToolsetIds.has(toolset.id)),
+    () => toolsetRegistry.listToolsets().filter((toolset) => visibleToolsetIds.has(toolset.id) && !isDockedToolset(toolset.id)),
+    [toolsetRegistry, visibleToolsetIds]
+  );
+  const visibleDockedToolsets = useMemo(
+    () => toolsetRegistry.listToolsets().filter((toolset) => visibleToolsetIds.has(toolset.id) && isDockedToolset(toolset.id)),
     [toolsetRegistry, visibleToolsetIds]
   );
   const ringInspectorOpen = visibleToolsetIds.has(ringInspectorToolsetId);
@@ -3909,7 +3914,8 @@ export function MainWindow({
     resolvedToolsetIdsRef.current.add(toolsetId);
     const perfWindow = perfHook(() => perfProbe?.expectSignal(visibleToolsetIdsRef.current.has(toolsetId) ? "command-finished" : "window-shown"));
 
-    if (effectiveNativePalette) {
+    // A docked toolset is part of the document window, never a native window of its own.
+    if (effectiveNativePalette && !isDockedToolset(toolsetId)) {
       const perfOpen = perfProbe && !visibleToolsetIdsRef.current.has(toolsetId)
         ? perfHook(() => nativeWindowOpening(`toolset:${toolsetId}`)) : undefined;
       // JS owns visibility, so JS decides open vs close (and passes the window geometry on open)
@@ -3945,7 +3951,7 @@ export function MainWindow({
   const setCustomizeMode = useCallback((active: boolean) => {
     setCustomizeMainToolbarActive(active);
     if (active && !visibleToolsetIdsRef.current.has(DEFAULT_TOOLSET_ID)) {
-      if (effectiveNativePalette) {
+      if (effectiveNativePalette && !isDockedToolset(DEFAULT_TOOLSET_ID)) {
         resolvedToolsetIdsRef.current.add(DEFAULT_TOOLSET_ID);
         void openToolsetWindow(DEFAULT_TOOLSET_ID, toolsetWindowGeometry(DEFAULT_TOOLSET_ID))
           .then((nextState) => setVisibleToolsetIds((current) => updateVisibleToolsets(current, DEFAULT_TOOLSET_ID, nextState.open)))
@@ -3962,9 +3968,11 @@ export function MainWindow({
   const arrangeToolbars = useCallback(async () => {
     const openIds = toolsetRegistry.listToolsets()
       .map((toolset) => toolset.id)
-      .filter((toolsetId) => visibleToolsetIdsRef.current.has(toolsetId));
+      .filter((toolsetId) => visibleToolsetIdsRef.current.has(toolsetId) && !isDockedToolset(toolsetId));
+    // The stack starts below the docked strip, not over it.
+    const dockedBottom = window.document.querySelector<HTMLElement>(".docked-toolbar-strip")?.getBoundingClientRect().bottom ?? 0;
     if (effectiveNativePalette) {
-      const moved = await arrangeToolsetWindowsTopToBottom(openIds).catch(() => 0);
+      const moved = await arrangeToolsetWindowsTopToBottom(openIds, dockedBottom).catch(() => 0);
       setStatus(moved > 0 ? "Toolbars arranged top to bottom" : "No open toolbars to arrange");
       return;
     }
@@ -3976,7 +3984,7 @@ export function MainWindow({
       return rect ? [{ id: toolsetId, width: rect.width, height: rect.height }] : [];
     });
     const base = defaultToolsetPosition(DEFAULT_TOOLSET_ID, toolsetRegistry);
-    const placements = stackToolsetWindows(sizes, { left: base.x, top: base.y, bottom: window.innerHeight - 8 }, 6);
+    const placements = stackToolsetWindows(sizes, { left: base.x, top: Math.max(base.y, dockedBottom + 8), bottom: window.innerHeight - 8 }, 6);
     setWebPalettePositions((current) => ({
       ...current,
       ...Object.fromEntries(placements.map((placement) => [placement.id, { x: placement.x, y: placement.y }]))
@@ -12990,7 +12998,8 @@ export function MainWindow({
       openToolsetWindow: (toolsetId) => openToolsetWindow(toolsetId, toolsetWindowGeometry(toolsetId)),
       closeToolsetWindow,
       isKnownToolset: (toolsetId) => Boolean(toolsetRegistry.get(toolsetId)),
-      desiredVisibleToolsetIds: () => [...visibleToolsetIdsRef.current],
+      // Docked toolsets stay known, so a native window left from before docking gets closed.
+      desiredVisibleToolsetIds: () => [...visibleToolsetIdsRef.current].filter((toolsetId) => !isDockedToolset(toolsetId)),
       isCancelled: () => cancelled
     }).then((result) => {
       if (cancelled || result.outcome === "cancelled") {
@@ -19880,12 +19889,85 @@ export function MainWindow({
     return () => globalThis.document.removeEventListener("keydown", onKeyDown);
   }, [openCanvasKeyboardContextMenu]);
 
+  // Live state for palettes drawn in this window (docked toolbars, and the in-window fallback).
+  const inWindowPaletteWidgetState: ToolbarWidgetState = {
+    currentObjectColor: currentToolbarObjectColor,
+    currentArtStyle,
+    currentArtStyleTarget: activeArtPaintTarget,
+    currentMoleculeInspector,
+    currentSelection: currentToolbarSelection,
+    currentMolecularInspector: analysisReport,
+    molecularInspectorBusy: analysisBusy,
+    molecularInspectorStale: analysisReportIsStale,
+    currentTextStyle: currentToolbarTextStyle,
+    currentTextScript: currentToolbarTextScript,
+    onArtStylePreview: previewObjectStyleCommand,
+    onArtStyleCommit: commitObjectStylePreview,
+    onArtStyleCancel: cancelObjectStylePreview,
+    onMoleculeInspectorPreview: previewMoleculeInspectorCommand,
+    onMoleculeInspectorCommit: commitMoleculeInspectorPreview,
+    onMoleculeInspectorCancel: cancelMoleculeInspectorPreview,
+    onMolecularInspectorCopy: copyAnalysisText,
+    onMolecularInspectorChangeInterpretation: recomputeAnalysisFor,
+    onInvoke: invoke
+  };
+  // Render one in-window palette from a given set of groups. The customize controller passes an
+  // optimistic overlay while a drop settles so the palette doesn't flash the old layout.
+  const renderInWindowPalette = (
+    toolset: DesktopToolsetDefinition,
+    renderGroups: readonly ToolbarPaletteGroupModel[],
+    customizing: boolean
+  ) => (
+    <ToolPalette
+      itemGroups={renderGroups.map((group) => group.items)}
+      gridLayout={toolset.gridLayout}
+      activeTool={activeTool}
+      currentDistributeMode={distributeMode}
+      mode="floating"
+      orientation={paletteOrientation(toolset)}
+      title={toolset.title}
+      onInvoke={invoke}
+      customize={customizing ? { groupIds: renderGroups.map((group) => group.id) } : undefined}
+      widgetState={inWindowPaletteWidgetState}
+    />
+  );
+  // A palette with the customize chrome around it while the Main toolbar is being customized.
+  const renderInWindowToolset = (toolset: DesktopToolsetDefinition) => {
+    const paletteGroups = getToolsetPaletteGroups(toolset.id, toolsetRegistry, shellCommandsById, compoundLayoutsEnabled);
+    if (!(customizeMainToolbarActive && toolset.id === DEFAULT_TOOLSET_ID)) {
+      return renderInWindowPalette(toolset, paletteGroups, false);
+    }
+    return (
+      <ToolbarCustomizeController
+        toolsetId={toolset.id}
+        groups={paletteGroups}
+        onEdit={(edit) => sendToolsetLayoutEdit({ toolsetId: toolset.id, edit })}
+      >
+        {(effectiveGroups) => (
+          <>
+            {renderInWindowPalette(toolset, effectiveGroups, true)}
+            <CustomizeBar
+              onDone={() => void sendToolsetLayoutEdit({ toolsetId: toolset.id, edit: { kind: "exitCustomize" } }).catch(() => undefined)}
+              onRestoreDefaults={() => void sendToolsetLayoutEdit({ toolsetId: toolset.id, edit: { kind: "resetToolset" } }).catch(() => undefined)}
+            />
+            <GalleryTray
+              commands={galleryCommands}
+              widgets={APPENDABLE_TOOLBAR_WIDGETS}
+              presentItemIds={new Set(effectiveGroups.flatMap((group) => group.items.map((item) => item.id)))}
+            />
+          </>
+        )}
+      </ToolbarCustomizeController>
+    );
+  };
+
   return (
     <main
       className={[
         "app-shell",
         effectiveNativePalette ? "native-shell" : "web-shell",
-        showAppMenuBar ? "has-app-menu-bar" : ""
+        showAppMenuBar ? "has-app-menu-bar" : "",
+        visibleDockedToolsets.length > 0 ? "has-docked-toolbar" : ""
       ].filter(Boolean).join(" ")}
       aria-label="ChemDraft desktop workspace"
       data-active-tool={activeToolState.activeCommandId}
@@ -19912,6 +19994,22 @@ export function MainWindow({
       />
 
       {showAppMenuBar ? <MenuBar sections={appMenuSections} onInvoke={invoke} /> : null}
+
+      {visibleDockedToolsets.length > 0 ? (
+        <div className="docked-toolbar-strip">
+          {visibleDockedToolsets.map((toolset) => (
+            <section
+              className="docked-toolbar"
+              aria-label={toolset.title}
+              data-docked-toolbar="true"
+              data-toolset-id={toolset.id}
+              key={toolset.id}
+            >
+              {renderInWindowToolset(toolset)}
+            </section>
+          ))}
+        </div>
+      ) : null}
 
       {pluginManagerOpen ? (
         <PluginManagerDialog
@@ -19992,44 +20090,6 @@ export function MainWindow({
       {!effectiveNativePalette
         ? visibleFloatingToolsets.map((toolset) => {
             const position = webPalettePositions[toolset.id] ?? defaultToolsetPosition(toolset.id, toolsetRegistry);
-            const customizingThis = customizeMainToolbarActive && toolset.id === DEFAULT_TOOLSET_ID;
-            const paletteGroups = getToolsetPaletteGroups(toolset.id, toolsetRegistry, shellCommandsById, compoundLayoutsEnabled);
-            // Render from a given set of groups — the controller passes an optimistic overlay while a
-            // drop settles so the palette doesn't flash the old layout during the broadcast round-trip.
-            const renderPalette = (renderGroups: readonly ToolbarPaletteGroupModel[]) => (
-              <ToolPalette
-                itemGroups={renderGroups.map((group) => group.items)}
-                gridLayout={toolset.gridLayout}
-                activeTool={activeTool}
-                currentDistributeMode={distributeMode}
-                mode="floating"
-                orientation={paletteOrientation(toolset)}
-                title={toolset.title}
-                onInvoke={invoke}
-                customize={customizingThis ? { groupIds: renderGroups.map((group) => group.id) } : undefined}
-                widgetState={{
-                  currentObjectColor: currentToolbarObjectColor,
-                  currentArtStyle,
-                  currentArtStyleTarget: activeArtPaintTarget,
-                  currentMoleculeInspector,
-                  currentSelection: currentToolbarSelection,
-                  currentMolecularInspector: analysisReport,
-                  molecularInspectorBusy: analysisBusy,
-                  molecularInspectorStale: analysisReportIsStale,
-                  currentTextStyle: currentToolbarTextStyle,
-                  currentTextScript: currentToolbarTextScript,
-                  onArtStylePreview: previewObjectStyleCommand,
-                  onArtStyleCommit: commitObjectStylePreview,
-                  onArtStyleCancel: cancelObjectStylePreview,
-                  onMoleculeInspectorPreview: previewMoleculeInspectorCommand,
-                  onMoleculeInspectorCommit: commitMoleculeInspectorPreview,
-                  onMoleculeInspectorCancel: cancelMoleculeInspectorPreview,
-                  onMolecularInspectorCopy: copyAnalysisText,
-                  onMolecularInspectorChangeInterpretation: recomputeAnalysisFor,
-                  onInvoke: invoke
-                }}
-              />
-            );
             return (
               <section
                 className="web-floating-palette"
@@ -20066,30 +20126,7 @@ export function MainWindow({
                 >
                   <span className="palette-title-label">{toolset.title.replace(/ Toolbar$/, "")}</span>
                 </div>
-                {customizingThis ? (
-                  <ToolbarCustomizeController
-                    toolsetId={toolset.id}
-                    groups={paletteGroups}
-                    onEdit={(edit) => sendToolsetLayoutEdit({ toolsetId: toolset.id, edit })}
-                  >
-                    {(effectiveGroups) => (
-                      <>
-                        {renderPalette(effectiveGroups)}
-                        <CustomizeBar
-                          onDone={() => void sendToolsetLayoutEdit({ toolsetId: toolset.id, edit: { kind: "exitCustomize" } }).catch(() => undefined)}
-                          onRestoreDefaults={() => void sendToolsetLayoutEdit({ toolsetId: toolset.id, edit: { kind: "resetToolset" } }).catch(() => undefined)}
-                        />
-                        <GalleryTray
-                          commands={galleryCommands}
-                          widgets={APPENDABLE_TOOLBAR_WIDGETS}
-                          presentItemIds={new Set(effectiveGroups.flatMap((group) => group.items.map((item) => item.id)))}
-                        />
-                      </>
-                    )}
-                  </ToolbarCustomizeController>
-                ) : (
-                  renderPalette(paletteGroups)
-                )}
+                {renderInWindowToolset(toolset)}
               </section>
             );
           })

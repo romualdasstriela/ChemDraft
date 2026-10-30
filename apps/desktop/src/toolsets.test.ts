@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ToolsetRegistry, type ToolsetDefinition } from "@chemdraft/toolset-registry";
 import type { CommandSpec } from "./commands";
 import {
+  isDockedToolset,
   computePaletteGridSize,
   createDesktopToolsetRegistry,
   desktopToolsets,
@@ -49,6 +50,12 @@ describe("palette orientation", () => {
       row: 3,
       column: 0
     });
+  });
+});
+
+describe("docked toolbars", () => {
+  it("docks only the Main toolbar; every other toolbar keeps its floating window", () => {
+    expect(desktopToolsets.filter((toolset) => isDockedToolset(toolset.id)).map((toolset) => toolset.id)).toEqual(["core.main"]);
   });
 });
 
