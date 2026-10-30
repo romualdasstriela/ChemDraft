@@ -41,4 +41,13 @@ describe("hover letter labels", () => {
       expect(svg, letter).toContain(`>${letter}<`);
     }
   });
+
+  it("draws numbered R-groups in either case without the ? query mark", () => {
+    const chain = applySingleBondToolAtPoint(createPhase4Document("Chain"), { x: 200, y: 200 });
+    const before = molecule(chain);
+    for (const label of ["R1", "R2", "R12", "r1", "r2", "R₁", "R¹"]) {
+      const labelled = applyNativeAtomElementTarget(chain, { objectId: before.id, kind: "atom", atomId: before.atoms[0]!.id, distanceToPointer: 0 }, label);
+      expect(exportPhase4Svg(labelled, { includeWarnings: false }).contents, label).not.toContain('data-atom-indicator="query"');
+    }
+  });
 });

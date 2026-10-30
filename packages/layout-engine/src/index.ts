@@ -3335,13 +3335,13 @@ function nativeBondStereoIndicatorLabel(bond: CoreMoleculeBond): string | undefi
 }
 
 /**
- * Labels drawn with the "?" query mark: the dummy atom, numbered R-groups, R# and atom lists. A bare
- * capital letter (X, A, Q, M, L, R) is a placeholder label a hover key puts on an atom, and is drawn
- * as just that letter.
+ * Labels drawn with the "?" query mark: the dummy atom, R# and atom lists. A placeholder label,
+ * a bare capital letter (X, A, Q, M, L, R) or a numbered R-group (R1, r2, R₁, R¹), is drawn as
+ * just its text.
  */
 function isQueryLikeAtomLabel(value: string): boolean {
   const trimmed = value.trim();
-  if (trimmed === "*" || /^R\d+$/i.test(trimmed)) {
+  if (trimmed === "*") {
     return true;
   }
   return nativeElementFromAtomLabel(trimmed) === undefined &&

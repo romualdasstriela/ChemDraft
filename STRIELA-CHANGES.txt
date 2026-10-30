@@ -33,8 +33,8 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - G, J, L and Z now count as placeholder labels like X and R, so no letter label shows
      the "?" unknown-label badge.
    - Bare letters X, A, Q, M, L and R are no longer drawn with the purple "?" query-atom
-     mark. It stays only for explicit query notation: *, numbered R-groups (R1), R# and
-     bracketed atom lists.
+     mark, and neither are numbered R-groups (R1, R2, r1, R₁, R¹). It stays only for
+     explicit query notation: *, R# and bracketed atom lists.
 
 3. Periodic Table toolbar
    - New toolbar with the full periodic table. Click an element, then click atoms to set
