@@ -23,7 +23,15 @@ export async function writeClipboardText(text: string): Promise<boolean> {
   return writeClipboardTextItems([{ type: "text/plain", text }]);
 }
 
-export async function writeClipboardTextItems(items: readonly ClipboardWriteTextItem[]): Promise<boolean> {
+export interface ClipboardWriteOptions {
+  /** A picture of the same content, written in the same transaction (desktop only). */
+  jpegBytes?: Uint8Array;
+}
+
+export async function writeClipboardTextItems(
+  items: readonly ClipboardWriteTextItem[],
+  options: ClipboardWriteOptions = {}
+): Promise<boolean> {
   const normalizedItems = normalizeClipboardWriteTextItems(items);
   if (normalizedItems.length === 0) {
     return false;
@@ -32,7 +40,10 @@ export async function writeClipboardTextItems(items: readonly ClipboardWriteText
   if (isDesktopRuntime()) {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("write_clipboard_text_items", { items: normalizedItems });
+      await invoke("write_clipboard_text_items", {
+        items: normalizedItems,
+        ...(options.jpegBytes ? { jpegBytes: Array.from(options.jpegBytes) } : {})
+      });
       return true;
     } catch {
       // Fall through to the browser Clipboard API. Tauri previews and tests can

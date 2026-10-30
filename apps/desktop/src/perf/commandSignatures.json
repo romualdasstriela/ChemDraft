@@ -540,7 +540,7 @@
     "name": "write_clipboard_text_items",
     "async": true,
     "generics": "",
-    "parameters": "app: tauri::AppHandle, items: Vec<ClipboardWriteTextItem>,",
+    "parameters": "app: tauri::AppHandle, items: Vec<ClipboardWriteTextItem>, jpeg_bytes: Option<Vec<u8>>,",
     "returnType": "Result<(), String>"
   },
   {
@@ -548,7 +548,7 @@
     "name": "write_clipboard_text_items",
     "async": false,
     "generics": "",
-    "parameters": "app: tauri::AppHandle, items: Vec<ClipboardWriteTextItem>,",
+    "parameters": "app: tauri::AppHandle, items: Vec<ClipboardWriteTextItem>, jpeg_bytes: Option<Vec<u8>>,",
     "returnType": "Result<(), String>"
   },
   {

@@ -259,30 +259,67 @@ pub(crate) fn png_pixels_per_meter(png: &[u8]) -> Option<(u32, u32)> {
     None
 }
 
+/// The pixels-per-metre a JPEG declares in its JFIF `APP0` header, if it declares a physical unit
+/// (1 = dots per inch, 2 = dots per centimetre; 0 is only an aspect ratio).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn jpeg_pixels_per_meter(jpeg: &[u8]) -> Option<(u32, u32)> {
+    // SOI, APP0 marker, 2-byte length, "JFIF\0", 2-byte version, then units and densities.
+    if !jpeg.starts_with(&[0xff, 0xd8, 0xff, 0xe0]) || jpeg.get(6..11)? != b"JFIF\0" {
+        return None;
+    }
+    let units = *jpeg.get(13)?;
+    let x = u32::from(u16::from_be_bytes([*jpeg.get(14)?, *jpeg.get(15)?]));
+    let y = u32::from(u16::from_be_bytes([*jpeg.get(16)?, *jpeg.get(17)?]));
+    let per_meter = |density: u32| match units {
+        1 => Some((f64::from(density) / 0.0254).round() as u32),
+        2 => Some(density * 100),
+        _ => None,
+    };
+    let (x, y) = (per_meter(x)?, per_meter(y)?);
+    (x > 0 && y > 0).then_some((x, y))
+}
+
 /// A PNG as a `CF_DIBV5` block: BITMAPV5HEADER + 32-bit BGRA pixels (bottom-up, alpha preserved),
 /// for applications that paste bitmaps but not the registered `PNG` format (Paint, older Office).
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn png_to_dibv5(png: &[u8]) -> Result<Vec<u8>, String> {
-    const HEADER_SIZE: u32 = 124;
-    const BI_BITFIELDS: u32 = 3;
-    const LCS_SRGB: u32 = 0x7352_4742;
-    const LCS_GM_IMAGES: u32 = 4;
-
     // into_rgba8 reuses an already-RGBA8 buffer (to_rgba8 cloned it: one more full-size copy of a
     // 4x render).
     let image = image::load_from_memory_with_format(png, image::ImageFormat::Png)
         .map_err(|error| format!("Could not decode PNG for the clipboard: {error}"))?
         .into_rgba8();
+    rgba_to_dibv5(&image, png_pixels_per_meter(png))
+}
+
+/// A JPEG as a `CF_DIBV5` block (opaque), at the density its JFIF header declares, so a Ctrl+C
+/// picture pastes into Word at its drawn size.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn jpeg_to_dibv5(jpeg: &[u8]) -> Result<Vec<u8>, String> {
+    let image = image::load_from_memory_with_format(jpeg, image::ImageFormat::Jpeg)
+        .map_err(|error| format!("Could not decode JPEG for the clipboard: {error}"))?
+        .into_rgba8();
+    rgba_to_dibv5(&image, jpeg_pixels_per_meter(jpeg))
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn rgba_to_dibv5(
+    image: &image::RgbaImage,
+    pixels_per_meter: Option<(u32, u32)>,
+) -> Result<Vec<u8>, String> {
+    const HEADER_SIZE: u32 = 124;
+    const BI_BITFIELDS: u32 = 3;
+    const LCS_SRGB: u32 = 0x7352_4742;
+    const LCS_GM_IMAGES: u32 = 4;
+
     let (width, height) = image.dimensions();
     let size_image = width
         .checked_mul(height)
         .and_then(|pixels| pixels.checked_mul(4))
         .filter(|size| *size <= u32::MAX - HEADER_SIZE)
         .ok_or_else(|| format!("Image too large for the clipboard: {width}x{height}"))?;
-    // Declare the PNG's own density: a hard-coded 72 dpi told bitmap-only readers that honor DIB
+    // Declare the image's own density: a hard-coded 72 dpi told bitmap-only readers that honor DIB
     // resolution (older Office, WordPad) a 384 dpi Copy As PNG was 5.3x its real size.
-    let (pixels_per_meter_x, pixels_per_meter_y) =
-        png_pixels_per_meter(png).unwrap_or((2835, 2835));
+    let (pixels_per_meter_x, pixels_per_meter_y) = pixels_per_meter.unwrap_or((2835, 2835));
 
     let mut dib = Vec::with_capacity((HEADER_SIZE + size_image) as usize);
     let push = |dib: &mut Vec<u8>, value: u32| dib.extend_from_slice(&value.to_le_bytes());
@@ -475,11 +512,16 @@ pub(crate) mod native {
 
     /// Replace the clipboard with `items`, all in one transaction so readers see them together.
     /// `owner` must be a window: with a null owner, EmptyClipboard leaves no owner and every
-    /// SetClipboardData after it fails.
+    /// SetClipboardData after it fails. A `jpeg` picture of the same content rides along (as
+    /// `JFIF` and `CF_DIBV5`) so Ctrl+C pastes into Word as an image; ChemDraft's own paste still
+    /// reads the text items.
     pub(crate) fn write_text_items(
         owner: HWND,
         items: &[ClipboardWriteTextItem],
+        jpeg: Option<&[u8]>,
     ) -> Result<(), String> {
+        // Decode before opening: the clipboard stays locked to other apps while it is open.
+        let dib = jpeg.map(jpeg_to_dibv5).transpose()?;
         let _clipboard = OpenedClipboard::open(owner)?;
         // SAFETY: the clipboard is open with an owner window.
         if unsafe { EmptyClipboard() } == 0 {
@@ -510,6 +552,14 @@ pub(crate) mod native {
             })
             .map(|item| item.r#type.clone())
             .collect::<Vec<_>>();
+
+        if let (Some(jpeg), Some(dib)) = (jpeg, dib) {
+            let jfif_ok = set_bytes(registered("JFIF"), jpeg);
+            let dib_ok = set_bytes(CF_DIBV5, &dib);
+            if !jfif_ok && !dib_ok {
+                return Err("Could not write the picture to the clipboard.".to_string());
+            }
+        }
 
         if failed_types.is_empty() {
             Ok(())

@@ -18698,6 +18698,22 @@ const copyAsPagePaddingPx = 16;
  * A temporary document holding only the copy scope, translated onto a page fitted to its bounds —
  * so a copied SVG/PNG/CDXML frames the selection instead of reproducing a mostly-empty page.
  */
+/**
+ * The page a Ctrl+C picture is drawn from: exactly the copied objects (a partly selected molecule
+ * contributes only its copied fragment), cropped like Copy As.
+ */
+export function selectionClipboardImageDocument(
+  document: ChemDraftDocument,
+  payload: ChemDraftSelectionClipboardPayload
+): ChemDraftDocument {
+  const page = firstPage(document);
+  return copyAsScopedDocument({
+    ...document,
+    pages: [{ ...page, objects: [...payload.objects] }],
+    selection: { ...document.selection, objectIds: [] }
+  });
+}
+
 export function copyAsScopedDocument(document: ChemDraftDocument): ChemDraftDocument {
   const page = firstPage(document);
   const objects = copyAsScopeObjects(document);

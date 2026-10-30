@@ -422,6 +422,7 @@ import {
   applyMechanismArrowControlPoint,
   copyAsMolfile,
   copyAsScopedDocument,
+  selectionClipboardImageDocument,
   copyAsSmiles,
   createMechanismArrowBetween,
   type MechanismArrowEndpoint,
@@ -1624,7 +1625,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.29.14.30-opus";
+const CURRENT_BUILD_STAMP = "10.30.10.00-opus";
 /** Starts in the background for the document webview under the existing probe gate. */
 export function startMainWindowPerfProbe(): void {
   perfHook(() => startPerfProbe(CURRENT_BUILD_STAMP));
@@ -6860,7 +6861,9 @@ export function MainWindow({
       return;
     }
 
-    const didWrite = await writeClipboardTextItems(selectionClipboardTextItems(payload));
+    // A JPEG picture rides along so Ctrl+C pastes into Word; a failed render still copies.
+    const jpegBytes = await renderSelectionClipboardJpeg(documentRef.current, payload).catch(() => undefined);
+    const didWrite = await writeClipboardTextItems(selectionClipboardWriteItems(payload, jpegBytes !== undefined), { jpegBytes });
     if (!didWrite) {
       setStatus(mode === "copy" ? "Copy failed: clipboard unavailable" : "Cut canceled: clipboard unavailable");
       return;
@@ -22817,6 +22820,37 @@ export function selectionClipboardTextItems(
     items.push({ type: "text/plain", text: plainText });
   }
   return items;
+}
+
+/**
+ * What Ctrl+C writes beside a picture: the ChemDraft selection only. Word pastes plain text in
+ * preference to a picture, so text/plain stays off the clipboard whenever a picture is on it.
+ */
+export function selectionClipboardWriteItems(
+  payload: ChemDraftSelectionClipboardPayload,
+  withPicture: boolean
+): ClipboardWriteTextItem[] {
+  const items = selectionClipboardTextItems(payload);
+  return withPicture ? items.filter((item) => item.type !== "text/plain") : items;
+}
+
+/** The Ctrl+C picture: the copied objects as a white-backed 4x JPEG (desktop only). */
+async function renderSelectionClipboardJpeg(
+  document: ChemDraftDocument,
+  payload: ChemDraftSelectionClipboardPayload
+): Promise<Uint8Array | undefined> {
+  if (!isDesktopRuntime()) {
+    return undefined;
+  }
+  const svg = exportPhase4Svg(selectionClipboardImageDocument(document, payload), { includeWarnings: false }).contents;
+  const { bytes } = await rasterizeSvgNative(svg, "jpeg", {
+    scale: 4,
+    background: "#ffffff",
+    jpegQuality: 95,
+    maxDimensionPx: 8192,
+    cssPxPerInch: CSS_PX_PER_INCH
+  });
+  return bytes.length > 0 ? bytes : undefined;
 }
 
 export function selectionClipboardPayloadKey(payload: ChemDraftSelectionClipboardPayload): string {

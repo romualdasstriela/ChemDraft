@@ -1,6 +1,9 @@
 use std::io::Cursor;
 
-use image::{codecs::jpeg::JpegEncoder, ColorType, DynamicImage, ImageEncoder, ImageFormat};
+use image::{
+    codecs::jpeg::{JpegEncoder, PixelDensity},
+    ColorType, DynamicImage, ImageEncoder, ImageFormat,
+};
 use resvg::{tiny_skia, usvg};
 
 use crate::fonts::shared_fontdb;
@@ -126,16 +129,23 @@ fn rasterize_svg_impl(request: RasterExportRequest) -> Result<RasterExportRespon
     let transform = tiny_skia::Transform::from_scale(scale_x, scale_y);
     resvg::render(&tree, transform, &mut pixmap.as_mut());
 
-    let (mut bytes, encode_warnings) =
-        encode_raster(&pixmap, request.format, background, request.jpeg_quality)?;
+    // scale_x/scale_y are the ACTUAL raster-px-per-source-px ratio after any max-dimension
+    // clamping above, so the density always matches the bitmap really produced — never a nominal
+    // request that clamping silently made too large.
+    let pixels_per_inch = request
+        .css_px_per_inch
+        .map(|css_px_per_inch| f64::from((scale_x + scale_y) / 2.0) * css_px_per_inch);
+    let (mut bytes, encode_warnings) = encode_raster(
+        &pixmap,
+        request.format,
+        background,
+        request.jpeg_quality,
+        pixels_per_inch,
+    )?;
     warnings.extend(encode_warnings);
     if request.format == RasterExportFormat::Png {
-        if let Some(css_px_per_inch) = request.css_px_per_inch {
-            // scale_x/scale_y are the ACTUAL raster-px-per-source-px ratio after any
-            // max-dimension clamping above, so this always matches the bitmap really produced —
-            // never a nominal request that clamping silently made too large.
-            let applied_scale = f64::from((scale_x + scale_y) / 2.0);
-            bytes = png_with_physical_density(bytes, applied_scale * css_px_per_inch)?;
+        if let Some(pixels_per_inch) = pixels_per_inch {
+            bytes = png_with_physical_density(bytes, pixels_per_inch)?;
         }
     }
 
@@ -191,6 +201,7 @@ fn encode_raster(
     format: RasterExportFormat,
     background: Option<[u8; 3]>,
     jpeg_quality: Option<u8>,
+    pixels_per_inch: Option<f64>,
 ) -> Result<(Vec<u8>, Vec<RasterExportWarning>), String> {
     let width = pixmap.width();
     let height = pixmap.height();
@@ -216,7 +227,12 @@ fn encode_raster(
                 }
             }
             let rgb = flatten_to_rgb(pixmap.data(), background.unwrap_or([255, 255, 255]));
-            let encoder = JpegEncoder::new_with_quality(&mut cursor, quality);
+            let mut encoder = JpegEncoder::new_with_quality(&mut cursor, quality);
+            // The JFIF density is what lets Word paste a 4x render at its drawn size.
+            if let Some(pixels_per_inch) = pixels_per_inch.filter(|ppi| ppi.is_finite()) {
+                let dpi = pixels_per_inch.round().clamp(1.0, f64::from(u16::MAX)) as u16;
+                encoder.set_pixel_density(PixelDensity::dpi(dpi));
+            }
             encoder
                 .write_image(&rgb, width, height, ColorType::Rgb8.into())
                 .map_err(|error| format!("Could not encode JPEG export: {error}"))?;
@@ -603,6 +619,22 @@ mod tests {
         // The IHDR chunk must still come first and decode cleanly.
         assert_eq!(&response.bytes[12..16], b"IHDR");
         image::load_from_memory(&response.bytes).expect("PNG with pHYs should still decode");
+    }
+
+    #[test]
+    fn jpeg_export_declares_its_density_in_the_jfif_header() {
+        let response = rasterize_svg_impl(RasterExportRequest {
+            scale: Some(4.0),
+            css_px_per_inch: Some(96.0),
+            ..request(RasterExportFormat::Jpeg)
+        })
+        .expect("JPEG export with density should encode");
+
+        assert_eq!(
+            crate::windows_clipboard::jpeg_pixels_per_meter(&response.bytes),
+            Some((15118, 15118))
+        );
+        image::load_from_memory(&response.bytes).expect("JPEG with density should still decode");
     }
 
     #[test]
