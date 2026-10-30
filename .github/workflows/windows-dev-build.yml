@@ -43,6 +43,11 @@ jobs:
           shared-key: windows-dev-build
       - run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
 
+      # The rest of the Rust gate ci.yml runs on Windows. tauri_build needs apps/desktop/dist to exist.
+      - run: pnpm --filter @chemdraft/desktop build:web
+      - run: cargo clippy --all-targets --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings
+      - run: cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

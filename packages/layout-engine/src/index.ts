@@ -245,6 +245,34 @@ export interface BondHit {
   nearestTerminalAtomId?: string;
 }
 
+/**
+ * Triple bonds are linear: a bond grown from an atom that carries a triple bond, or a triple bond
+ * grown from an atom with one bond, continues straight on from that atom's one existing bond (180°)
+ * instead of zig-zagging. Returns the unit direction to grow in, or undefined when the atom has no
+ * single existing bond to line up with. A triple bond needs the atom's other bond to be single;
+ * past a double bond the new bond could not be triple, so it zig-zags as usual.
+ */
+export function linearBondGrowthDirection(
+  atoms: readonly MoleculeLayoutAtom[],
+  bonds: readonly (MoleculeLayoutBond & { order?: string })[],
+  atomId: string,
+  growsTripleBond: boolean
+): LayoutPoint | undefined {
+  const atomBonds = bonds.filter((bond) => bond.fromAtomId === atomId || bond.toAtomId === atomId);
+  const bond = atomBonds.length === 1 ? atomBonds[0]! : undefined;
+  if (!bond || !(bond.order === "triple" || (growsTripleBond && bond.order === "single"))) {
+    return undefined;
+  }
+  const atom = atoms.find((candidate) => candidate.id === atomId);
+  const neighborId = bond.fromAtomId === atomId ? bond.toAtomId : bond.fromAtomId;
+  const neighbor = atoms.find((candidate) => candidate.id === neighborId);
+  if (!atom || !neighbor) {
+    return undefined;
+  }
+  const length = Math.hypot(atom.x - neighbor.x, atom.y - neighbor.y);
+  return length > 0 ? { x: (atom.x - neighbor.x) / length, y: (atom.y - neighbor.y) / length } : undefined;
+}
+
 export function planBondExtension(input: BondExtensionPlanningInput): BondExtensionPlan | undefined {
   if (input.bondLength <= 0 || input.hitRadius < 0) {
     return undefined;
