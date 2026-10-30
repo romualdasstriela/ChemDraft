@@ -17,6 +17,8 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      downward. View > Toolbars still shows or hides it. All other toolbars still float.
      It is always horizontal: Customize Toolbars no longer offers Vertical for it, and an
      earlier saved Vertical choice is ignored.
+   - When the window is narrower than the Main toolbar, its sections (split at the divider
+     lines) wrap onto a second row instead of the right end being cut off.
 
 2. Relabelling atoms by hovering and typing
    - Fixed: after relabelling one hovered carbon with a key, pressing a key over the next

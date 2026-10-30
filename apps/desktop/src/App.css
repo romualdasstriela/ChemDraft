@@ -573,8 +573,22 @@ textarea:focus-visible,
 
 .docked-toolbar {
   display: grid;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: visible;
+}
+
+/* Sections (split at the dividers) wrap onto further rows when the window is narrower than the
+   toolbar, instead of the right end being cut off. */
+.docked-toolbar-strip .docked-toolbar .tool-palette.floating.horizontal {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  width: 100%;
+  max-height: none;
+}
+
+.docked-toolbar .tool-palette.floating.horizontal .tool-group:last-of-type {
+  border-right: 0;
 }
 
 .docked-toolbar .palette-content-drag-grip {

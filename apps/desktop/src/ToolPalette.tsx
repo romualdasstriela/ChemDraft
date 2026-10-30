@@ -232,7 +232,8 @@ export function ToolPalette({
   onRequestFlyout,
   onInvoke,
   widgetState,
-  customize
+  customize,
+  wrapAtSeparators = false
 }: {
   groups?: CommandSpec[][];
   itemGroups?: ToolbarPaletteItemModel[][];
@@ -251,6 +252,10 @@ export function ToolPalette({
    *  invoke/flyout/tooltip handlers), grouped by these group ids (aligned with the item groups,
    *  BEFORE the widget filter). A DndContext must wrap this component (ToolbarCustomizeController). */
   customize?: { groupIds: readonly (string | undefined)[] };
+  /** Break each auto-placed group into its own section at every separator, so a palette narrower
+   *  than its content (the docked Main strip) can wrap sections onto further rows. The section
+   *  edges draw the dividers. Not in customize mode, where groups stay whole for reordering. */
+  wrapAtSeparators?: boolean;
 }) {
   const {
     visibleTooltipId,
@@ -304,7 +309,8 @@ export function ToolPalette({
       // span-less widgets drop out to the appended-section path below.
       items: group.filter((item) => !isToolbarWidgetItem(item) || isGridWidgetItem(item))
     }))
-    .filter((group) => group.items.length > 0);
+    .filter((group) => group.items.length > 0)
+    .flatMap((group) => (wrapAtSeparators && !customize ? splitGroupAtSeparators(group) : [group]));
   const gridItemGroups = gridGroups.map((group) => group.items);
   // Pair each present widget with the id of the group it lives in (from `customize`, aligned to the
   // UNFILTERED groups), so a customize drag-out can address it. Deduped, first-seen order.
@@ -663,6 +669,29 @@ function commandGroupsToPaletteItemGroups(groups: CommandSpec[][]): ToolbarPalet
     disabledReason: command.disabledReason,
     category: command.category
   })));
+}
+
+/**
+ * One group as separator-delimited sections, separators dropped. A group with any explicitly placed
+ * item stays whole: its row/column numbers only mean something in the one grid.
+ */
+function splitGroupAtSeparators<Group extends { id: string | undefined; items: ToolbarPaletteItemModel[] }>(
+  group: Group
+): Group[] {
+  if (group.items.some((item) => item.layout.column !== undefined || item.layout.row !== undefined)) {
+    return [group];
+  }
+  const sections: ToolbarPaletteItemModel[][] = [[]];
+  for (const item of group.items) {
+    if (item.kind === "separator") {
+      sections.push([]);
+    } else {
+      sections[sections.length - 1]!.push(item);
+    }
+  }
+  return sections
+    .filter((items) => items.length > 0)
+    .map((items, index) => ({ ...group, id: group.id === undefined ? undefined : `${group.id}#${index}`, items }));
 }
 
 function toolPaletteGridStyle(gridLayout: ToolsetGridLayout | undefined, transposed = false): CSSProperties | undefined {
