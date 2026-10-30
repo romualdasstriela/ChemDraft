@@ -3334,13 +3334,18 @@ function nativeBondStereoIndicatorLabel(bond: CoreMoleculeBond): string | undefi
   return undefined;
 }
 
+/**
+ * Labels drawn with the "?" query mark: the dummy atom, numbered R-groups, R# and atom lists. A bare
+ * capital letter (X, A, Q, M, L, R) is a placeholder label a hover key puts on an atom, and is drawn
+ * as just that letter.
+ */
 function isQueryLikeAtomLabel(value: string): boolean {
   const trimmed = value.trim();
-  if (trimmed === "*" || /^R\d*$/i.test(trimmed)) {
+  if (trimmed === "*" || /^R\d+$/i.test(trimmed)) {
     return true;
   }
   return nativeElementFromAtomLabel(trimmed) === undefined &&
-    /^(A|Q|X|M|L|R#|\[[^\]]+\])$/i.test(trimmed);
+    /^(R#|\[[^\]]+\])$/i.test(trimmed);
 }
 
 function unknownRecordStringSet(

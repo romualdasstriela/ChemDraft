@@ -4,6 +4,7 @@ import {
   applyNativeAtomElementTarget,
   applySingleBondToolAtPoint,
   createPhase4Document,
+  exportPhase4Svg,
   insertNativeTemplateMolecule,
   nativeMoleculeInvalidAtomStates
 } from "./documentWorkflow";
@@ -27,6 +28,17 @@ describe("hover letter labels", () => {
         expect(labelled.atoms[0]!.element).toBe(letter);
         expect(nativeMoleculeInvalidAtomStates(labelled).find((state) => state.atomId === atomId)?.invalidReason, letter).toBeUndefined();
       }
+    }
+  });
+
+  it("are drawn as just the letter, with no ? query mark beside them", () => {
+    const chain = applySingleBondToolAtPoint(createPhase4Document("Chain"), { x: 200, y: 200 });
+    const before = molecule(chain);
+    for (const letter of nativeHoverLetterLabels) {
+      const labelled = applyNativeAtomElementTarget(chain, { objectId: before.id, kind: "atom", atomId: before.atoms[0]!.id, distanceToPointer: 0 }, letter);
+      const svg = exportPhase4Svg(labelled, { includeWarnings: false }).contents;
+      expect(svg, letter).not.toContain('data-atom-indicator="query"');
+      expect(svg, letter).toContain(`>${letter}<`);
     }
   });
 });
