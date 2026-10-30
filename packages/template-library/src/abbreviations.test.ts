@@ -120,11 +120,11 @@ describe("abbreviation lookup", () => {
   });
 
   it("accepts the deliberate placeholders, case-sensitively", () => {
-    for (const label of ["R", "R'", "R''", "R1", "R12", "X", "A", "Q", "M", "Nu", "E", "LG", "PG", "?", "*", " R1 "]) {
+    for (const label of ["R", "R'", "R''", "R1", "R12", "X", "A", "Q", "M", "G", "L", "J", "Z", "Nu", "E", "LG", "PG", "?", "*", " R1 "]) {
       expect(isGenericAtomLabel(label), label).toBe(true);
     }
-    // Z is Cbz's old name, so it is not waved through; case and spelling variants are not placeholders.
-    for (const label of ["Z", "r", "nu", "R0", "R00", "R01", "R100", "R123", "R'''", "Rx", "Ome", ""]) {
+    // Case and spelling variants are not placeholders.
+    for (const label of ["z", "g", "r", "nu", "R0", "R00", "R01", "R100", "R123", "R'''", "Rx", "Ome", ""]) {
       expect(isGenericAtomLabel(label), label).toBe(false);
     }
   });

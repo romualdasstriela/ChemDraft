@@ -11,12 +11,15 @@ import { abbreviationForBondedElementLabel } from "./abbreviations";
  * `bondedElementLabelMeaning` lists: on a bonded atom "Ar" is aryl (a placeholder), and "Ac", "Pr"
  * and "Ts" are the abbreviation table's acetyl, n-propyl and tosyl.
  *
- * "Z" is left out on purpose: it is also the old peptide abbreviation for Cbz, so it is flagged as
- * unrecognized rather than silently accepted.
+ * Every capital letter that is not an element symbol is a placeholder, so a letter put on an atom
+ * by a hover key never carries the unrecognised-label badge. That includes "Z", although it is also
+ * the old peptide abbreviation for Cbz: as a bare letter it is read as a placeholder, not as Cbz.
  */
 const genericAtomLabels: ReadonlySet<string> = new Set([
   // Halogen, and the molfile query letters: any atom, heteroatom, metal.
   "X", "A", "Q", "M",
+  // Any group, a ligand, and the remaining non-element letters.
+  "G", "L", "J", "Z",
   // Mechanism and synthesis placeholders: nucleophile, electrophile, leaving and protecting group.
   "Nu", "E", "LG", "PG",
   // Unknown, and the dummy atom a pasted SMILES or molfile can carry.
