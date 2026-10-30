@@ -405,7 +405,9 @@ describe("hover label typing over a long chain (stress)", () => {
 
   const DRIFTS = [0.35, 0.5, 0.65, 1] as const;
 
-  it(`keeps OMe on its atom when the pointer drifts ${DRIFTS.join("/")} of the way to a neighbour after "O" (${TRIALS} trials)`, async () => {
+  // A drift that lands on the neighbouring atom hands the next letter to that atom (any letter
+  // relabels the atom it is over); any shorter drift keeps OMe on the labelled atom.
+  it(`keeps OMe on its atom when the pointer drifts ${DRIFTS.join("/")} of the way to a neighbour after "O", unless it lands on the neighbour (${TRIALS} trials)`, async () => {
     const start = molecule();
     let seed = 20261011;
     const random = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
@@ -434,10 +436,17 @@ describe("hover label typing over a long chain (stress)", () => {
       for (const key of ["M", "e"]) await press(key);
       await press("Enter");
       const after = molecule();
-      expectOMeResult(start, atom.id);
+      const onNeighbour = landed?.kind === "atom" && landed.atomId === neighbour.id;
+      if (onNeighbour) {
+        // The label ended at "O"; the neighbour took "M" and "e" as its own label, Me.
+        expect(after.atoms.find((candidate) => candidate.id === atom.id)!.element).toBe("O");
+        expect(after.atoms.some((candidate) => candidate.element === "Me")).toBe(true);
+      } else {
+        expectOMeResult(start, atom.id);
+      }
       row.labelled += 1;
       if (snapshot().activeToolCommandId !== "tool.bond") row.toolSwitched += 1;
-      const added = expectedAttachmentCount(start, atom.id);
+      const added = expectedAttachmentCount(start, onNeighbour ? neighbour.id : atom.id);
       if (after.atoms.length !== start.atoms.length + added || after.bonds.length !== start.bonds.length + added) row.structureChanged += 1;
       await resetTrial();
     }
@@ -464,7 +473,7 @@ describe("hover label typing over a long chain (stress)", () => {
     );
     let seed = 20261012;
     const random = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
-    const tally = { trials: 0, startOnAtom: 0, startOnBond: 0, wanderedOffLabelledAtom: 0, labelled: 0, toolSwitched: 0, structureChanged: 0 };
+    const tally = { trials: 0, startOnAtom: 0, startOnBond: 0, wanderedOffLabelledAtom: 0, movedToOtherAtom: 0, labelled: 0, toolSwitched: 0, structureChanged: 0 };
 
     for (let trial = 0; trial < TRIALS; trial++) {
       const bond = start.bonds[Math.floor(random() * start.bonds.length)]!;
@@ -481,27 +490,38 @@ describe("hover label typing over a long chain (stress)", () => {
       const labelled = molecule().atoms.filter((atom) => atom.element === "O");
       expect(labelled).toHaveLength(1);
       let wandered = false;
+      // Only the key typed straight after "O" is judged by the hover: from then on the label editor
+      // has the keys. If it lands on another atom, that atom takes the letter (the label ends at O).
+      let movedToOtherAtom = false;
       for (const key of ["M", "e"]) {
         const angle = random() * 2 * Math.PI, distance = random() * 0.6 * bondLength;
         point = { x: point.x + Math.cos(angle) * distance, y: point.y + Math.sin(angle) * distance };
         const hovered = await pointAt(point);
         if (!(hovered?.kind === "atom" && hovered.atomId === labelled[0]!.id)) wandered = true;
+        if (key === "M" && hovered?.kind === "atom" && hovered.atomId !== labelled[0]!.id) movedToOtherAtom = true;
         await press(key);
       }
-      if (wandered) tally.wanderedOffLabelledAtom += 1;
+      if (wandered && !movedToOtherAtom) tally.wanderedOffLabelledAtom += 1;
       await press("Enter");
       const after = molecule();
-      expectOMeResult(start, labelled[0]!.id);
+      if (movedToOtherAtom) {
+        tally.movedToOtherAtom += 1;
+        expect(after.atoms.find((atom) => atom.id === labelled[0]!.id)!.element).toBe("O");
+      } else {
+        expectOMeResult(start, labelled[0]!.id);
+      }
       tally.labelled += 1;
       if (snapshot().activeToolCommandId !== "tool.bond") tally.toolSwitched += 1;
+      // Where the other atom's own label went depends on that atom, so only the OMe trials count here.
       const added = expectedAttachmentCount(start, labelled[0]!.id);
-      if (after.atoms.length !== start.atoms.length + added || after.bonds.length !== start.bonds.length + added) tally.structureChanged += 1;
+      if (!movedToOtherAtom && (after.atoms.length !== start.atoms.length + added || after.bonds.length !== start.bonds.length + added)) tally.structureChanged += 1;
       await resetTrial();
     }
 
     console.log(`[hover-wander-stress] ${JSON.stringify(tally)}`);
-    // The drift must actually happen: in most trials the pointer leaves the labelled atom mid-label.
-    expect(tally.wanderedOffLabelledAtom).toBeGreaterThanOrEqual(Math.ceil(tally.trials / 2));
+    // The drift must actually happen: some trials keep OMe while the pointer is off the labelled atom
+    // (on a bond or empty page).
+    expect(tally.wanderedOffLabelledAtom).toBeGreaterThan(0);
     expect(tally.toolSwitched).toBe(0);
     expect(tally.structureChanged).toBe(0);
     expect(tally.labelled).toBe(tally.trials);

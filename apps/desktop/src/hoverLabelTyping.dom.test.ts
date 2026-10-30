@@ -196,12 +196,36 @@ describe("hover label typing", () => {
     expectIntact();
   });
 
-  it("keeps an unrelated hover key's tool shortcut", async () => {
+  it.each([["e", "E"], ["x", "X"], ["X", "X"], ["t", "T"]])("relabels a hovered atom with the capital of a non-element letter (%s)", async (key, label) => {
     await hover(0);
-    await press("e");
-    expect(snapshot().activeToolCommandId).toBe("tool.eraser");
-    expect(molecule().atoms).toHaveLength(6);
+    await press(key);
+    expect(molecule().atoms[0]!.element).toBe(label);
+    expect(snapshot().activeToolCommandId).toBe("tool.bond");
     expect(editor()).toBeNull();
+    expectIntact();
+  });
+
+  it("keeps typing after a non-element letter, so m then e types Me", async () => {
+    await hover(0);
+    await press("m");
+    expect(molecule().atoms[0]!.element).toBe("M");
+    await press("e");
+    expect(editor()?.value).toBe("Me");
+    await press("Enter");
+    expect(editor()).toBeNull();
+    expect(molecule().atoms.some((atom) => atom.element === "Me")).toBe(true);
+    expect(snapshot().activeToolCommandId).toBe("tool.bond");
+  });
+
+  it("relabels the next atom with a non-element letter right after an element key", async () => {
+    await hover(0);
+    await press("o");
+    await hover(1);
+    await press("x");
+    expect(molecule().atoms[0]!.element).toBe("O");
+    expect(molecule().atoms[1]!.element).toBe("X");
+    expect(editor()).toBeNull();
+    expectIntact();
   });
 
   // A bond of `atomIndex` and a point along it, `fraction` of the way from that atom to the other end.
@@ -273,18 +297,15 @@ describe("hover label typing", () => {
     });
   }
 
-  it("keeps a label going when the pointer drifts onto a neighbouring atom", async () => {
+  it("relabels a neighbouring atom the pointer has moved onto, for a non-element letter too", async () => {
     await hover(0);
     await press("O");
     await hover(1);
     await press("M");
-    expect(editor()?.value).toBe("OM");
-    await press("e");
-    await press("Enter");
-    expectOMeSubstituent();
-    expect(molecule().atoms[1]!.element).toBe("C");
-    // The label is done: the hover is back on the atom under the pointer.
-    expect(snapshot().hoveredNativeTarget).toMatchObject({ kind: "atom", atomId: molecule().atoms[1]!.id });
+    expect(editor()).toBeNull();
+    expect(molecule().atoms[0]!.element).toBe("O");
+    expect(molecule().atoms[1]!.element).toBe("M");
+    expectIntact();
   });
 
   it("keeps a label going when the pointer drifts off the molecule onto empty page", async () => {
@@ -461,18 +482,17 @@ describe("hover label typing", () => {
     await hover(1);
     await press("e");
     expect(editor()).toBeNull();
-    expect(snapshot().activeToolCommandId).toBe("tool.eraser");
-    expect(molecule().atoms.map((atom) => atom.element)).toEqual(["C", "C", "C", "C", "C", "C"]);
+    expect(molecule().atoms.map((atom) => atom.element)).toEqual(["C", "E", "C", "C", "C", "C"]);
   });
 
   // Now that the pointer leaving the atom no longer ends a continuation, every other change of
   // context must. Each case: "O" on atom 0, the context change, a drift to atom 1, then "e", which
-  // must choose the Eraser rather than continue the old label as "Oe".
+  // must relabel atom 1 E rather than continue the old label as "Oe".
   async function expectContinuationEnded() {
     await hover(1);
     await press("e");
     expect(editor()).toBeNull();
-    expect(snapshot().activeToolCommandId).toBe("tool.eraser");
+    expect(molecule().atoms[1]!.element).toBe("E");
     expect(molecule().atoms[0]!.element).toBe("O");
     expect(molecule().atoms).toHaveLength(6);
   }
@@ -568,8 +588,9 @@ describe("hover label typing", () => {
     await press("O");
     await act(async () => { await window.__CHEMDRAFT_AGENT__!.command("tool.select"); });
     await press("M");
+    // Not continued as "OM": M relabels the atom afresh.
     expect(editor()).toBeNull();
-    expect(molecule().atoms[0]!.element).toBe("O");
+    expect(molecule().atoms[0]!.element).toBe("M");
     expect(molecule().atoms).toHaveLength(6);
   });
 
@@ -618,7 +639,7 @@ describe("hover label typing", () => {
 
     await press("e", window);
     expect(editor()).toBeNull();
-    expect(snapshot().activeToolCommandId).toBe("tool.eraser");
+    expect(molecule().atoms.some((candidate) => candidate.element === "Oe")).toBe(false);
   });
 
   it("ignores an IME composition key while hovering an atom", async () => {

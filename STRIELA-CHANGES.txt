@@ -24,6 +24,12 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - Fixed: after relabelling one hovered carbon with a key, pressing a key over the next
      atom typed letters next to the previous label instead of relabelling the new atom.
    - Shift+B gives Br (b stays B), Shift+C gives Cl (c stays C), Shift+S gives Si (s stays S).
+   - A letter that is not an element (A, D, E, G, J, L, M, Q, R, T, X, Z) also relabels the
+     hovered atom, shown as the capital letter (x gives X). Over an atom these letters no
+     longer act as tool shortcuts (e over an atom gives E, not the Eraser); with nothing
+     hovered they still do. Any letter over another atom starts a new label there, so a
+     multi-letter label like OMe is typed with the pointer kept on its atom (a drift onto a
+     bond or empty page is fine). The k (carbonyl) key over an atom is unchanged.
 
 3. Periodic Table toolbar
    - New toolbar with the full periodic table. Click an element, then click atoms to set

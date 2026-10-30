@@ -595,7 +595,8 @@ describe.each(["macos", "windows"] as const)("ring label commits (%s)", platform
     expect(status()).toBe("Redid Add OMe substituent");
   });
 
-  it.each(["neighbour", "empty page"])("ring O-M-e stays one continuation after drifting to %s and commits a substituent", async drift => {
+  // Over a neighbouring atom any letter relabels that atom instead (hoverLabelTyping covers it).
+  it.each(["empty page"])("ring O-M-e stays one continuation after drifting to %s and commits a substituent", async drift => {
     await mount(ring(), "tool.bond");
     const before = molecule(), atom = before.atoms[0]!;
     const destination = drift === "neighbour" ? before.atoms[1]! : { x: 40, y: 40 };

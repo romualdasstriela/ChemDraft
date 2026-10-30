@@ -25,6 +25,7 @@ import type { CommandDefinition } from "@chemdraft/plugin-host";
 import { withStandaloneDrawingToolCommands } from "./drawingTools";
 import {
   nativeHotkeyElements,
+  nativeElementFromKeyboardKey,
   selectedTextToAtomLabelDisabledReason,
   selectedGroupObjectIds,
   selectedArrangementObjectIds,
@@ -499,6 +500,27 @@ export const atomNicknameLabelActions: CommandSpec[] = [...nicknameLabelByComman
   source: "core",
   category: "edit",
   description: `Set the hovered native atom's label to ${label}`
+}));
+
+/**
+ * The capital letters that name no single-letter element (A, D, E, G, J, L, M, Q, R, T, X, Z). In
+ * the ChemDraft scheme, pressing one of these letters over an atom relabels the atom with that
+ * capital letter, the way an element key sets the element.
+ */
+export const nativeHoverLetterLabels: readonly string[] = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
+  .filter((letter) => nativeElementFromKeyboardKey(letter) === undefined);
+
+export function atomLetterLabelCommandId(letter: string): string {
+  return `atom.setHoveredLetter.${letter}`;
+}
+
+export const atomLetterLabelActions: CommandSpec[] = nativeHoverLetterLabels.map((letter) => ({
+  id: atomLetterLabelCommandId(letter),
+  title: `Set Hovered Atom Label: ${letter}`,
+  icon: "atom",
+  source: "core",
+  category: "edit",
+  description: `Relabel the hovered native atom as ${letter}`
 }));
 
 export const atomElementActions: CommandSpec[] = nativeHotkeyElements.map((element) => ({
@@ -2297,6 +2319,7 @@ export function allShellCommands(
     ...copyAsActions,
     ...editActions,
     ...atomElementActions,
+    ...atomLetterLabelActions,
     ...atomNicknameLabelActions,
     ...viewActions,
     createOpenWarningsAction(options.availability),

@@ -255,6 +255,9 @@ import {
 } from "@chemdraft/export-engine";
 import {
   atomElementActions,
+  atomLetterLabelActions,
+  atomLetterLabelCommandId,
+  nativeHoverLetterLabels,
   atomNicknameLabelActions,
   atomElementCommandId,
   nicknameLabelByCommandId,
@@ -1626,7 +1629,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.30.14.00-opus";
+const CURRENT_BUILD_STAMP = "10.30.15.00-opus";
 /** Starts in the background for the document webview under the existing probe gate. */
 export function startMainWindowPerfProbe(): void {
   perfHook(() => startPerfProbe(CURRENT_BUILD_STAMP));
@@ -4289,7 +4292,8 @@ export function MainWindow({
       : `Set hovered bond display to ${bondStyle}`);
   }, [assignHoveredNativeDeleteTarget, commitDocumentChange, selectedNativeMoleculePart]);
 
-  const setHoveredNativeAtomElement = useCallback((element: NativeHotkeyElement) => {
+  // An element symbol, or a capital letter that names no element (X, R, …) set the same way.
+  const setHoveredNativeAtomElement = useCallback((element: NativeHotkeyElement | string) => {
     const target = hoveredNativeDeleteTargetRef.current
       ?? nativeDeleteTargetFromSelectionPart(documentRef.current, selectedNativeMoleculePart);
     if (!target || target.kind !== "atom") {
@@ -10366,6 +10370,12 @@ export function MainWindow({
       });
     });
 
+    atomLetterLabelActions.forEach((action) => {
+      register(action, () => {
+        setHoveredNativeAtomElement(action.id.replace("atom.setHoveredLetter.", ""));
+      });
+    });
+
     atomNicknameLabelActions.forEach((action) => {
       const label = nicknameLabelByCommandId.get(action.id);
       if (!label) {
@@ -12694,7 +12704,8 @@ export function MainWindow({
           invokeCommandRef.current(hoveredTargetCommandId);
           // Only a label assignment made by a hover key starts continuation. Other keys and
           // selected-atom assignments retain their existing shortcut behavior.
-          const assignedElement = chemDraftHoverElementForKey(event.key);
+          // A capital-letter label ("x" makes X) continues like an element ("m" then "e" types Me).
+          const assignedElement = chemDraftHoverElementForKey(event.key) ?? hoverLetterLabelForKey(event.key);
           if (
             keybindingSchemeRef.current === "chemdraft" && hoveredTarget?.kind === "atom" &&
             assignedElement
@@ -22704,7 +22715,18 @@ export function hoveredNativeTargetShortcutCommand(
   }
 
   const element = chemDraftHoverElementForKey(key);
-  return element ? atomElementCommandId(element) : undefined;
+  if (element) {
+    return atomElementCommandId(element);
+  }
+  // A letter that names no element relabels the atom with its capital ("x" makes X).
+  const letter = hoverLetterLabelForKey(key);
+  return letter ? atomLetterLabelCommandId(letter) : undefined;
+}
+
+/** The capital-letter label a hover key that names no element puts on an atom, if any. */
+export function hoverLetterLabelForKey(key: string): string | undefined {
+  const letter = key.length === 1 ? key.toUpperCase() : "";
+  return nativeHoverLetterLabels.includes(letter) ? letter : undefined;
 }
 
 /** Shift picks the two-letter element that shares a single-letter element's key. */
@@ -22753,8 +22775,8 @@ export function hoverTargetKeepsLabelContinuation(
 
 /**
  * Whether a letter or digit typed mid-label continues that label, wherever the pointer has drifted.
- * Digits and letters that are not elements in either case ("M" and "e" in OMe) cannot start a label,
- * so they always continue. An element letter continues only while the pointer has stayed on the
+ * Digits always continue. Letters that are not elements ("M" and "e" in OMe) continue unless the
+ * pointer is over another atom, which they relabel instead. An element letter continues only while the pointer has stayed on the
  * labelled atom and its own bonds ("CF3", "Si"). Once the pointer has left them, an element letter
  * starts a new label on whatever other atom or bond it is over, in either case: hovering the next
  * carbon and pressing "n" makes it N rather than typing "On" onto the atom labelled before. A capital
@@ -22780,7 +22802,11 @@ export function hoverLabelContinuesForKey(
   }
   const startsNewLabel = nativeElementFromKeyboardKey(key) !== undefined && target !== undefined &&
     (/^[A-Z]$/.test(key) || !hoverTargetKeepsLabelContinuation(target, assignment));
-  return !startsNewLabel;
+  // A letter that names no element relabels another atom it is over ("x" there makes X), but keeps
+  // the label going over a bond or empty page, where it cannot label anything ("M" and "e" of OMe).
+  const relabelsOtherAtom = hoverLetterLabelForKey(key) !== undefined && target?.kind === "atom" &&
+    !hoverTargetKeepsLabelContinuation(target, assignment);
+  return !startsNewLabel && !relabelsOtherAtom;
 }
 
 /**
@@ -22829,6 +22855,11 @@ export function activeNativeTargetShortcutCommand(
   key: string,
   scheme: KeybindingScheme = "chemdraft"
 ): string | undefined {
+  // A non-element letter relabels only a HOVERED atom: with an atom merely selected, it keeps its
+  // tool shortcut ("e" = Eraser), so selecting something never takes the letter shortcuts away.
+  if (!hoveredTarget && hoverLetterLabelForKey(key) !== undefined && scheme === "chemdraft") {
+    return undefined;
+  }
   return hoveredNativeTargetShortcutCommand(
     hoveredTarget ?? nativeDeleteTargetFromSelectionPart(document, selectedPart),
     key,

@@ -2436,7 +2436,10 @@ describe("ChemDraft desktop shell", () => {
     expect(hoveredNativeTargetShortcutCommand(bondTarget, "3")).toBe("bond.setHoveredBondOrder.triple");
     expect(hoveredNativeTargetShortcutCommand(atomTarget, "k")).toBe("atom.addCarbonylToHoveredAtom");
     expect(hoveredNativeTargetShortcutCommand(atomTarget, "c")).toBe("atom.setHoveredElement.C");
-    expect(hoveredNativeTargetShortcutCommand(atomTarget, "t")).toBeUndefined();
+    // A letter that names no element relabels the hovered atom with its capital.
+    expect(hoveredNativeTargetShortcutCommand(atomTarget, "t")).toBe("atom.setHoveredLetter.T");
+    expect(hoveredNativeTargetShortcutCommand(atomTarget, "x")).toBe("atom.setHoveredLetter.X");
+    expect(hoveredNativeTargetShortcutCommand(bondTarget, "x")).toBeUndefined();
     expect(hoveredNativeTargetShortcutCommand(bondTarget, "c")).toBeUndefined();
     // ChemDraw's numeric drawing hotkeys work in both schemes.
     expect(hoveredNativeTargetShortcutCommand(atomTarget, "2")).toBe("atom.addCarbonylToHoveredAtom");
@@ -2567,8 +2570,9 @@ describe("ChemDraft desktop shell", () => {
     expect(hoveredNativeTargetShortcutCommand(atomTarget, "A", "chemdraw")).toBeUndefined();
     // Nicknames are atom-only; over a bond, `e` falls through (to the arrow tool binding).
     expect(hoveredNativeTargetShortcutCommand(bondTarget, "e", "chemdraw")).toBeUndefined();
-    // The default ChemDraft scheme keeps `e` free for the eraser, hovering or not.
-    expect(hoveredNativeTargetShortcutCommand(atomTarget, "e")).toBeUndefined();
+    // The default ChemDraft scheme relabels a hovered atom E; `e` is the eraser with nothing hovered.
+    expect(hoveredNativeTargetShortcutCommand(atomTarget, "e")).toBe("atom.setHoveredLetter.E");
+    expect(hoveredNativeTargetShortcutCommand(undefined, "e")).toBeUndefined();
 
     // No hovered target → hover hotkeys stay inert (matches ChemDraw's hotspot requirement).
     expect(hoveredNativeTargetShortcutCommand(undefined, "c", "chemdraw")).toBeUndefined();
