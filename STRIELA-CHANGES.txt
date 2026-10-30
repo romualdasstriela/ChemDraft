@@ -15,6 +15,8 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - The Main toolbar is no longer a floating window: it is docked as a fixed strip across
      the top of the document window, right under the File menu row. Its pop-out menus open
      downward. View > Toolbars still shows or hides it. All other toolbars still float.
+     It is always horizontal: Customize Toolbars no longer offers Vertical for it, and an
+     earlier saved Vertical choice is ignored.
 
 2. Relabelling atoms by hovering and typing
    - Fixed: after relabelling one hovered carbon with a key, pressing a key over the next

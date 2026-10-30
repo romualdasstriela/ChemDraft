@@ -458,14 +458,6 @@ const ORIENTABLE_WIDGET_IDS: ReadonlySet<string> = new Set([
   TOOLBAR_WIDGET_IDS.artStyleControls
 ]);
 
-export function toolsetSupportsOrientation(toolset: Pick<DesktopToolsetDefinition, "groups">): boolean {
-  return toolset.groups.every((group) => group.items.every((item) => (
-    item.primary?.type !== "control"
-    || !item.primary.controlId.startsWith(WIDGET_CONTROL_ID_PREFIX)
-    || ORIENTABLE_WIDGET_IDS.has(item.primary.controlId)
-  )));
-}
-
 /**
  * Toolsets drawn as a fixed strip across the top of the document window, under the menu, instead of
  * in a floating window of their own. Every other toolset still floats.
@@ -476,9 +468,18 @@ export function isDockedToolset(toolsetId: string): boolean {
   return DOCKED_TOOLSET_IDS.has(toolsetId);
 }
 
+/** A docked strip spans the window width, so it never flips: a vertical strip would cover the page. */
+export function toolsetSupportsOrientation(toolset: Pick<DesktopToolsetDefinition, "id" | "groups">): boolean {
+  return !isDockedToolset(toolset.id) && toolset.groups.every((group) => group.items.every((item) => (
+    item.primary?.type !== "control"
+    || !item.primary.controlId.startsWith(WIDGET_CONTROL_ID_PREFIX)
+    || ORIENTABLE_WIDGET_IDS.has(item.primary.controlId)
+  )));
+}
+
 /** The axis a palette renders along: the user's choice where the toolset supports flipping. */
 export function paletteOrientation(
-  toolset: Pick<DesktopToolsetDefinition, "gridLayout" | "orientation" | "groups">
+  toolset: Pick<DesktopToolsetDefinition, "id" | "gridLayout" | "orientation" | "groups">
 ): ToolsetOrientation {
   return toolsetSupportsOrientation(toolset) ? effectiveToolsetOrientation(toolset) : authoredToolsetOrientation(toolset);
 }

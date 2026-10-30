@@ -3,6 +3,7 @@ import { ToolsetRegistry, type ToolsetDefinition } from "@chemdraft/toolset-regi
 import type { CommandSpec } from "./commands";
 import {
   isDockedToolset,
+  toolsetSupportsOrientation,
   computePaletteGridSize,
   createDesktopToolsetRegistry,
   desktopToolsets,
@@ -25,8 +26,10 @@ import { formatMenuShortcut } from "./appMenu";
 describe("palette orientation", () => {
   const byId = (id: string) => desktopToolsets.find((toolset) => toolset.id === id)!;
 
-  it("lets Main, Art and plain toolbars flip, but keeps widget-panel toolbars on their authored axis", () => {
-    expect(paletteOrientation({ ...byId("core.main"), orientation: "vertical" })).toBe("vertical");
+  it("lets Art and plain toolbars flip, but keeps widget-panel and docked toolbars on their authored axis", () => {
+    // The docked Main strip ignores a saved vertical choice: it would cover the page.
+    expect(paletteOrientation({ ...byId("core.main"), orientation: "vertical" })).toBe("horizontal");
+    expect(toolsetSupportsOrientation(byId("core.main"))).toBe(false);
     expect(paletteOrientation({ ...byId("core.art"), orientation: "vertical" })).toBe("vertical");
     expect(paletteOrientation({ ...byId("core.structure"), orientation: "horizontal" })).toBe("horizontal");
     expect(paletteOrientation({ ...byId("core.text"), orientation: "vertical" })).toBe("horizontal");
