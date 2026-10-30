@@ -1,0 +1,54 @@
+ChemDraft - changes on the striela-changes branch
+=================================================
+
+Fork: https://github.com/romualdasstriela/ChemDraft (branch striela-changes)
+Based on: https://github.com/jgassens/ChemDraft (main)
+Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub Actions
+(workflow "Windows dev build", artifact chemdraft-dev-windows-installer).
+
+
+1. Vertical toolbars
+   - Each toolbar can be laid out horizontally or vertically: View > Customize Toolbars,
+     Horizontal/Vertical choice on each toolbar's row.
+   - View > Arrange Toolbars stacks the toolbar windows top to bottom down the side.
+
+2. Relabelling atoms by hovering and typing
+   - Fixed: after relabelling one hovered carbon with a key, pressing a key over the next
+     atom typed letters next to the previous label instead of relabelling the new atom.
+   - Shift+B gives Br (b stays B), Shift+C gives Cl (c stays C), Shift+S gives Si (s stays S).
+
+3. Periodic Table toolbar
+   - New toolbar with the full periodic table. Click an element, then click atoms to set
+     them to that element.
+
+4. Bond tools
+   - The Single Bond button in the Structure toolbar has a pop-out with Single, Double and
+     Triple Bond. The button shows whichever bond was picked last.
+   - Clicking a single bond with the bond tool makes a centred double bond (then triple).
+   - In a ring, a double bond goes on the inner side of the ring automatically.
+   - Triple bonds are linear: a triple bond added to a single bond, and the next bond
+     grown from a triple bond, continue at 180 degrees.
+     Known gap: clicking an existing angled bond with the Triple tool makes it triple
+     but does not straighten it.
+
+5. Copy to Word with Ctrl+C
+   - Ctrl+C (and Cut, Edit > Copy) also puts a JPG picture of the copied objects on the
+     clipboard (white background, 4x resolution, pastes at drawn size), so Ctrl+V in Word
+     pastes the drawing. Copy As > PNG still exists.
+   - Copy and paste inside ChemDraft is unchanged.
+   - When a picture is on the clipboard, plain text is left off (Word would paste text
+     instead of the picture), so text no longer pastes into Notepad from Ctrl+C.
+   - The macOS side (public.jpeg) is written but untested.
+
+
+Commits (oldest first)
+----------------------
+b588266 Let toolbars lay out vertically and stack top to bottom
+026cbaf Start a new hover label for a lower-case element key on another atom
+c2cfceb Shift+B gives Br and Shift+S gives Si on a hovered atom
+9a572e5 Shift+C gives Cl on a hovered atom
+d721b39 Add a Periodic Table toolbar with one element tool per element
+ada39a8 Add double and triple bond tools; centre double bonds made by a click
+d5826e4 Bond button follows the bond picked from its flyout; ring double bonds go inside
+8940b96 Grow bonds straight through triple bonds (180 degrees)
+5806d2b Put a JPEG picture on the clipboard with every copy
