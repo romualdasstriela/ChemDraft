@@ -120,6 +120,7 @@ import {
   viewportCssVars,
   wheelDeltaToZoomFactor,
   zoomViewportAtPoint,
+  stepZoomViewport,
   type RulerUnitState,
   type ViewportState
 } from "@chemdraft/viewport-engine";
@@ -1623,7 +1624,6 @@ const INTERACTIVE_3D_POST_OPEN_POLL_COUNT = 8;
 const INTERACTIVE_3D_POST_OPEN_POLL_MS = 90;
 const FREEFORM_BOND_DRAG_THRESHOLD = 6;
 const DOUBLE_BOND_SIDE_DRAG_THRESHOLD = 4;
-const VIEW_ZOOM_COMMAND_FACTOR = 1.25;
 const PROJECTED_PLANE_TILT_DRAG_PX = 360;
 const OBJECT_ROTATE_TANGENTIAL_DEGREES_PER_PIXEL = 360 / PROJECTED_PLANE_TILT_DRAG_PX;
 const OBJECT_DRAG_THRESHOLD = 4;
@@ -1632,7 +1632,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.03.13.40-opus";
+const CURRENT_BUILD_STAMP = "11.03.14.30-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -10096,11 +10096,14 @@ export function MainWindow({
         if (action.id === "clipboard.paste") {
           await pasteClipboard();
         }
-        if (action.id === "view.zoomOut") {
-          setViewport((current) => zoomViewportAtPoint(current, current.scale / VIEW_ZOOM_COMMAND_FACTOR, pageCenterPoint(current, activePage)));
-        }
-        if (action.id === "view.zoomIn") {
-          setViewport((current) => zoomViewportAtPoint(current, current.scale * VIEW_ZOOM_COMMAND_FACTOR, pageCenterPoint(current, activePage)));
+        // Zoom In / Out step through 25%…300% in 25% steps.
+        if (action.id === "view.zoomOut" || action.id === "view.zoomIn") {
+          const direction = action.id === "view.zoomIn" ? "in" : "out";
+          setViewport((current) => {
+            const next = stepZoomViewport(current, direction, pageCenterPoint(current, activePage));
+            setStatus(`Zoom ${Math.round(next.scale * 100)}%`);
+            return next;
+          });
         }
         if (action.id === "view.toggleToolPalette") {
           await toggleToolset(DEFAULT_TOOLSET_ID);

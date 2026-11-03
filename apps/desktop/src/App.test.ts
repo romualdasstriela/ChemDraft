@@ -2915,7 +2915,9 @@ describe("ChemDraft desktop shell", () => {
       "layout.rotate90",
       "layout.duplicate",
       "layout.group",
-      "layout.ungroup"
+      "layout.ungroup",
+      "view.zoomIn",
+      "view.zoomOut"
     ]);
     const disabledTools = paletteGroups.flat().filter((command) => !enabledToolIds.has(command.id));
 
@@ -4292,13 +4294,16 @@ describe("ChemDraft desktop shell", () => {
     // The Main toolbar is one flattened group now; the chrome cluster is its tail segment (after the
     // last divider), so assert its contiguous order at the end instead of indexing a per-section group.
     const mainCommandIds = getToolsetCommandGroups("core.main")[0].map((command) => command.id);
+    // Then the page zoom buttons, after the last divider.
     const chromeCluster = [
       "style.color",
       "tool.settings",
       structureCleanupCommandId,
       structureSpin3dCommandId,
       structureInteractive3dCommandId,
-      structureCleanup3dCommandId
+      structureCleanup3dCommandId,
+      "view.zoomIn",
+      "view.zoomOut"
     ];
 
     expect(mainCommandIds.slice(-chromeCluster.length)).toEqual(chromeCluster);

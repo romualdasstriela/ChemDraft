@@ -68,7 +68,13 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      the .cds file itself is not part of the repository. Structures the AI assistant and
      the command-line tools build still use the original ChemDraft style.
 
-7. Build checks
+7. Page zoom buttons
+   - Zoom In and Zoom Out buttons at the right end of the Main toolbar. They, and Ctrl++ /
+     Ctrl+-, step through 25%, 50%, ... 300% in 25% steps. A zoom off that grid (after a
+     pinch or Ctrl+wheel) goes to the next 25% level; above 300% Zoom Out returns to 300%.
+   - The page can now zoom out to 25% (was 50%).
+
+8. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
    - Every dev build also runs cargo clippy (-D warnings) and cargo test, as the main
      project's Windows CI does.
@@ -95,3 +101,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 1a6ddfc Draw numbered R-groups without the ? query mark
 4f7ef6f Move linear triple-bond growth into layout-engine; run clippy and cargo test in the dev build
 (next)  Draw new structures in the ACS Document 1996 style
+(next)  Add Zoom In / Zoom Out buttons stepping 25% to 300% in 25% steps

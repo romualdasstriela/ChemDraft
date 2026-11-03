@@ -1946,6 +1946,50 @@
               "layout": {
                 "rowSpan": 2
               }
+            },
+            {
+              "commandId": "view.zoomIn",
+              "title": "Zoom In",
+              "icon": "zoomIn",
+              "category": "view",
+              "id": "view.zoomIn",
+              "kind": "button",
+              "label": "Zoom In",
+              "primary": {
+                "type": "command",
+                "commandId": "view.zoomIn"
+              },
+              "submenu": null,
+              "tooltip": {
+                "title": "Zoom In (25% steps, up to 300%)",
+                "shortcut": null
+              },
+              "layout": {
+                "colSpan": 1,
+                "rowSpan": 1
+              }
+            },
+            {
+              "commandId": "view.zoomOut",
+              "title": "Zoom Out",
+              "icon": "zoomOut",
+              "category": "view",
+              "id": "view.zoomOut",
+              "kind": "button",
+              "label": "Zoom Out",
+              "primary": {
+                "type": "command",
+                "commandId": "view.zoomOut"
+              },
+              "submenu": null,
+              "tooltip": {
+                "title": "Zoom Out (25% steps, down to 25%)",
+                "shortcut": null
+              },
+              "layout": {
+                "colSpan": 1,
+                "rowSpan": 1
+              }
             }
           ]
         }

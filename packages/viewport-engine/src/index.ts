@@ -82,8 +82,36 @@ export const centimeterRulerUnit: RulerUnitState = {
   subdivisions: 10
 };
 
+/** The zoom levels the Zoom In / Zoom Out buttons step through: 25% to 300% in 25% steps. */
+export const ZOOM_STEP = 0.25;
+export const ZOOM_STEP_MIN = 0.25;
+export const ZOOM_STEP_MAX = 3;
+
+/**
+ * The next zoom level up or down the 25% grid from `scale`. A level off the grid (after a pinch or
+ * a wheel zoom) goes to the nearest grid level in that direction; above 300% Zoom Out comes back
+ * to 300%, and Zoom In there stays where it is.
+ */
+export function steppedZoomScale(scale: number, direction: "in" | "out"): number {
+  const epsilon = 1e-6;
+  if (direction === "in") {
+    if (scale >= ZOOM_STEP_MAX - epsilon) return scale;
+    const next = (Math.floor(scale / ZOOM_STEP + epsilon) + 1) * ZOOM_STEP;
+    return Math.min(ZOOM_STEP_MAX, Math.max(ZOOM_STEP_MIN, next));
+  }
+  if (scale > ZOOM_STEP_MAX + epsilon) return ZOOM_STEP_MAX;
+  const next = (Math.ceil(scale / ZOOM_STEP - epsilon) - 1) * ZOOM_STEP;
+  return Math.max(ZOOM_STEP_MIN, Math.min(ZOOM_STEP_MAX, next));
+}
+
+/** Zoom one 25% step about `focalScreenPoint`, letting a view saved with a higher floor reach 25%. */
+export function stepZoomViewport(viewport: ViewportState, direction: "in" | "out", focalScreenPoint: Point): ViewportState {
+  const floored = { ...viewport, minZoom: Math.min(viewport.minZoom, ZOOM_STEP_MIN) };
+  return zoomViewportAtPoint(floored, steppedZoomScale(viewport.scale, direction), focalScreenPoint);
+}
+
 export function createViewportState(options: ViewportOptions = {}): ViewportState {
-  const minZoom = options.minZoom ?? 0.5;
+  const minZoom = options.minZoom ?? ZOOM_STEP_MIN;
   const maxZoom = options.maxZoom ?? 8.5;
 
   return {
