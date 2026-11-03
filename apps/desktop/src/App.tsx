@@ -7,7 +7,12 @@ import {
 } from "./window-manager";
 import { installSecondaryWindowEditHistory } from "./editHistoryRouting";
 
-const MainWindow = lazy(() => import("./MainWindow").then(m => ({ default: m.MainWindow })));
+// The app's document window draws new structures in the app's default style; tests that render
+// MainWindow directly keep the synthetic preset.
+const MainWindow = lazy(() => import("./MainWindow").then(m => {
+  m.applyAppNewStructureStyle();
+  return { default: m.MainWindow };
+}));
 const PaletteWindow = lazy(() => import("./PaletteWindow").then(m => ({ default: m.PaletteWindow })));
 const PalettePopoverWindow = lazy(() => import("./PalettePopoverWindow").then(m => ({ default: m.PalettePopoverWindow })));
 const PaletteTooltipWindow = lazy(() => import("./PaletteTooltipWindow").then(m => ({ default: m.PaletteTooltipWindow })));

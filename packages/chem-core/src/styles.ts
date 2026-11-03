@@ -109,6 +109,27 @@ export const ChemDraftSyntheticStylePreset = {
   }
 } as const satisfies ChemDraftStylePreset;
 
+/**
+ * The ACS Document 1996 journal style: 14.4 pt bonds at 120°, 0.6 pt lines, 2.0 pt bold bonds,
+ * double-bond spacing 18% of the bond length, 1.6 pt margins, 2.5 pt hash spacing, Arial 10 pt
+ * labels. The values are what style-compat's style-sheet importer produces for that style sheet,
+ * so a structure drawn with this preset matches one restyled by importing the sheet. Only the
+ * line widths and the spacing mode differ from the synthetic preset.
+ */
+export const AcsDocument1996StylePreset = {
+  id: "chemdraft.acs-document-1996",
+  name: "ACS Document 1996",
+  source: "core",
+  drawing: {
+    ...ChemDraftSyntheticStylePreset.drawing,
+    stylePresetId: "chemdraft.acs-document-1996",
+    bondStrokeWidthPx: 1.058,
+    bondBoldWidthPx: 4.233,
+    bondSpacingMode: "percent",
+    bondSpacingPercent: 18
+  }
+} as const satisfies ChemDraftStylePreset;
+
 /** Native drawing units per point for the fixed document preset. `DocumentStyleScale`
  * in layout-engine is its inverse, converting native coordinates to physical points. */
 export const DOCUMENT_STYLE_UNITS_PER_PT = 22 / 14.4;

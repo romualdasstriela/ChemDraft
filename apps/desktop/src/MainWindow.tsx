@@ -97,7 +97,8 @@ import {
   type NativeTextStyle,
   type ObjectReorderPlacement,
   type TextObject,
-  type TextSpan
+  type TextSpan,
+  AcsDocument1996StylePreset
 } from "@chemdraft/chem-core";
 import { tryNativeSingleBondGraphSmiles } from "@chemdraft/document-workflow-core";
 import { atomLabelDraftDocumentUnchanged, createAtomLabelDraftRollback, documentOwnsAtomLabelDraft, recordAtomLabelDraftRollback, restoreAtomLabelDraft, type AtomLabelDraftState } from "./atomLabelDraft";
@@ -549,6 +550,8 @@ import {
   nativeFreehandStrokeDocument,
   nativePolylinePathDocument,
   insertSmilesMolecule,
+  getNewNativeMoleculeStylePreset,
+  setNewNativeMoleculeStylePreset,
   insertSmilesMoleculeGrid,
   insertSmilesMoleculeGridStatus,
   documentObjectProjectedPlaneTilt,
@@ -1629,7 +1632,15 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.30.19.00-opus";
+const CURRENT_BUILD_STAMP = "11.03.13.40-opus";
+/** The style the app draws new structures in: the ACS Document 1996 journal style. */
+export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
+
+/** Called once when the app's document window loads (App.tsx), before anything is drawn. */
+export function applyAppNewStructureStyle(): void {
+  setNewNativeMoleculeStylePreset(APP_NEW_STRUCTURE_STYLE_PRESET);
+}
+
 /** Starts in the background for the document webview under the existing probe gate. */
 export function startMainWindowPerfProbe(): void {
   perfHook(() => startPerfProbe(CURRENT_BUILD_STAMP));
@@ -6702,7 +6713,8 @@ export function MainWindow({
           atoms: depiction.atoms,
           bonds: depiction.bonds
         },
-        smilesText
+        smilesText,
+        getNewNativeMoleculeStylePreset()
       );
       commitDocumentChange(nextDocument);
       resetPasteUiState();

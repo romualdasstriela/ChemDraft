@@ -49,6 +49,7 @@ import {
   applyPatch,
   applyPatches,
   ChemDraftSyntheticStylePreset,
+  type ChemDraftStylePreset,
   createEmptyDocument,
   DocumentObjectSchema,
   createPageLayout,
@@ -926,13 +927,28 @@ export function insertAdapterFallbackMolecule(
   );
 }
 
+/**
+ * The drawing style every new structure starts with: drawn, placed from a template, or pasted
+ * without a style of its own. Existing structures keep the style they carry. The desktop app sets
+ * it once at startup (`MainWindow`); headless callers and tests keep the synthetic preset.
+ */
+let newNativeMoleculeStylePreset: ChemDraftStylePreset = ChemDraftSyntheticStylePreset;
+
+export function setNewNativeMoleculeStylePreset(preset: ChemDraftStylePreset): void {
+  newNativeMoleculeStylePreset = preset;
+}
+
+export function getNewNativeMoleculeStylePreset(): ChemDraftStylePreset {
+  return newNativeMoleculeStylePreset;
+}
+
 export function createNativeSingleBondMolecule(
   document: ChemDraftDocument,
   point: PagePoint = { x: 228, y: 236 },
   options: NativeBondToolOptions = {}
 ): MoleculeObject {
   const page = firstPage(document);
-  const objectStyle = stylePresetToObjectStyle(ChemDraftSyntheticStylePreset);
+  const objectStyle = stylePresetToObjectStyle(newNativeMoleculeStylePreset);
   // The first bond lands at the zig-zag half-angle — (180° − chainAngleDegrees)/2, 30° above
   // horizontal for the default 120° chain angle — rising left-to-right, ChemDraw's first-bond
   // orientation, rather than flat. The angle comes from the same preset style the new molecule
@@ -1318,7 +1334,7 @@ export function applyNativeChainTool(
     );
   }
 
-  const presetStyle = nativeDrawingStyleFromObjectStyle(stylePresetToObjectStyle(ChemDraftSyntheticStylePreset));
+  const presetStyle = nativeDrawingStyleFromObjectStyle(stylePresetToObjectStyle(newNativeMoleculeStylePreset));
   const start = {
     x: clamp(startPoint.x, 0, page.width),
     y: clamp(startPoint.y, 0, page.height)
@@ -1359,7 +1375,7 @@ export function applyNativeChainTool(
     rotation: 0,
     transform: defaultNativeMoleculeTransform,
     style: {
-      ...stylePresetToObjectStyle(ChemDraftSyntheticStylePreset),
+      ...stylePresetToObjectStyle(newNativeMoleculeStylePreset),
       source: "chemdraft-native-drawing",
       drawingPrimitive: "chain"
     },
@@ -3053,7 +3069,7 @@ export function createNativeTemplateMolecule(
     rotation: 0,
     transform: defaultNativeMoleculeTransform,
     style: {
-      ...stylePresetToObjectStyle(ChemDraftSyntheticStylePreset),
+      ...stylePresetToObjectStyle(newNativeMoleculeStylePreset),
       source: "chemdraft-native-drawing",
       drawingPrimitive: templateId
     },
@@ -4780,7 +4796,7 @@ export function convertNativeTextObjectToAtom(
     rotation: 0,
     transform: defaultNativeMoleculeTransform,
     style: {
-      ...stylePresetToObjectStyle(ChemDraftSyntheticStylePreset),
+      ...stylePresetToObjectStyle(newNativeMoleculeStylePreset),
       source: "chemdraft-native-drawing"
     },
     compatibility: {
@@ -5027,7 +5043,7 @@ export function createNativeMolfileMolecule(
     rotation: 0,
     transform: defaultNativeMoleculeTransform,
     style: {
-      ...stylePresetToObjectStyle(ChemDraftSyntheticStylePreset),
+      ...stylePresetToObjectStyle(newNativeMoleculeStylePreset),
       source: "clipboard-molfile"
     },
     compatibility: {
@@ -5064,7 +5080,8 @@ export function insertSmilesMoleculeGrid(
   const molecules = entries.map((entry) => {
     const molecule = createSmilesMolecule(document, { x: margin, y: margin }, entry.depiction, entry.smiles, {
       ...SMILES_PASTE_SOURCE,
-      reservedObjectIds
+      reservedObjectIds,
+      stylePreset: newNativeMoleculeStylePreset
     });
     reservedObjectIds.add(molecule.id);
     return molecule;
@@ -18863,7 +18880,7 @@ function createClipboardTextStructureMolecule(
     rotation: 0,
     transform: defaultNativeMoleculeTransform,
     style: {
-      ...stylePresetToObjectStyle(ChemDraftSyntheticStylePreset),
+      ...stylePresetToObjectStyle(newNativeMoleculeStylePreset),
       source: "clipboard-chemical-text"
     },
     compatibility: {

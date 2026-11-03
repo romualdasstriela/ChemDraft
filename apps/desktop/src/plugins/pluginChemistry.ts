@@ -30,6 +30,7 @@ import { analysisClient } from "../analysisClient";
 import { depictSmilesOffThread } from "../depiction2d/client";
 import {
   createSmilesMolecule,
+  getNewNativeMoleculeStylePreset,
   type PastedStructureDepiction
 } from "../documentWorkflow";
 
@@ -145,6 +146,7 @@ export async function structureFromSmilesForPlugin(
     objectIdPrefix: "mol_plugin",
     reservedObjectIds: RESERVED_PLUGIN_OBJECT_IDS,
     styleSource: "plugin-smiles",
+    stylePreset: getNewNativeMoleculeStylePreset(),
     warningCode: "plugin.smiles_imported",
     // Names the plugin, because "pasted" would be a false account of where this came from.
     warningMessage: [origin

@@ -168,6 +168,7 @@ export {
 } from "./history";
 
 export {
+  AcsDocument1996StylePreset,
   ChemDraftSyntheticStylePreset,
   DOCUMENT_STYLE_UNITS_PER_PT,
   DocumentMoleculeSizeStyle,

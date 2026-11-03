@@ -59,6 +59,20 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      instead of the picture), so text no longer pastes into Notepad from Ctrl+C.
    - The macOS side (public.jpeg) is written but untested.
 
+6. ACS Document 1996 as the default drawing style
+   - Every new structure (drawn, placed from a template, or pasted as SMILES or molfile)
+     now starts in the ACS Document 1996 journal style: 0.6 pt lines, 2.0 pt bold bonds,
+     double-bond spacing 18% of the bond length, 14.4 pt bonds at 120 degrees, Arial 10 pt
+     labels. Existing drawings and opened files keep their own style.
+   - The values are what ChemDraft's own .cds importer reads from "ACS Document 1996.cds";
+     the .cds file itself is not part of the repository. Structures the AI assistant and
+     the command-line tools build still use the original ChemDraft style.
+
+7. Build checks
+   - The bond geometry for straight triple bonds lives in the layout engine.
+   - Every dev build also runs cargo clippy (-D warnings) and cargo test, as the main
+     project's Windows CI does.
+
 
 Commits (oldest first)
 ----------------------
@@ -71,3 +85,13 @@ ada39a8 Add double and triple bond tools; centre double bonds made by a click
 d5826e4 Bond button follows the bond picked from its flyout; ring double bonds go inside
 8940b96 Grow bonds straight through triple bonds (180 degrees)
 5806d2b Put a JPEG picture on the clipboard with every copy
+be351e3 Add STRIELA-CHANGES.txt listing the changes on this branch
+3ab4e4b Dock the Main toolbar under the menu in the document window
+804fa02 Keep the docked Main toolbar horizontal
+dbf926d Wrap the docked Main toolbar onto more rows in a narrow window
+d49ff81 Relabel a hovered atom with any letter, as its capital
+a3fd81f Read G, J, L and Z as placeholder labels
+f9c1489 Draw bare letter labels without the ? query mark
+1a6ddfc Draw numbered R-groups without the ? query mark
+4f7ef6f Move linear triple-bond growth into layout-engine; run clippy and cargo test in the dev build
+(next)  Draw new structures in the ACS Document 1996 style

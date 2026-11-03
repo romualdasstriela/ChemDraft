@@ -5,6 +5,7 @@ import {
   applyPatches,
   type ChemDraftDocument,
   ChemDraftSyntheticStylePreset,
+  type ChemDraftStylePreset,
   type DocumentObject,
   type MoleculeAtom,
   type MoleculeBond,
@@ -123,6 +124,8 @@ export interface SmilesMoleculeSource {
    * The caller owns the set and adds to it, because only the caller knows when an id has been issued.
    */
   reservedObjectIds?: Set<string>;
+  /** The drawing style the molecule starts with; the synthetic preset when omitted. */
+  stylePreset?: ChemDraftStylePreset;
 }
 
 export const SMILES_PASTE_SOURCE: SmilesMoleculeSource = {
@@ -243,7 +246,7 @@ export function createSmilesMolecule(
     rotation: 0,
     transform: defaultNativeMoleculeTransform,
     style: {
-      ...stylePresetToObjectStyle(ChemDraftSyntheticStylePreset),
+      ...stylePresetToObjectStyle(source.stylePreset ?? ChemDraftSyntheticStylePreset),
       bondLengthPx: smilesPasteBondLengthPx,
       source: source.styleSource
     },
@@ -270,9 +273,10 @@ export function insertSmilesMolecule(
   document: ChemDraftDocument,
   point: PagePoint,
   depiction: PastedStructureDepiction,
-  smilesText: string
+  smilesText: string,
+  stylePreset?: ChemDraftStylePreset
 ): ChemDraftDocument {
-  const object = createSmilesMolecule(document, point, depiction, smilesText);
+  const object = createSmilesMolecule(document, point, depiction, smilesText, { ...SMILES_PASTE_SOURCE, stylePreset });
   const page = firstPage(document);
 
   return applyPatches(
