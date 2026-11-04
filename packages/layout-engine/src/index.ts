@@ -101,6 +101,7 @@ export {
   nativeAtomValence,
   nativeGroupLabelDisplay,
   nativeLabelGroupAttachment,
+  nativeLabelGroupSeparateAttachments,
   type NativeLabelGroup,
   type NativeLabelGroupAttachment,
   nativeLabelReadingDependsOnBondSide,

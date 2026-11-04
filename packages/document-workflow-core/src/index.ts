@@ -16,6 +16,7 @@ export {
 export * from "./labelGroups";
 export * from "./labelOnBondedAtom";
 export * from "./molecule";
+export * from "./nicknames";
 export * from "./moleculeSmiles";
 export * from "./reactionArrows";
 export * from "./reactionScheme";

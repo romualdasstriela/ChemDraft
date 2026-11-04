@@ -83,7 +83,8 @@ export const TOOLBAR_WIDGET_IDS = {
   ringInspector: "widget.core.ringInspector",
   drawnStructureSettings: "widget.core.drawnStructureSettings",
   molecularInspector: "widget.core.molecularInspector",
-  periodicTable: "widget.core.periodicTable"
+  periodicTable: "widget.core.periodicTable",
+  nicknames: "widget.core.nicknames"
 } as const;
 
 export type ToolbarWidgetId = (typeof TOOLBAR_WIDGET_IDS)[keyof typeof TOOLBAR_WIDGET_IDS];

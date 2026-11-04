@@ -245,6 +245,9 @@
         },
         {
           "path": "$APPDATA/installed-plugins/**"
+        },
+        {
+          "path": "$HOME/**"
         }
       ]
     },

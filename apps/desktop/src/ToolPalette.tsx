@@ -41,6 +41,7 @@ import {
 } from "./toolbars/toolbarCells";
 import { MainStyleWidget } from "./toolbars/mainStyleWidget";
 import { PeriodicTableWidget } from "./toolbars/PeriodicTableWidget";
+import { NicknamesWidget } from "./toolbars/NicknamesWidget";
 import {
   TOOLTIP_DELAY_MS,
   useNativeFloatingTooltip,
@@ -607,6 +608,12 @@ const TOOLBAR_WIDGET_REGISTRY: Record<
     className: "periodic-table-palette",
     title: "Periodic Table",
     render: () => <PeriodicTableWidget />
+  },
+  [TOOLBAR_WIDGET_IDS.nicknames]: {
+    gridMode: "hide-grid",
+    className: "nicknames-palette",
+    title: "Nicknames",
+    render: () => <NicknamesWidget />
   }
 };
 

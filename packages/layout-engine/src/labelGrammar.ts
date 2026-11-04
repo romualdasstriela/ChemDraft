@@ -90,6 +90,17 @@ export interface NativeLabelGroupAttachment {
   declaredAttachmentCount?: number;
 }
 
+/**
+ * The atoms a group attaches at, when that is more than one (an amino-acid residue joins at its N and
+ * its C=O): one group-atom index per attachment, in order. Undefined when every bond meets the first
+ * atom — every built-in group, every composite.
+ */
+export function nativeLabelGroupSeparateAttachments(group: NativeLabelGroup): readonly number[] | undefined {
+  if (group.kind !== "abbreviation") return undefined;
+  const indices = group.definition.attachmentAtoms;
+  return indices && new Set(indices).size > 1 ? indices : undefined;
+}
+
 export function nativeLabelGroupAttachment(group: NativeLabelGroup): NativeLabelGroupAttachment {
   if (group.kind === "composite") {
     return { element: group.head, internalValence: group.hydrogens + group.substituents.length, charge: 0 };

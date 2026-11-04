@@ -63,6 +63,14 @@ export interface AbbreviationDefinition {
   /** `atoms[0]` is the attachment atom: the atom the label's bonds connect to. */
   atoms: readonly AbbreviationAtom[];
   bonds: readonly AbbreviationBond[];
+  /**
+   * For a group that attaches at more than one atom (an amino-acid residue joins at its N and its
+   * C=O): the atom index each attachment uses, in order; `attachmentAtoms[0]` is 0. Omitted when
+   * every bond meets `atoms[0]`, as for every built-in group.
+   */
+  attachmentAtoms?: readonly number[];
+  /** Where a user-supplied group came from (a nickname file), for messages. Built-ins have none. */
+  source?: string;
 }
 
 export const abbreviationDefinitions: readonly AbbreviationDefinition[] = [
@@ -427,9 +435,41 @@ const abbreviationBySpelling: ReadonlyMap<string, AbbreviationDefinition> = new 
 export const abbreviationSpellings: readonly string[] = [...abbreviationBySpelling.keys()]
   .sort((left, right) => right.length - left.length || left.localeCompare(right));
 
+/**
+ * Groups the user supplies at run time (the desktop app reads them from a nickname folder on the
+ * user's computer). They are never part of this package's data. A user group answers only to its
+ * whole label — it never takes part in composite labels ("NMe2") — and a built-in group with the
+ * same spelling wins. A spelling that is also an element symbol is registered as bonded-only.
+ */
+let userAbbreviationBySpelling: ReadonlyMap<string, AbbreviationDefinition> = new Map();
+let userAbbreviationByBondedSpelling: ReadonlyMap<string, AbbreviationDefinition> = new Map();
+let userAbbreviationList: readonly AbbreviationDefinition[] = [];
+
+export function setUserAbbreviations(definitions: readonly AbbreviationDefinition[]): void {
+  const bySpelling = new Map<string, AbbreviationDefinition>();
+  const byBondedSpelling = new Map<string, AbbreviationDefinition>();
+  for (const definition of definitions) {
+    for (const spelling of [definition.label, ...definition.aliases]) {
+      if (!abbreviationBySpelling.has(spelling) && !bySpelling.has(spelling)) bySpelling.set(spelling, definition);
+    }
+    for (const spelling of definition.bondedSpellings ?? []) {
+      if (!abbreviationByBondedSpelling.has(spelling) && !byBondedSpelling.has(spelling)) byBondedSpelling.set(spelling, definition);
+    }
+  }
+  userAbbreviationBySpelling = bySpelling;
+  userAbbreviationByBondedSpelling = byBondedSpelling;
+  userAbbreviationList = [...definitions];
+}
+
+/** The user-supplied groups currently registered, in the order given. */
+export function userAbbreviations(): readonly AbbreviationDefinition[] {
+  return userAbbreviationList;
+}
+
 /** The group a label spells, matched exactly and case-sensitively ("OMe" yes, "Ome" no). */
 export function abbreviationForLabel(label: string): AbbreviationDefinition | undefined {
-  return abbreviationBySpelling.get(label.trim());
+  const trimmed = label.trim();
+  return abbreviationBySpelling.get(trimmed) ?? userAbbreviationBySpelling.get(trimmed);
 }
 
 const abbreviationByBondedSpelling: ReadonlyMap<string, AbbreviationDefinition> = new Map(
@@ -447,7 +487,8 @@ export const abbreviationBondedSpellings: readonly string[] = [...abbreviationBy
  * The caller decides whether the atom is bonded; unbonded, these labels are their elements.
  */
 export function abbreviationForBondedElementLabel(label: string): AbbreviationDefinition | undefined {
-  return abbreviationByBondedSpelling.get(label.trim());
+  const trimmed = label.trim();
+  return abbreviationByBondedSpelling.get(trimmed) ?? userAbbreviationByBondedSpelling.get(trimmed);
 }
 
 /**

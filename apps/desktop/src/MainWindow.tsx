@@ -364,6 +364,7 @@ import {
   copyAsMenuItems,
   textToolbarActions,
   toolbarCustomizationActions,
+  nicknameActions,
   viewActions,
   createOpenWarningsAction,
   pageCustomSizeAction,
@@ -400,6 +401,8 @@ import {
   type ActiveToolState
 } from "./drawingTools";
 import { elementSymbolForToolCommand } from "./periodicTable";
+import { nicknameLabelForToolCommand, nicknameToolCommandId, useUserNicknames } from "./nicknames/userNicknames";
+import { saveNicknameSettings } from "./nicknames/nicknameSettings";
 import {
   clipboardPayloadFromDataTransfer,
   readClipboardPayload,
@@ -751,6 +754,7 @@ import {
   pushKeybindingSchemeToNativeMenu,
   closeToolsetWindow,
   arrangeToolsetWindowsTopToBottom,
+  broadcastNicknameSettings,
   type ToolsetWindowGeometry,
   type ToolsetArtPaintTarget
 } from "./window-manager";
@@ -1633,7 +1637,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.04.10.00-opus";
+const CURRENT_BUILD_STAMP = "11.04.14.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -2420,6 +2424,8 @@ export function MainWindow({
   const [textStyleDefaults, setTextStyleDefaults] = useState<NativeTextStyle>(DefaultNativeTextStyle);
   const [activeToolState, setActiveToolState] = useState(() => createActiveToolState(initialActiveToolCommandId));
   const compoundLayoutsEnabled = useCompoundLayoutTools();
+  // The user's nicknames (Preferences ▸ Nicknames), registered with the label grammar.
+  const userNicknames = useUserNicknames(true);
   const [unfilteredToolsetRegistry, setToolsetRegistry] = useState<DesktopToolsetRegistry>(() => desktopToolsetRegistry);
   const toolsetRegistry = useMemo(() => compoundLayoutRegistry(unfilteredToolsetRegistry, compoundLayoutsEnabled),
     [unfilteredToolsetRegistry, compoundLayoutsEnabled]);
@@ -2989,7 +2995,8 @@ export function MainWindow({
   // Move previews retain this plan and translate the paint/hits; crossing gaps stay at
   // their start geometry until the real document is rendered once on release.
   const pageSvgRenderPlan = useMemo(() =>
-    markFrame("planPageSvgRender", () => planPageSvgRender(plannedDisplayPage)), [plannedDisplayPage]);
+    // A nickname load changes what labels on the page mean, so it redraws them too.
+    markFrame("planPageSvgRender", () => planPageSvgRender(plannedDisplayPage)), [plannedDisplayPage, userNicknames.revision]);
   const previousOverlayFragmentsRef = useRef<ReadonlyMap<string, readonly PageSvgElementFragment[]> | undefined>(undefined);
   const baseObjectOverlayFragments = useMemo(() => {
     const next = reuseUnchangedFragments(
@@ -4376,6 +4383,49 @@ export function MainWindow({
     setFreeformNativeBond(undefined);
     setStatus(result.message ?? `Labeled hovered atom ${label}`);
   }, [commitDocumentChange, selectedNativeMoleculePart]);
+
+  // A Nicknames toolbar tool: clicking an atom labels it with the nickname, the way a typed label is
+  // committed (a group that takes fewer bonds than the atom has is added as a substituent).
+  const applyNicknameToolToAtom = useCallback((target: NativeMoleculeDeleteTarget, label: string) => {
+    const currentDocument = documentRef.current;
+    const result = commitNativeAtomLabelTarget(currentDocument, target, label);
+    const split = result.target.kind === "atom" && target.kind === "atom" && result.target.atomId !== target.atomId;
+    const nextDocument = split ? selectDocumentObject(result.document, target.objectId) : result.document;
+    if (nextDocument === currentDocument) {
+      setStatus(`Cannot label the atom ${label}`);
+      return;
+    }
+    commitDocumentChange(nextDocument, split ? `Add ${label} substituent` : `Label atom ${label}`);
+    if (split) {
+      setSelectedNativeMoleculePart(result.target);
+    }
+    setStatus(result.message ?? `Labeled atom ${label}`);
+  }, [commitDocumentChange]);
+
+  const armNicknameTool = useCallback((commandId: string, label: string) => {
+    setActiveToolState((current) => ({ ...current, activeCommandId: commandId, activeKind: "atom", lastOutcome: "activated", lastCommandId: commandId }));
+    setActiveTextEditObjectId(undefined);
+    setActiveAtomLabelEdit(undefined);
+    setStatus(`${label}: click an atom to label it ${label}; Esc exits`);
+  }, []);
+
+  // Preferences ▸ Nicknames ▸ Choose…: the document window owns the native folder picker.
+  const chooseNicknameFolder = useCallback(async () => {
+    if (!isDesktopRuntime()) {
+      setStatus("Nickname folders are read by the desktop app");
+      return;
+    }
+    const { open } = await loadTauriDialogModule();
+    const selected = await open({ title: "Choose Nickname Folder", directory: true, multiple: false });
+    if (typeof selected !== "string") {
+      setStatus("Nickname folder unchanged");
+      return;
+    }
+    const next = { folder: selected };
+    saveNicknameSettings(next);
+    await broadcastNicknameSettings(next);
+    setStatus(`Reading nicknames from ${selected}…`);
+  }, []);
 
   const hoveredGrowthArrowPlan = useCallback((target: NativeMoleculeDeleteTarget): NativeBondGrowthPlan | undefined => {
     const arrow = hoveredNativeAtomStateRef.current;
@@ -10679,6 +10729,27 @@ export function MainWindow({
       });
     });
 
+    nicknameActions.forEach((action) => {
+      register(action, () => { void chooseNicknameFolder(); });
+    });
+
+    // One tool per nickname from the user's folder, armed from the Nicknames toolbar.
+    userNicknames.definitions.forEach((definition) => {
+      const id = nicknameToolCommandId(definition.label);
+      if (bindings.has(id)) return;
+      register(
+        {
+          id,
+          title: `Nickname ${definition.label}`,
+          icon: "atom",
+          source: "core",
+          category: "structure",
+          description: `Click atoms to label them ${definition.label} (${definition.formula})`
+        },
+        () => armNicknameTool(id, definition.label)
+      );
+    });
+
     register(createOpenWarningsAction({ hasOpenWarnings: openWarnings !== undefined }), () => {
       if (!openWarningsRef.current) {
         setStatus(NO_OPEN_WARNINGS_REASON);
@@ -10747,7 +10818,10 @@ export function MainWindow({
     setHoveredNativeBondOrder,
     toggleToolset,
     toolCommandSpecs,
-    toolsetRegistry
+    toolsetRegistry,
+    userNicknames.definitions,
+    armNicknameTool,
+    chooseNicknameFolder
   ]);
 
   coreCommandBindingsRef.current = coreCommandBindings;
@@ -12653,7 +12727,7 @@ export function MainWindow({
       if (
         event.key === "Escape" &&
         activeToolCommandIdRef.current !== "tool.select" &&
-        isDrawingToolCommand(activeToolCommandIdRef.current)
+        (isDrawingToolCommand(activeToolCommandIdRef.current) || nicknameLabelForToolCommand(activeToolCommandIdRef.current) !== undefined)
       ) {
         event.preventDefault();
         switchToSelectTool();
@@ -15823,6 +15897,23 @@ export function MainWindow({
       }
     }
 
+    {
+      const nickname = nicknameLabelForToolCommand(activeToolState.activeCommandId);
+      if (nickname) {
+        event.preventDefault();
+        event.stopPropagation();
+        const target = nativeMoleculeCanvasHoverTarget(
+          documentRef.current, point, event.target, hitToleranceForScale(viewportRef.current.scale)
+        ) ?? hoveredNativeDeleteTargetRef.current;
+        if (target?.kind === "atom") {
+          applyNicknameToolToAtom(target, nickname);
+        } else {
+          setStatus(`${nickname}: click an atom to label it ${nickname}`);
+        }
+        return;
+      }
+    }
+
     if (activeToolState.activeCommandId === "tool.atom") {
       event.preventDefault();
       event.stopPropagation();
@@ -15867,6 +15958,7 @@ export function MainWindow({
     addChargeToHoveredNativeAtom,
     applyChargeDocumentAtPoint,
     applyElementToolToAtom,
+    applyNicknameToolToAtom,
     applyNativeArtDocumentAtPoint,
     applyNativeTemplateDocumentAtPoint,
     applySingleBondDocumentAtPoint,
@@ -17212,6 +17304,20 @@ export function MainWindow({
       }
     }
 
+    {
+      const nickname = nicknameLabelForToolCommand(activeToolState.activeCommandId);
+      if (nickname && object?.type === "molecule" && point) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (nativeMoleculeHit?.kind === "atom") {
+          applyNicknameToolToAtom({ objectId, ...nativeMoleculeHit }, nickname);
+        } else {
+          setStatus(`${nickname}: click an atom to label it ${nickname}`);
+        }
+        return;
+      }
+    }
+
     if (activeToolState.activeCommandId === "tool.atom" && object?.type === "molecule" && point) {
       if (nativeMoleculeHit?.kind === "atom") {
         // preventDefault, or the pointerdown's companion mousedown moves focus to the clicked
@@ -17822,6 +17928,7 @@ export function MainWindow({
     applyChargeDocumentAtPoint,
     applyBracketAtPoint,
     applyElementToolToAtom,
+    applyNicknameToolToAtom,
     applyNativeArtDocumentAtPoint,
     applyNativeBondDisplayStyleDocumentTarget,
     applyNativeTemplateDocumentAtPoint,

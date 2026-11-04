@@ -274,6 +274,23 @@ body.preferences-window-body #root {
   color: var(--cd-text-secondary);
 }
 
+.preferences-folder-row {
+  display: flex;
+  gap: var(--cd-space-2);
+  align-items: center;
+}
+
+.preferences-folder-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.preferences-skipped ul {
+  margin: var(--cd-space-2) 0 0;
+  padding-left: var(--cd-space-5);
+  color: var(--cd-text-secondary);
+}
+
 .preferences-radio-list {
   list-style: none;
   margin: 0;
@@ -1128,6 +1145,75 @@ textarea:focus-visible,
   border-color: var(--cd-accent);
   background: var(--cd-accent);
   color: #ffffff;
+}
+
+/* The Nicknames toolbar: a search box over a wrapping, scrolling list of label buttons. The list
+   has a fixed height so the content-fit palette window stays a usable size with 500 groups. */
+.tool-palette.horizontal.nicknames-palette,
+.tool-palette.floating.horizontal.nicknames-palette {
+  width: 300px;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+
+.nicknames-panel {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.nicknames-search {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.nicknames-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 3px;
+  height: 260px;
+  overflow-y: auto;
+}
+
+.nickname-button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 5px;
+  border: 1px solid var(--cd-border-control);
+  border-radius: 3px;
+  background: var(--cd-bg-control);
+  color: var(--cd-text-primary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.nickname-button:hover {
+  border-color: var(--cd-accent);
+}
+
+.nickname-button.active {
+  border-color: var(--cd-accent);
+  background: var(--cd-accent);
+  color: #ffffff;
+}
+
+.nickname-sites {
+  font-size: 8px;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.nicknames-empty {
+  margin: 0;
+  color: var(--cd-text-secondary);
+  font-size: 12px;
 }
 
 .periodic-table-series-marker {

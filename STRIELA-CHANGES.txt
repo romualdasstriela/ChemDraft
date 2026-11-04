@@ -79,7 +79,28 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      saved shift like that is cleared when a document reopens or on the next zoom.) When
      the whole page fits on screen after zooming out, it is brought into view.
 
-8. Build checks
+8. Nicknames from your own folder
+   - Preferences > Nicknames: choose a folder of nickname files (one CDXML structure per
+     file, named by its label, e.g. Ad.cdxml = "Ad", with connection points where the group
+     attaches). ChemDraft reads the folder every time it starts; the files are not copied
+     into ChemDraft or this repository (the project forbids bundling another program's
+     nickname list, and this fork is public).
+   - Every group read from the folder is recognised as an atom label: typed "Ad", "Boc",
+     "Ala", "TBDPS"... counts in the formula, is checked for the right number of bonds, and
+     is written out as real atoms in SMILES / molfile / exports. Built-in groups with the
+     same name win. A label that is also an element symbol ("Am", "Np") means the group
+     only on an atom with bonds.
+   - Groups that join at two atoms (amino-acid and nucleotide residues, PEG and phenylene
+     linkers) are supported: the label needs exactly one bond per site, and the bonds are
+     joined in reading order - the leftmost neighbour (then the highest) to the first site,
+     e.g. Ala's N, the next to the second, e.g. its C=O.
+   - Nested nicknames inside a file (DMTr, MMTr, PMB...) are expanded. Files that are not one
+     definite structure are skipped and listed in Preferences (in the test folder: Asx, Glx,
+     Xaa - "either of" / "any" placeholders). 513 of 516 files load.
+   - New Nicknames toolbar (View > Toolbars): a search box and a button per group (x2 marks
+     two-site groups). Pick one, then click atoms to label them; Esc exits.
+
+9. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
    - Every dev build also runs cargo clippy (-D warnings) and cargo test, as the main
      project's Windows CI does.
@@ -108,3 +129,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Draw new structures in the ACS Document 1996 style
 (next)  Add Zoom In / Zoom Out buttons stepping 25% to 300% in 25% steps
 (next)  Zoom buttons scroll instead of shifting the page, so the whole page stays reachable
+(next)  Load nicknames from a user folder: label recognition, two-site groups, Nicknames toolbar

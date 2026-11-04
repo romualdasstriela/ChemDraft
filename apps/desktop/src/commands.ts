@@ -2297,6 +2297,21 @@ export const toolbarCustomizationActions: CommandSpec[] = [
   }
 ];
 
+/** Preferences ▸ Nicknames: pick the folder of nickname files (the document window shows the picker). */
+export const CHOOSE_NICKNAME_FOLDER_COMMAND_ID = "nicknames.chooseFolder";
+
+export const nicknameActions: CommandSpec[] = [
+  {
+    id: CHOOSE_NICKNAME_FOLDER_COMMAND_ID,
+    title: "Choose Nickname Folder…",
+    icon: "open",
+    source: "core",
+    category: "app",
+    enabled: true,
+    description: "Choose the folder of nickname files (one CDXML structure per file) for the Nicknames toolbar and label recognition"
+  }
+];
+
 export function allPaletteCommands(
   registry: DesktopToolsetRegistry = desktopToolsetRegistry
 ): CommandSpec[] {
@@ -2328,7 +2343,8 @@ export function allShellCommands(
     ...pageOrientationActions,
     ...textToolbarActions,
     ...objectStyleActions,
-    ...toolbarCustomizationActions
+    ...toolbarCustomizationActions,
+    ...nicknameActions
   ]);
 }
 

@@ -9,6 +9,7 @@ import type { ToolbarSelectionModel } from "../toolbars/toolbarSelectionKind";
 import { isSpin3dSettings, type Spin3dSettings } from "../spin3dSettings";
 import { isCompoundLayoutSettings, COMPOUND_LAYOUT_STORAGE_KEY, loadCompoundLayoutSettings, type CompoundLayoutSettings } from "../compoundLayoutSettings";
 import { isKeybindingSettings, type KeybindingScheme, type KeybindingSettings } from "../keybindingSettings";
+import { isNicknameSettings, loadNicknameSettings, NICKNAME_SETTINGS_STORAGE_KEY, type NicknameSettings } from "../nicknames/nicknameSettings";
 import { migrateLegacyToolsetIds } from "../toolbars/legacyToolsetIds";
 import { stackToolsetWindows, toolsetWindowLabel } from "../toolbars/arrangeToolsets";
 import { listenCurrentWindowEvent, listenTauriEvent } from "./tauriEvents";
@@ -1575,6 +1576,40 @@ export async function listenForCompoundLayoutSettings(
   }
   const unlistenTauri = await listenTauriEvent<CompoundLayoutSettings>(COMPOUND_LAYOUT_SETTINGS_EVENT, (event) => {
     if (isCompoundLayoutSettings(event.payload)) handler(event.payload);
+  });
+  return () => {
+    removeStorage();
+    unlistenDom();
+    unlistenTauri();
+  };
+}
+
+export const NICKNAME_SETTINGS_EVENT = "chemdraft://nickname-settings";
+
+/** Preferences ▸ Nicknames changed the folder: every window reloads its nicknames. */
+export async function broadcastNicknameSettings(settings: NicknameSettings): Promise<void> {
+  dispatchDomToolsetEvent(NICKNAME_SETTINGS_EVENT, settings);
+  if (!isDesktopRuntime()) {
+    return;
+  }
+  const { emit } = await import("@tauri-apps/api/event");
+  await emit<NicknameSettings>(NICKNAME_SETTINGS_EVENT, settings);
+}
+
+export async function listenForNicknameSettings(handler: (settings: NicknameSettings) => void): Promise<Unlisten> {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === NICKNAME_SETTINGS_STORAGE_KEY || event.key === null) handler(loadNicknameSettings());
+  };
+  globalThis.addEventListener?.("storage", onStorage);
+  const removeStorage = () => globalThis.removeEventListener?.("storage", onStorage);
+  const unlistenDom = listenForDomToolsetEvent(NICKNAME_SETTINGS_EVENT, (event) => {
+    if (isNicknameSettings(event.detail)) handler(event.detail);
+  });
+  if (!isDesktopRuntime()) {
+    return () => { unlistenDom(); removeStorage(); };
+  }
+  const unlistenTauri = await listenTauriEvent<NicknameSettings>(NICKNAME_SETTINGS_EVENT, (event) => {
+    if (isNicknameSettings(event.payload)) handler(event.payload);
   });
   return () => {
     removeStorage();

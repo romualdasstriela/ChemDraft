@@ -17,6 +17,8 @@ export {
   abbreviationForBondedElementLabel,
   abbreviationForLabel,
   abbreviationSpellings,
-  abbreviationSpellingSuggestion
+  abbreviationSpellingSuggestion,
+  setUserAbbreviations,
+  userAbbreviations
 } from "./abbreviations";
 export { bondedElementLabelMeaning, isBondedGenericAtomLabel, isGenericAtomLabel } from "./genericLabels";

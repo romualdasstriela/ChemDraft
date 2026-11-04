@@ -1825,6 +1825,137 @@ function expandCdxmlAbbreviationNodes(
   };
 }
 
+/** One atom of a nickname definition file, in the file's own coordinates (points, y down). */
+export interface CdxmlNicknameAtom {
+  element: string;
+  charge: number;
+  /** Hydrogens the file states (`NumHydrogens`); undefined when it leaves them implicit. */
+  statedHydrogens?: number;
+  x: number;
+  y: number;
+}
+
+/** A nickname definition read from a CDXML file: one group, and where it attaches. */
+export interface CdxmlNicknameGraph {
+  atoms: CdxmlNicknameAtom[];
+  /** Atom indices and bond order (1–3). */
+  bonds: Array<[from: number, to: number, order: 1 | 2 | 3]>;
+  /**
+   * One entry per external connection point, in file order: the index of the group atom it bonds
+   * to, and the point's own position (which shows the direction the outer bond comes from).
+   */
+  attachments: Array<{ atomIndex: number; x: number; y: number }>;
+}
+
+export type CdxmlNicknameReadResult =
+  | { ok: true; graph: CdxmlNicknameGraph }
+  | { ok: false; reason: string };
+
+/**
+ * Read a nickname definition file: a CDXML document holding one fragment whose atoms are the group
+ * and whose `ExternalConnectionPoint` pseudo-atoms mark where it attaches. Only plain atoms are
+ * accepted: a nested nickname, an atom list or a generic nickname is refused with the reason, as is
+ * an aromatic or other non-integer bond order, so nothing is read as a structure it is not.
+ */
+export function readCdxmlNickname(contents: string): CdxmlNicknameReadResult {
+  let tree: OrderedXmlTree;
+  try {
+    tree = parseCdxml(contents);
+  } catch (error) {
+    return { ok: false, reason: `not readable CDXML (${error instanceof Error ? error.message : String(error)})` };
+  }
+  const page = findElements(tree, "page")[0];
+  const fragments = page ? childElements(page, "fragment") : [];
+  const fragment = fragments[0];
+  if (!fragment) {
+    return { ok: false, reason: "it holds no structure" };
+  }
+  if (fragments.length > 1) {
+    return { ok: false, reason: "it holds more than one structure" };
+  }
+  // A nickname built from another one (DMTr carries two anisyl groups) is written out the way a
+  // drawing's abbreviations are on import; one that cannot be is refused rather than guessed.
+  const conversionWarnings: CompatibilityConversionWarning[] = [];
+  const expansion = expandCdxmlAbbreviationNodes(childElements(fragment, "n"), childElements(fragment, "b"), conversionWarnings);
+  if (expansion.literalLabelByCdxmlId.size > 0) {
+    return { ok: false, reason: `a nested nickname could not be expanded (${conversionWarnings.map((warning) => warning.message).join(" ")})` };
+  }
+  const nodes = expansion.atomElements;
+  const resolveId = (id: string) => expansion.attachmentByCdxmlId.get(id) ?? id;
+  const bondElements: XmlElementView[] = expansion.bondElements.map((bondElement) => ({
+    ...bondElement,
+    attributes: { ...bondElement.attributes, B: resolveId(bondElement.attributes.B ?? ""), E: resolveId(bondElement.attributes.E ?? "") }
+  }));
+  const unsupported = nodes.find((node) => node.attributes.NodeType && node.attributes.NodeType !== "ExternalConnectionPoint");
+  if (unsupported) {
+    return { ok: false, reason: `it contains a ${unsupported.attributes.NodeType} node` };
+  }
+
+  const atomIndexById = new Map<string, number>();
+  const connectionPointById = new Map<string, Point>();
+  const atoms: CdxmlNicknameAtom[] = [];
+  for (const node of nodes) {
+    const id = node.attributes.id ?? "";
+    const point = parseCdxmlPoint(node.attributes.p);
+    if (node.attributes.NodeType === "ExternalConnectionPoint") {
+      connectionPointById.set(id, point);
+      continue;
+    }
+    const element = elementFromCdxmlAtom(node.attributes.Element);
+    if (!element) {
+      return { ok: false, reason: `atom ${id} has an unreadable element` };
+    }
+    const statedHydrogens = parseInteger(node.attributes.NumHydrogens);
+    atomIndexById.set(id, atoms.length);
+    atoms.push({
+      element,
+      charge: parseInteger(node.attributes.Charge) ?? 0,
+      ...(statedHydrogens !== undefined ? { statedHydrogens } : {}),
+      x: point.x,
+      y: point.y
+    });
+  }
+  if (atoms.length === 0) {
+    return { ok: false, reason: "it holds no atoms" };
+  }
+
+  const bonds: CdxmlNicknameGraph["bonds"] = [];
+  const attachments: Array<CdxmlNicknameGraph["attachments"][number] & { order: number }> = [];
+  const connectionOrder = [...connectionPointById.keys()];
+  for (const bondElement of bondElements) {
+    const begin = bondElement.attributes.B ?? "";
+    const end = bondElement.attributes.E ?? "";
+    const order = Number(bondElement.attributes.Order ?? "1");
+    if (order !== 1 && order !== 2 && order !== 3) {
+      return { ok: false, reason: `bond ${bondElement.attributes.id ?? "?"} has order ${bondElement.attributes.Order}` };
+    }
+    const connection = connectionPointById.get(begin) ?? connectionPointById.get(end);
+    if (connection) {
+      const atomIndex = atomIndexById.get(connectionPointById.has(begin) ? end : begin);
+      if (atomIndex === undefined || order !== 1) {
+        return { ok: false, reason: "a connection point does not bond singly to a group atom" };
+      }
+      attachments.push({
+        atomIndex, x: connection.x, y: connection.y,
+        order: connectionOrder.indexOf(connectionPointById.has(begin) ? begin : end)
+      });
+      continue;
+    }
+    const from = atomIndexById.get(begin);
+    const to = atomIndexById.get(end);
+    if (from === undefined || to === undefined) {
+      return { ok: false, reason: `bond ${bondElement.attributes.id ?? "?"} does not join two group atoms` };
+    }
+    bonds.push([from, to, order]);
+  }
+  if (attachments.length === 0) {
+    return { ok: false, reason: "it has no connection point" };
+  }
+  const ordered = attachments.sort((left, right) => left.order - right.order)
+    .map(({ atomIndex, x, y }) => ({ atomIndex, x, y }));
+  return { ok: true, graph: { atoms, bonds, attachments: ordered } };
+}
+
 /** The text ChemDraw draws in place of a node: "SO3", "OH", "Ph". */
 function cdxmlAtomLabelText(atomElement: XmlElementView): string | undefined {
   const labelElement = childElements(atomElement, "t")[0];

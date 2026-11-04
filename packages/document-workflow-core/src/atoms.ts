@@ -21,6 +21,7 @@ import {
   nativeAtomValenceForCharge,
   nativeBondOrderResolution,
   nativeElementFromAtomLabel,
+  nativeLabelGroupSeparateAttachments,
   nativeLabelReadingDependsOnBondSide,
   nativeSingleHeavyElementLabelValence,
   parseCondensedLabelFormula,
@@ -662,6 +663,12 @@ export function nativeLabelGroupVerdict(
 
 /** Whether `externalValence` (bond orders plus radicals) completes the group at the label's charge. */
 function nativeLabelGroupCompletes(group: NativeLabelGroup, externalValence: number, labelCharge: number): boolean {
+  // A group joining at several of its atoms takes one single bond at each, uncharged; which atom
+  // each bond meets is settled at expansion.
+  const separate = nativeLabelGroupSeparateAttachments(group);
+  if (separate) {
+    return externalValence === separate.length && labelCharge === 0;
+  }
   const attachment = nativeLabelGroupAttachment(group);
   const element = attachment.element as NativeElementSymbol;
   return nativeAtomValence[element] !== undefined && nativeAtomMaxValence[element] !== undefined
@@ -676,6 +683,10 @@ function nativeLabelGroupCompletes(group: NativeLabelGroup, externalValence: num
  * the group at that charge.
  */
 export function nativeLabelGroupFreeValence(group: NativeLabelGroup, labelCharge = 0): number | undefined {
+  const separate = nativeLabelGroupSeparateAttachments(group);
+  if (separate) {
+    return labelCharge === 0 ? separate.length : undefined;
+  }
   const attachment = nativeLabelGroupAttachment(group);
   const element = attachment.element as NativeElementSymbol;
   if (nativeAtomValence[element] === undefined || nativeAtomMaxValence[element] === undefined) {

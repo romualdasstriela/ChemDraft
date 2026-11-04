@@ -7,7 +7,12 @@
 
 import { ChemDraftSyntheticStylePreset, type MoleculeAtom, type MoleculeBond } from "@chemdraft/chem-core";
 import type { AbbreviationDefinition } from "@chemdraft/template-library";
-import { nativeLabelGroupAttachment, type NativeLabelGroup, type NativeLabelGroupAttachment } from "@chemdraft/layout-engine";
+import {
+  nativeLabelGroupAttachment,
+  nativeLabelGroupSeparateAttachments,
+  type NativeLabelGroup,
+  type NativeLabelGroupAttachment
+} from "@chemdraft/layout-engine";
 
 // What a group is, and the atom its label bonds connect to, belong to the label grammar
 // (layout-engine's labelGrammar.ts); re-exported under the same names.
@@ -64,6 +69,7 @@ export function expandNativeLabelGroupsInGraph(
   const atomById = new Map(atoms.map((atom) => [atom.id, atom]));
   const bondLength = labelGroupBondLength(atoms, bonds);
   const expandedAtoms = [...atoms];
+  const expandedBonds = [...bonds];
   const addedAtoms: MoleculeAtom[] = [];
   const addedBonds: MoleculeBond[] = [];
   const expansions: NativeLabelGroupExpansion[] = [];
@@ -82,7 +88,7 @@ export function expandNativeLabelGroupsInGraph(
     let groupIndex = 0;
     // Places one abbreviation's atoms around its attachment atom (`originId`, already in place at
     // `origin`), its frame turned so the atom it bonds to lies at angle `inward` from it.
-    const place = (definition: AbbreviationDefinition, originId: string, origin: { x: number; y: number }, inward: number): void => {
+    const place = (definition: AbbreviationDefinition, originId: string, origin: { x: number; y: number }, inward: number): string[] => {
       const outward = inward + Math.PI;
       const cos = Math.cos(outward);
       const sin = Math.sin(outward);
@@ -110,9 +116,29 @@ export function expandNativeLabelGroupsInGraph(
           order: bondOrderName[order]
         });
       });
+      return ids;
     };
 
-    if (group.kind === "abbreviation") {
+    const separate = nativeLabelGroupSeparateAttachments(group);
+    if (group.kind === "abbreviation" && separate) {
+      // A group joining at several of its atoms (a residue's N and C=O) takes its drawn bonds in
+      // reading order: the neighbour furthest left (then highest) meets the first attachment atom,
+      // the next the second, as a sequence is written left to right. The group is placed facing the
+      // first neighbour; the other bonds are re-pointed at their attachment atoms.
+      const ordered = bonds
+        .map((bond, bondIndex) => ({ bond, bondIndex }))
+        .filter(({ bond }) => bond.fromAtomId === atom.id || bond.toAtomId === atom.id)
+        .map((entry) => ({ ...entry, neighbor: atomById.get(entry.bond.fromAtomId === atom.id ? entry.bond.toAtomId : entry.bond.fromAtomId) }))
+        .filter((entry): entry is typeof entry & { neighbor: MoleculeAtom } => entry.neighbor !== undefined)
+        .sort((left, right) => left.neighbor.x - right.neighbor.x || left.neighbor.y - right.neighbor.y);
+      const first = ordered[0]?.neighbor;
+      const ids = place(group.definition, atom.id, atom, first ? Math.atan2(first.y - atom.y, first.x - atom.x) : Math.PI);
+      ordered.forEach(({ bond, bondIndex }, order) => {
+        const target = ids[separate[order] ?? 0];
+        if (!target || target === atom.id) return;
+        expandedBonds[bondIndex] = bond.fromAtomId === atom.id ? { ...bond, fromAtomId: target } : { ...bond, toAtomId: target };
+      });
+    } else if (group.kind === "abbreviation") {
       // The group grows away from the first atom it is bonded to; a charge-closed group with no
       // bond ("OMe" carrying −1, methoxide) keeps the table's own orientation.
       place(group.definition, atom.id, atom, neighborAngles[0] ?? Math.PI);
@@ -146,7 +172,7 @@ export function expandNativeLabelGroupsInGraph(
     expansions.push({ atomId: atom.id, label: group.label, atomIds });
   });
 
-  return { atoms: [...expandedAtoms, ...addedAtoms], bonds: [...bonds, ...addedBonds], expansions };
+  return { atoms: [...expandedAtoms, ...addedAtoms], bonds: [...expandedBonds, ...addedBonds], expansions };
 }
 
 /**

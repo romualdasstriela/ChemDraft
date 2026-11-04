@@ -16,7 +16,10 @@ import {
   type KeybindingSettings
 } from "./keybindingSettings";
 import { loadCompoundLayoutSettings, saveCompoundLayoutSettings } from "./compoundLayoutSettings";
-import { broadcastCompoundLayoutSettings, broadcastKeybindingSettings, broadcastSpin3dSettings, broadcastQuitSettings, broadcastExportPreviewSettings } from "./window-manager";
+import { broadcastCompoundLayoutSettings, broadcastKeybindingSettings, broadcastNicknameSettings, broadcastSpin3dSettings, broadcastQuitSettings, broadcastExportPreviewSettings, routeToolsetCommand } from "./window-manager";
+import { CHOOSE_NICKNAME_FOLDER_COMMAND_ID } from "./commands";
+import { saveNicknameSettings } from "./nicknames/nicknameSettings";
+import { useUserNicknames } from "./nicknames/userNicknames";
 
 interface RadioOption<T extends string> {
   value: T;
@@ -94,6 +97,57 @@ function PreferenceRadioGroup<T extends string>({ legend, hint, name, options, v
   );
 }
 
+/**
+ * Preferences ▸ Nicknames: the folder of the user's nickname files. The document window shows the
+ * folder picker (it owns the native dialogs); a path can also be typed or pasted.
+ */
+function NicknameFolderSection() {
+  const nicknames = useUserNicknames(false);
+  const [folder, setFolder] = useState(nicknames.folder);
+  useEffect(() => setFolder(nicknames.folder), [nicknames.folder]);
+  const apply = (next: string): void => {
+    const settings = { folder: next.trim() };
+    saveNicknameSettings(settings);
+    void broadcastNicknameSettings(settings);
+  };
+  const loaded = nicknames.folder
+    ? nicknames.error ?? `${nicknames.definitions.length} nicknames loaded.`
+    : "No folder set.";
+  return (
+    <section className="preferences-section" aria-labelledby="nickname-folder">
+      <h2 id="nickname-folder">Nicknames</h2>
+      <p className="preferences-section-hint">
+        A folder of nickname files on this computer: one CDXML structure per file, named by its label
+        (Ad.cdxml is "Ad"), with connection points where it attaches. The groups appear in the Nicknames
+        toolbar and are recognised when typed as atom labels. The files are read from the folder each
+        time ChemDraft starts; they are not copied into ChemDraft.
+      </p>
+      <div className="preferences-folder-row">
+        <input
+          type="text"
+          aria-label="Nickname folder"
+          placeholder="Folder path"
+          value={folder}
+          onChange={(event) => setFolder(event.currentTarget.value)}
+          onKeyDown={(event) => { if (event.key === "Enter") apply(folder); }}
+        />
+        <button type="button" onClick={() => apply(folder)}>Apply</button>
+        <button type="button" onClick={() => void routeToolsetCommand(CHOOSE_NICKNAME_FOLDER_COMMAND_ID)}>Choose…</button>
+        {nicknames.folder ? <button type="button" onClick={() => apply("")}>Clear</button> : null}
+      </div>
+      <p className="preferences-section-hint" role="status">{loaded}</p>
+      {nicknames.skipped.length > 0 ? (
+        <details className="preferences-skipped">
+          <summary>{nicknames.skipped.length} file{nicknames.skipped.length === 1 ? "" : "s"} not used</summary>
+          <ul>
+            {nicknames.skipped.map((entry) => <li key={entry.file}><strong>{entry.file}</strong>: {entry.reason}</li>)}
+          </ul>
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
 export function PreferencesWindow() {
   const [compoundLayouts, setCompoundLayouts] = useState(() => loadCompoundLayoutSettings());
   const [exportPreview, setExportPreview] = useState(loadExportPreviewEnabled);
@@ -152,6 +206,7 @@ export function PreferencesWindow() {
             <small>Enable circle, oval, grid, row and column layouts and a spacing preview. Off by default.</small></span>
         </label>
       </section>
+      <NicknameFolderSection />
       <section className="preferences-section">
         <h2>Quitting</h2>
         <label className="preferences-radio">

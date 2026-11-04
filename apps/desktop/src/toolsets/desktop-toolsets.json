@@ -5512,6 +5512,43 @@
           ]
         }
       ]
+    },
+    {
+      "id": "core.nicknames",
+      "title": "Nicknames",
+      "source": "core",
+      "defaultVisible": false,
+      "defaultMode": "floating",
+      "preferredWindowSize": {
+        "width": 320,
+        "height": 360,
+        "minWidth": 240,
+        "minHeight": 200
+      },
+      "category": "core",
+      "gridLayout": {
+        "orientation": "horizontal",
+        "rows": 1,
+        "cellWidth": 24,
+        "cellHeight": 24
+      },
+      "groups": [
+        {
+          "id": "core.nicknames.list",
+          "items": [
+            {
+              "id": "widget.core.nicknames",
+              "kind": "control",
+              "label": "Nicknames",
+              "primary": {
+                "type": "control",
+                "controlId": "widget.core.nicknames"
+              },
+              "submenu": null
+            }
+          ]
+        }
+      ]
     }
   ]
 }
