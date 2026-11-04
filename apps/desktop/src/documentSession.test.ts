@@ -181,6 +181,16 @@ describe("multi-document session extension", () => {
     expect(parsed.tabs![2]!.openWarnings).toBeUndefined();
   });
 
+  it("drops a saved page offset, which would leave part of the page beyond the scrollbars", () => {
+    const viewport = { ...createViewportState({ scale: 2 }), translateX: -408, translateY: -528 };
+    const parsed = parseDocumentSessionEnvelope(buildDocumentTabsSession([
+      { ...blank, view: { viewport, scrollLeft: 10, scrollTop: 20 } }
+    ], 0))!;
+    expect(parsed.tabs![0]!.view).toEqual({
+      viewport: { ...viewport, translateX: 0, translateY: 0 }, scrollLeft: 10, scrollTop: 20
+    });
+  });
+
   it("does not restore a sole pristine blank Untitled tab", () => {
     expect(shouldRestoreDocumentSession(buildDocumentTabsSession([{ ...blank, pristine: true }], 0))).toBe(false);
     expect(shouldRestoreDocumentSession(buildDocumentTabsSession([{ ...blank, pristine: false }], 0))).toBe(true);

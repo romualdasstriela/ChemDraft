@@ -73,6 +73,11 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      Ctrl+-, step through 25%, 50%, ... 300% in 25% steps. A zoom off that grid (after a
      pinch or Ctrl+wheel) goes to the next 25% level; above 300% Zoom Out returns to 300%.
    - The page can now zoom out to 25% (was 50%).
+   - The buttons zoom about the middle of the visible canvas by moving the scrollbars, like
+     Ctrl+wheel zoom, so every part of the page stays reachable by scrolling. (The first
+     version shifted the page, which left its top and left edges beyond the scrollbars; a
+     saved shift like that is cleared when a document reopens or on the next zoom.) When
+     the whole page fits on screen after zooming out, it is brought into view.
 
 8. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
@@ -102,3 +107,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 4f7ef6f Move linear triple-bond growth into layout-engine; run clippy and cargo test in the dev build
 (next)  Draw new structures in the ACS Document 1996 style
 (next)  Add Zoom In / Zoom Out buttons stepping 25% to 300% in 25% steps
+(next)  Zoom buttons scroll instead of shifting the page, so the whole page stays reachable

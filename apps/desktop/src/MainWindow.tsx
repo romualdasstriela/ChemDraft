@@ -120,7 +120,8 @@ import {
   viewportCssVars,
   wheelDeltaToZoomFactor,
   zoomViewportAtPoint,
-  stepZoomViewport,
+  steppedZoomScale,
+  ZOOM_STEP_MIN,
   type RulerUnitState,
   type ViewportState
 } from "@chemdraft/viewport-engine";
@@ -1632,7 +1633,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.03.14.30-opus";
+const CURRENT_BUILD_STAMP = "11.04.10.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -3791,7 +3792,12 @@ export function MainWindow({
     const focalPagePoint = clientToPage(clientPoint, { pageRect, scale: currentScale });
 
     setViewport((current) => {
-      const next = setViewportScale(current, nextScale);
+      // Scroll, never translate: clear any page offset an older zoom left (it put part of the page
+      // out of the scrollbars' reach), and let a view saved with the old 50% floor reach 25%.
+      const next = setViewportScale(
+        { ...current, translateX: 0, translateY: 0, minZoom: Math.min(current.minZoom, ZOOM_STEP_MIN) },
+        nextScale
+      );
       viewportRef.current = next;
       return next;
     });
@@ -10096,14 +10102,28 @@ export function MainWindow({
         if (action.id === "clipboard.paste") {
           await pasteClipboard();
         }
-        // Zoom In / Out step through 25%…300% in 25% steps.
+        // Zoom In / Out step through 25%…300% in 25% steps, about the middle of the visible canvas.
+        // Like Ctrl+wheel zoom, the scrollbars keep that point still, so every part of the page
+        // stays scrollable (a CSS translate of the page cannot be scrolled back to).
         if (action.id === "view.zoomOut" || action.id === "view.zoomIn") {
-          const direction = action.id === "view.zoomIn" ? "in" : "out";
-          setViewport((current) => {
-            const next = stepZoomViewport(current, direction, pageCenterPoint(current, activePage));
-            setStatus(`Zoom ${Math.round(next.scale * 100)}%`);
-            return next;
+          const nextScale = steppedZoomScale(viewportRef.current.scale, action.id === "view.zoomIn" ? "in" : "out");
+          const canvasRect = canvasRegionRef.current?.getBoundingClientRect();
+          zoomCanvasAtClientPoint(nextScale, canvasRect
+            ? { x: canvasRect.left + canvasRect.width / 2, y: canvasRect.top + canvasRect.height / 2 }
+            : { x: 0, y: 0 });
+          // Zoomed out far enough that the whole page fits: show it, rather than leave it scrolled
+          // out of view. Runs after the zoom's own scroll correction (queued first, above).
+          window.requestAnimationFrame(() => {
+            const canvas = canvasRegionRef.current;
+            const page = pageRef.current;
+            if (!canvas || !page) return;
+            const view = canvas.getBoundingClientRect();
+            const rect = page.getBoundingClientRect();
+            if (rect.width > view.width || rect.height > view.height) return;
+            if (rect.top < view.top || rect.bottom > view.bottom) canvas.scrollTop += rect.top - view.top - (view.height - rect.height) / 2;
+            if (rect.left < view.left || rect.right > view.right) canvas.scrollLeft += rect.left - view.left - (view.width - rect.width) / 2;
           });
+          setStatus(`Zoom ${Math.round(nextScale * 100)}%`);
         }
         if (action.id === "view.toggleToolPalette") {
           await toggleToolset(DEFAULT_TOOLSET_ID);

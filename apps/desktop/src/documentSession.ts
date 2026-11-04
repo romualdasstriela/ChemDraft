@@ -89,7 +89,10 @@ function parseSessionView(raw: unknown): DocumentSessionView | undefined {
       typeof unit.label !== "string" || !finite(unit.pixelsPerUnit) || unit.pixelsPerUnit <= 0 ||
       !finite(unit.subdivisions) || unit.subdivisions <= 0) return undefined;
   return {
-    viewport: { ...viewport, scale: Math.min(viewport.maxZoom as number, Math.max(viewport.minZoom as number, viewport.scale as number)) } as unknown as ViewportState,
+    // The page is positioned by scrolling; a saved page offset (left by an older zoom) would put
+    // part of the page beyond the scrollbars' reach, so a restored view starts without one.
+    viewport: { ...viewport, translateX: 0, translateY: 0,
+      scale: Math.min(viewport.maxZoom as number, Math.max(viewport.minZoom as number, viewport.scale as number)) } as unknown as ViewportState,
     scrollLeft: Math.max(0, raw.scrollLeft), scrollTop: Math.max(0, raw.scrollTop)
   };
 }
