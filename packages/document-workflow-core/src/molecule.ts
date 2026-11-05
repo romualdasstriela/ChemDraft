@@ -126,6 +126,8 @@ export interface SmilesMoleculeSource {
   reservedObjectIds?: Set<string>;
   /** The drawing style the molecule starts with; the synthetic preset when omitted. */
   stylePreset?: ChemDraftStylePreset;
+  /** The bond length to draw at; SMILES paste's own larger default when omitted. */
+  bondLengthPx?: number;
 }
 
 export const SMILES_PASTE_SOURCE: SmilesMoleculeSource = {
@@ -181,7 +183,7 @@ export function createSmilesMolecule(
     pseudoGraph,
     point,
     page,
-    smilesPasteBondLengthPx
+    source.bondLengthPx ?? smilesPasteBondLengthPx
   ).map((atom) => ({
     id: atom.id,
     element: atom.element,
@@ -247,7 +249,7 @@ export function createSmilesMolecule(
     transform: defaultNativeMoleculeTransform,
     style: {
       ...stylePresetToObjectStyle(source.stylePreset ?? ChemDraftSyntheticStylePreset),
-      bondLengthPx: smilesPasteBondLengthPx,
+      bondLengthPx: source.bondLengthPx ?? smilesPasteBondLengthPx,
       source: source.styleSource
     },
     compatibility: {

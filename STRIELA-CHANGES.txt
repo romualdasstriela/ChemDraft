@@ -99,6 +99,9 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      Xaa - "either of" / "any" placeholders). 513 of 516 files load.
    - New Nicknames toolbar (View > Toolbars): a search box and a button per group (x2 marks
      two-site groups). Pick one, then click atoms to label them; Esc exits.
+   - With a nickname picked, a click on empty page places the group's whole structure there
+     as real, editable atoms (in the new-structure style, selected); each attachment site
+     gets a hydrogen, so "Ad" places adamantane.
 
 9. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
@@ -130,3 +133,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Add Zoom In / Zoom Out buttons stepping 25% to 300% in 25% steps
 (next)  Zoom buttons scroll instead of shifting the page, so the whole page stays reachable
 (next)  Load nicknames from a user folder: label recognition, two-site groups, Nicknames toolbar
+(next)  Nickname tool: a click on empty page places the group's structure

@@ -555,6 +555,7 @@ import {
   nativeFreehandStrokeDocument,
   nativePolylinePathDocument,
   insertSmilesMolecule,
+  insertNicknameStructure,
   getNewNativeMoleculeStylePreset,
   setNewNativeMoleculeStylePreset,
   insertSmilesMoleculeGrid,
@@ -1637,7 +1638,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.04.14.00-opus";
+const CURRENT_BUILD_STAMP = "11.05.10.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -4402,11 +4403,24 @@ export function MainWindow({
     setStatus(result.message ?? `Labeled atom ${label}`);
   }, [commitDocumentChange]);
 
+  // A Nicknames toolbar tool on empty page: the group's whole structure, as real atoms, at the click.
+  const userNicknameDefinitionsRef = useRef(userNicknames.definitions);
+  userNicknameDefinitionsRef.current = userNicknames.definitions;
+  const placeNicknameStructure = useCallback((point: ClientPoint, label: string) => {
+    const definition = userNicknameDefinitionsRef.current.find((candidate) => candidate.label === label);
+    if (!definition) {
+      setStatus(`${label} is not in the nickname folder any more`);
+      return;
+    }
+    commitDocumentChange(insertNicknameStructure(documentRef.current, point, definition), `Place ${label}`);
+    setStatus(`Placed ${label} (${definition.formula})`);
+  }, [commitDocumentChange]);
+
   const armNicknameTool = useCallback((commandId: string, label: string) => {
     setActiveToolState((current) => ({ ...current, activeCommandId: commandId, activeKind: "atom", lastOutcome: "activated", lastCommandId: commandId }));
     setActiveTextEditObjectId(undefined);
     setActiveAtomLabelEdit(undefined);
-    setStatus(`${label}: click an atom to label it ${label}; Esc exits`);
+    setStatus(`${label}: click an atom to label it ${label}, or empty page to place its structure; Esc exits`);
   }, []);
 
   // Preferences ▸ Nicknames ▸ Choose…: the document window owns the native folder picker.
@@ -15907,8 +15921,10 @@ export function MainWindow({
         ) ?? hoveredNativeDeleteTargetRef.current;
         if (target?.kind === "atom") {
           applyNicknameToolToAtom(target, nickname);
+        } else if (!target) {
+          placeNicknameStructure(point, nickname);
         } else {
-          setStatus(`${nickname}: click an atom to label it ${nickname}`);
+          setStatus(`${nickname}: click an atom to label it, or empty page to place it`);
         }
         return;
       }
@@ -15959,6 +15975,7 @@ export function MainWindow({
     applyChargeDocumentAtPoint,
     applyElementToolToAtom,
     applyNicknameToolToAtom,
+    placeNicknameStructure,
     applyNativeArtDocumentAtPoint,
     applyNativeTemplateDocumentAtPoint,
     applySingleBondDocumentAtPoint,
@@ -17929,6 +17946,7 @@ export function MainWindow({
     applyBracketAtPoint,
     applyElementToolToAtom,
     applyNicknameToolToAtom,
+    placeNicknameStructure,
     applyNativeArtDocumentAtPoint,
     applyNativeBondDisplayStyleDocumentTarget,
     applyNativeTemplateDocumentAtPoint,

@@ -160,6 +160,7 @@ import {
   type ParsedMolfileGraph
 } from "@chemdraft/clipboard-adapter";
 import {
+  type AbbreviationDefinition,
   atomBondOrderUsageMap,
   atomPairKey,
   bondGeometry,
@@ -5140,6 +5141,39 @@ export function insertSmilesMoleculeGridStatus(
   }
   if (skipped > 0) status += `; ${skipped} token${skipped === 1 ? "" : "s"} skipped`;
   return status;
+}
+
+/**
+ * A nickname's structure placed on the page as real atoms, centred on `point` and drawn in the new
+ * structure style: what the Nicknames toolbar puts down when the click lands on empty page. Each
+ * attachment site is left to the valence model, so it carries a hydrogen ("Ad" places adamantane).
+ */
+export function insertNicknameStructure(
+  document: ChemDraftDocument,
+  point: PagePoint,
+  definition: Pick<AbbreviationDefinition, "label" | "atoms" | "bonds">
+): ChemDraftDocument {
+  const page = firstPage(document);
+  const bondOrder = { 1: "single", 2: "double", 3: "triple" } as const;
+  const object = createSmilesMolecule(document, point, {
+    atoms: definition.atoms.map((atom) => ({ element: atom.element, x: atom.x, y: atom.y, charge: atom.charge ?? 0 })),
+    bonds: definition.bonds.map(([from, to, order]) => ({ from, to, order: bondOrder[order], wedge: null }))
+  }, "", {
+    objectIdPrefix: "mol_nickname",
+    styleSource: "chemdraft-native-drawing",
+    warningCode: "nickname.placed",
+    warningMessage: `Placed the ${definition.label} structure from the nickname folder.`,
+    stylePreset: newNativeMoleculeStylePreset,
+    bondLengthPx: newNativeMoleculeStylePreset.drawing.bondLengthPx
+  });
+  return applyPatches(
+    document,
+    [
+      { op: "addObject", pageId: page.id, object },
+      { op: "setSelection", pageId: page.id, objectIds: [object.id] }
+    ],
+    { now: phase4Timestamp }
+  );
 }
 
 export function insertNativeMolfileMolecule(
