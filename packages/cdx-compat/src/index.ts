@@ -818,7 +818,8 @@ function semanticArrowExportKind(graphic: GraphicObject): SemanticArrowExportKin
   if (
     graphic.data.artToolId === "reactionArrow" ||
     graphic.data.artToolId === "reactionArrowBold" ||
-    graphic.data.artToolId === "reactionArrowDashed"
+    graphic.data.artToolId === "reactionArrowDashed" ||
+    graphic.data.artToolId === "reactionArrowNarrow"
   ) {
     return "forward";
   }

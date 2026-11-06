@@ -22,6 +22,7 @@ import {
   maxGraphicCornerRadius,
   planNativeArtBooleanOperation,
   planNativeArtVisual,
+  nativeArtMarkerHalfWidth,
   prepareGraphicPathForDirectEdit,
   projectGraphicObjectPoint,
   splitGraphicPathSegmentAtPoint,
@@ -449,6 +450,24 @@ describe("art-engine native art planning", () => {
       opacity: 1,
       paint: { kind: "none", opacity: 1 }
     });
+  });
+
+  it("carries a narrow arrowhead's width scale into the marker plan", () => {
+    const arrow = (markerEnd: GraphicObject["data"]["markerEnd"]) => planNativeArtVisual({
+      ...baseGraphic,
+      graphicKind: "path",
+      width: 82,
+      height: 46,
+      data: { artPathKind: "line", lineStart: { x: 0, y: 0 }, lineEnd: { x: 82, y: 0 }, markerEnd }
+    } satisfies GraphicObject, { coordinateSpace: "local" }).markerEnd;
+
+    const narrow = arrow({ kind: "filled-arrow", sizePx: 16, widthScale: 0.5 });
+    expect(narrow).toEqual({ kind: "filled-arrow", sizePx: 16, angleDegrees: 0, widthScale: 0.5 });
+    expect(nativeArtMarkerHalfWidth(narrow!)).toBe(4);
+    // A full-width head keeps the plan it always had.
+    const standard = arrow({ kind: "filled-arrow", sizePx: 16 });
+    expect(standard).toEqual({ kind: "filled-arrow", sizePx: 16, angleDegrees: 0 });
+    expect(nativeArtMarkerHalfWidth(standard!)).toBe(8);
   });
 
   it("plans native graphic markers for open stroke paths", () => {

@@ -35,6 +35,15 @@ describe("graphicObjectSupportsMarkers", () => {
   });
 });
 
+describe("narrow-head reaction arrow", () => {
+  it("keeps its half-width head when the head is resized", () => {
+    const document = insertSelected("tool.art.reactionArrowNarrow");
+    expect(selectedGraphic(document).data.markerEnd).toEqual({ kind: "filled-arrow", sizePx: 16, widthScale: 0.5 });
+    const resized = applyGraphicObjectMarkerSizeToSelection(document, 24);
+    expect(selectedGraphic(resized).data.markerEnd).toEqual({ kind: "filled-arrow", sizePx: 24, widthScale: 0.5 });
+  });
+});
+
 describe("applyGraphicObjectMarkerKindToSelection", () => {
   it("adds a tail head seeded from the end head's size", () => {
     const document = insertSelected("tool.art.reactionArrowBold"); // markerEnd filled-arrow 24

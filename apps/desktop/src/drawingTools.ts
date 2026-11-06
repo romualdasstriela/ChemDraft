@@ -699,6 +699,7 @@ function artDrawingToolDefinitions(): DrawingToolDefinition[] {
     ["tool.art.eyedropper", "Eyedropper", "style", usageHint("click source art", "⌥ copies full appearance", "Esc exits")],
     ["tool.art.arrow", "Arrow", "export", artPathUsageHint],
     ["tool.art.reactionArrow", "Reaction Arrow", "export", artPathUsageHint],
+    ["tool.art.reactionArrowNarrow", "Reaction Arrow (Narrow Head)", "export", artPathUsageHint],
     ["tool.art.reactionArrowBold", "Reaction Arrow (Large Head)", "export", artPathUsageHint],
     ["tool.art.reactionArrowDashed", "Dashed Reaction Arrow", "export", artPathUsageHint],
     ["tool.art.resonanceArrow", "Resonance Arrow", "export", artPathUsageHint],

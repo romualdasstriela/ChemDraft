@@ -4563,9 +4563,11 @@ function svgFlattenedMarkerFragments(
   ].filter(Boolean).join(" ");
 
   if (marker.kind === "filled-arrow") {
+    // A narrow head (widthScale < 1) keeps its length and narrows its base.
+    const headHalf = half * (marker.widthScale ?? 1);
     return [elementFragment("path", id, {
       ...attrs,
-      d: markerPath([tip, markerPoint(size, -half), markerPoint(size, half)]),
+      d: markerPath([tip, markerPoint(size, -headHalf), markerPoint(size, headHalf)]),
       ...fillAttrs,
       stroke: "none"
     })];

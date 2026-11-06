@@ -75,8 +75,8 @@ describe("Phase 7 drawing tool activation", () => {
     const result = activateDrawingToolCommand(createActiveToolState(), command);
 
     expect(result.outcome).toBe("activated");
-    expect(result.state.activeCommandId).toBe("tool.art.reactionArrow");
-    expect(result.state.lastCommandId).toBe("tool.art.reactionArrow");
+    expect(result.state.activeCommandId).toBe("tool.art.reactionArrowNarrow");
+    expect(result.state.lastCommandId).toBe("tool.art.reactionArrowNarrow");
     // And it must not resolve to the legacy arrow builder any more.
     expect(reactionArrowKindForToolCommand(result.state.activeCommandId)).toBeUndefined();
   });

@@ -4674,8 +4674,9 @@ function ArtToolIcon({ commandId }: { commandId: string }) {
     );
   }
 
-  if (toolId === "reactionArrow" || toolId === "reactionArrowBold" || toolId === "reactionArrowDashed" || toolId === "noReactionArrow") {
+  if (toolId === "reactionArrow" || toolId === "reactionArrowBold" || toolId === "reactionArrowDashed" || toolId === "reactionArrowNarrow" || toolId === "noReactionArrow") {
     const bold = toolId === "reactionArrowBold";
+    const narrow = toolId === "reactionArrowNarrow";
     return (
       <svg className="art-tool-icon" viewBox="0 0 17 17" aria-hidden="true" focusable="false" data-art-tool-icon={toolId}>
         <path
@@ -4684,7 +4685,7 @@ function ArtToolIcon({ commandId }: { commandId: string }) {
         />
         <path
           className="art-tool-stroke filled"
-          d={bold ? "M15.4 8.5 L10.6 5.6 L10.6 11.4 Z" : "M15 8.5 L11.6 6.5 L11.6 10.5 Z"}
+          d={bold ? "M15.4 8.5 L10.6 5.6 L10.6 11.4 Z" : narrow ? "M15 8.5 L11.6 7.5 L11.6 9.5 Z" : "M15 8.5 L11.6 6.5 L11.6 10.5 Z"}
         />
         {toolId === "noReactionArrow" ? (
           <path className="art-tool-stroke" d="M5.6 5.6 L9.4 11.4 M9.4 5.6 L5.6 11.4" />

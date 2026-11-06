@@ -18,7 +18,9 @@
  * without pulling in the toolsets manifest.
  */
 export const RENAMED_COMMAND_IDS: Readonly<Record<string, string>> = {
-  "tool.reactionArrow": "tool.art.reactionArrow",
+  // The legacy reaction-arrow id (the E shortcut) goes to the default reaction arrow, now the
+  // narrow-head one.
+  "tool.reactionArrow": "tool.art.reactionArrowNarrow",
   "tool.resonanceArrow": "tool.art.resonanceArrow",
   "tool.equilibriumArrow": "tool.art.equilibriumArrow",
   "tool.retroArrow": "tool.art.retroArrow",

@@ -181,7 +181,7 @@ const COMMAND_SECTION_RULES: ReadonlyArray<{ pattern: RegExp; section: string }>
   // offered the section emptied out — and even before that, every arrow a user could usefully add
   // was filed under the generic "Art" heading by the `tool.art.` rule below.
   {
-    pattern: /^tool\.art\.(arrow|reactionArrow|reactionArrowBold|reactionArrowDashed|resonanceArrow|equilibriumArrow|retroArrow|noReactionArrow)$/,
+    pattern: /^tool\.art\.(arrow|reactionArrow|reactionArrowBold|reactionArrowDashed|reactionArrowNarrow|resonanceArrow|equilibriumArrow|retroArrow|noReactionArrow)$/,
     section: "arrows"
   },
   // `tool.symbol` also has per-glyph variants (tool.symbol.degree, …), so the family is matched by

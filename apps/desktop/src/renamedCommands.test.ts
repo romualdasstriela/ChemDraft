@@ -3,7 +3,7 @@ import { canonicalCommandId, isRenamedCommandId, renamedCommandId } from "./rena
 
 describe("renamed command ids", () => {
   it("still redirects a real alias", () => {
-    expect(canonicalCommandId("tool.reactionArrow")).toBe("tool.art.reactionArrow");
+    expect(canonicalCommandId("tool.reactionArrow")).toBe("tool.art.reactionArrowNarrow");
     expect(isRenamedCommandId("tool.reactionArrow")).toBe(true);
     expect(renamedCommandId("tool.retroArrow")).toBe("tool.art.retroArrow");
   });

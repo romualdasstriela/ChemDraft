@@ -415,6 +415,7 @@ export type NativeArtToolId =
   | "reactionArrow"
   | "reactionArrowBold"
   | "reactionArrowDashed"
+  | "reactionArrowNarrow"
   | "resonanceArrow"
   | "equilibriumArrow"
   | "retroArrow"
@@ -557,6 +558,11 @@ export const nativeArtToolDefinitions: readonly NativeArtToolDefinition[] = [
   artShapeTool("reactionArrowBold", "Reaction Arrow (Large Head)", "path", 82, 46, {
     artPathKind: "line",
     markerEnd: { kind: "filled-arrow", sizePx: 24 }
+  }, { ...artOutlineStyle, strokeLineCap: "butt" }),
+  // The default reaction arrow: the standard head's length with half its base width.
+  artShapeTool("reactionArrowNarrow", "Reaction Arrow (Narrow Head)", "path", 82, 46, {
+    artPathKind: "line",
+    markerEnd: { kind: "filled-arrow", sizePx: 16, widthScale: 0.5 }
   }, { ...artOutlineStyle, strokeLineCap: "butt" }),
   artShapeTool("reactionArrowDashed", "Dashed Reaction Arrow", "path", 82, 46, {
     artPathKind: "line",
@@ -2069,6 +2075,7 @@ const nativeArrowStyleToolIds = new Set<NativeArtToolId>([
   "reactionArrow",
   "reactionArrowBold",
   "reactionArrowDashed",
+  "reactionArrowNarrow",
   "resonanceArrow",
   "equilibriumArrow",
   "retroArrow",

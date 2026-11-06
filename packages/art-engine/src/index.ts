@@ -102,6 +102,13 @@ export interface NativeArtMarkerPlan {
   kind: NativeArtMarkerKind;
   sizePx: number;
   angleDegrees: number;
+  /** Arrowhead base width as a share of `sizePx`; absent means 1. */
+  widthScale?: number;
+}
+
+/** Half the base width of an arrowhead marker: half its size, scaled by its `widthScale`. */
+export function nativeArtMarkerHalfWidth(marker: Pick<NativeArtMarkerPlan, "sizePx" | "widthScale">, size = marker.sizePx): number {
+  return (size / 2) * (marker.widthScale ?? 1);
 }
 
 export interface NativeArtStrokeTerminalPlan {
@@ -3147,10 +3154,12 @@ function nativeArtMarkerPlan(value: unknown, strokeWidth: number): NativeArtMark
     return undefined;
   }
 
+  const widthScale = metadataNumber(marker.widthScale);
   return {
     kind: marker.kind,
     sizePx: graphicMarkerRenderedSizePx(marker, strokeWidth),
-    angleDegrees: metadataNumber(marker.angleDegrees) ?? 0
+    angleDegrees: metadataNumber(marker.angleDegrees) ?? 0,
+    ...(widthScale !== undefined && widthScale > 0 && widthScale !== 1 ? { widthScale } : {})
   };
 }
 

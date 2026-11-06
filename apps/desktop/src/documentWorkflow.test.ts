@@ -7898,6 +7898,12 @@ describe("Phase 4 document workflow", () => {
     expect(bold.data.markerEnd).toEqual({ kind: "filled-arrow", sizePx: 24 });
     expect(bold.data.artPathKind).toBe("line");
 
+    // The default reaction arrow: the standard head's length, half its base width.
+    const narrow = byTool("tool.art.reactionArrowNarrow");
+    expect(narrow.data.markerEnd).toEqual({ kind: "filled-arrow", sizePx: 16, widthScale: 0.5 });
+    expect(narrow.data.artToolId).toBe("reactionArrowNarrow");
+    expect(narrow.data.artPathKind).toBe("line");
+
     const dashed = byTool("tool.art.reactionArrowDashed");
     expect(dashed.style.strokeDasharray).toBe("6 6");
     expect(dashed.data.markerEnd).toEqual({ kind: "filled-arrow", sizePx: 16 });

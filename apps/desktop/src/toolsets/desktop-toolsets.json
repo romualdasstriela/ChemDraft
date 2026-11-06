@@ -521,23 +521,27 @@
               }
             },
             {
-              "commandId": "tool.art.reactionArrow",
-              "title": "Reaction Arrow",
+              "commandId": "tool.art.reactionArrowNarrow",
+              "title": "Reaction Arrow (Narrow Head)",
               "icon": "export",
-              "assetName": "Custom_Arrow",
               "category": "arrows",
-              "id": "tool.art.reactionArrow",
+              "id": "tool.art.reactionArrowNarrow",
               "kind": "button",
-              "label": "Reaction Arrow",
+              "label": "Reaction Arrow (Narrow Head)",
               "primary": {
                 "type": "command",
-                "commandId": "tool.art.reactionArrow"
+                "commandId": "tool.art.reactionArrowNarrow"
               },
               "submenu": {
                 "type": "command-grid",
                 "title": "Arrow tools",
                 "columns": 4,
                 "items": [
+                  {
+                    "commandId": "tool.art.reactionArrowNarrow",
+                    "label": "Reaction Arrow (Narrow Head)",
+                    "icon": "export"
+                  },
                   {
                     "commandId": "tool.art.reactionArrow",
                     "label": "Reaction Arrow",
@@ -584,9 +588,9 @@
                 "id": "arrow-tools"
               },
               "tooltip": {
-                "title": "Reaction Arrow",
+                "title": "Reaction Arrow (Narrow Head)",
                 "shortcut": null,
-                "description": "Draw an arrow. Long-press for arrow variants."
+                "description": "Draw a reaction arrow with a narrow head. Long-press for arrow variants."
               },
               "layout": {
                 "colSpan": 1,
@@ -2551,23 +2555,27 @@
           "id": "core.arrows.tools",
           "items": [
             {
-              "commandId": "tool.art.reactionArrow",
-              "title": "Reaction Arrow",
+              "commandId": "tool.art.reactionArrowNarrow",
+              "title": "Reaction Arrow (Narrow Head)",
               "icon": "export",
-              "assetName": "Custom_Arrow",
               "category": "arrows",
-              "id": "tool.art.reactionArrow",
+              "id": "tool.art.reactionArrowNarrow",
               "kind": "button",
-              "label": "Reaction Arrow",
+              "label": "Reaction Arrow (Narrow Head)",
               "primary": {
                 "type": "command",
-                "commandId": "tool.art.reactionArrow"
+                "commandId": "tool.art.reactionArrowNarrow"
               },
               "submenu": {
                 "type": "command-grid",
                 "title": "Arrow tools",
                 "columns": 4,
                 "items": [
+                  {
+                    "commandId": "tool.art.reactionArrowNarrow",
+                    "label": "Reaction Arrow (Narrow Head)",
+                    "icon": "export"
+                  },
                   {
                     "commandId": "tool.art.reactionArrow",
                     "label": "Reaction Arrow",
@@ -2614,9 +2622,9 @@
                 "id": "arrow-tools"
               },
               "tooltip": {
-                "title": "Reaction Arrow",
+                "title": "Reaction Arrow (Narrow Head)",
                 "shortcut": null,
-                "description": "Draw an arrow. Long-press for arrow variants."
+                "description": "Draw a reaction arrow with a narrow head. Long-press for arrow variants."
               },
               "layout": {
                 "colSpan": 1,

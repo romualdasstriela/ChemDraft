@@ -535,7 +535,7 @@ describe("migrateLegacyMainToolbarLayoutState", () => {
     });
     const [items] = getToolsetItemGroups("core.main", registry);
     const ids = items.map((item) => item.id);
-    expect(ids.indexOf("user.spacer.9")).toBe(ids.indexOf("tool.art.reactionArrow") + 1);
+    expect(ids.indexOf("user.spacer.9")).toBe(ids.indexOf("tool.art.reactionArrowNarrow") + 1);
     expect(ids.indexOf("user.spacer.9")).toBeLessThan(ids.indexOf("tool.art.resonanceArrow"));
   });
 });
@@ -570,17 +570,17 @@ describe("migrateRenamedCommandIdsInLayoutState", () => {
     const migrated = migrateRenamedCommandIdsInLayoutState(legacyLayout) as typeof legacyLayout;
     const [main, arrows] = migrated.toolsetOverrides;
 
-    expect(main.hiddenCommandIds).toEqual(["tool.art.reactionArrow", "tool.select"]);
+    expect(main.hiddenCommandIds).toEqual(["tool.art.reactionArrowNarrow", "tool.select"]);
     expect(main.itemOrder["core.main.items"]).toEqual([
       "tool.art.retroArrow",
       "tool.art.equilibriumArrow",
       "tool.select"
     ]);
     expect(main.itemOverrides?.[0].commandId).toBe("tool.art.resonanceArrow");
-    expect(main.itemAdditions?.[0].item.commandId).toBe("tool.art.reactionArrow");
+    expect(main.itemAdditions?.[0].item.commandId).toBe("tool.art.reactionArrowNarrow");
     // The rename applies to every toolset that saved those ids, not only the Main toolbar.
     expect(arrows.hiddenCommandIds).toEqual(["tool.art.equilibriumArrow"]);
-    expect(arrows.itemOrder["core.arrows.items"]).toEqual(["tool.art.retroArrow", "tool.art.reactionArrow"]);
+    expect(arrows.itemOrder["core.arrows.items"]).toEqual(["tool.art.retroArrow", "tool.art.reactionArrowNarrow"]);
   });
 
   it("is idempotent and leaves already-migrated or unrelated state untouched", () => {

@@ -188,7 +188,10 @@ export const GraphicMarkerSchema = z
   .object({
     kind: z.enum(["none", "open-arrow", "filled-arrow", "half-arrow", "bar", "dot", "diamond", "chevron"]),
     sizePx: z.number().finite().positive().optional(),
-    angleDegrees: z.number().finite().optional()
+    angleDegrees: z.number().finite().optional(),
+    /** Base width of an arrowhead as a share of its length (`sizePx`); absent means 1, the full
+     *  width. 0.5 is a narrow head of the same length. */
+    widthScale: z.number().finite().positive().max(4).optional()
   })
   .strict();
 
