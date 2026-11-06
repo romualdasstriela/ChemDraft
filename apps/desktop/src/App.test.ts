@@ -2917,7 +2917,8 @@ describe("ChemDraft desktop shell", () => {
       "layout.group",
       "layout.ungroup",
       "view.zoomIn",
-      "view.zoomOut"
+      "view.zoomOut",
+      "nicknames.defineFromSelection"
     ]);
     const disabledTools = paletteGroups.flat().filter((command) => !enabledToolIds.has(command.id));
 
@@ -4303,7 +4304,8 @@ describe("ChemDraft desktop shell", () => {
       structureInteractive3dCommandId,
       structureCleanup3dCommandId,
       "view.zoomIn",
-      "view.zoomOut"
+      "view.zoomOut",
+      "nicknames.defineFromSelection"
     ];
 
     expect(mainCommandIds.slice(-chromeCluster.length)).toEqual(chromeCluster);

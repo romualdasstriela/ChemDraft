@@ -1990,6 +1990,28 @@
                 "colSpan": 1,
                 "rowSpan": 1
               }
+            },
+            {
+              "commandId": "nicknames.defineFromSelection",
+              "title": "Define Nickname",
+              "icon": "atom",
+              "category": "structure",
+              "id": "nicknames.defineFromSelection",
+              "kind": "button",
+              "label": "Define Nickname",
+              "primary": {
+                "type": "command",
+                "commandId": "nicknames.defineFromSelection"
+              },
+              "submenu": null,
+              "tooltip": {
+                "title": "Define Nickname: make the selected group a template in the Nicknames toolbar",
+                "shortcut": null
+              },
+              "layout": {
+                "colSpan": 1,
+                "rowSpan": 1
+              }
             }
           ]
         }

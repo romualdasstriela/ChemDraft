@@ -2299,6 +2299,8 @@ export const toolbarCustomizationActions: CommandSpec[] = [
 
 /** Preferences ▸ Nicknames: pick the folder of nickname files (the document window shows the picker). */
 export const CHOOSE_NICKNAME_FOLDER_COMMAND_ID = "nicknames.chooseFolder";
+/** Main toolbar: make the selected structure a user nickname (named in the Nicknames toolbar). */
+export const DEFINE_NICKNAME_COMMAND_ID = "nicknames.defineFromSelection";
 
 export const nicknameActions: CommandSpec[] = [
   {
@@ -2309,6 +2311,15 @@ export const nicknameActions: CommandSpec[] = [
     category: "app",
     enabled: true,
     description: "Choose the folder of nickname files (one CDXML structure per file) for the Nicknames toolbar and label recognition"
+  },
+  {
+    id: DEFINE_NICKNAME_COMMAND_ID,
+    title: "Define Nickname",
+    icon: "atom",
+    source: "core",
+    category: "structure",
+    enabled: true,
+    description: "Make the selected group a nickname: select it without the atom it attaches to (or mark that bond with a * atom), then name it in the Nicknames toolbar"
   }
 ];
 

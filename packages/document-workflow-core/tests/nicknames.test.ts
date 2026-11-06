@@ -6,6 +6,7 @@ import {
   nativeAtomLabelReading,
   nativeLabelGroupFreeValence,
   nativeLabelGroupVerdict,
+  nicknameGraphFromDrawing,
   setUserAbbreviations,
   type NicknameGraphInput
 } from "../src/index";
@@ -33,6 +34,44 @@ const cyclopropyl: NicknameGraphInput = {
 };
 
 afterEach(() => setUserAbbreviations([]));
+
+describe("a nickname from the drawing", () => {
+  // Propyl drawn on an O: O1–C2–C3–C4.
+  const atoms: MoleculeAtom[] = [
+    { id: "o", element: "O", x: 0, y: 0, formalCharge: 0 },
+    { id: "c1", element: "C", x: 20, y: -10, formalCharge: 0 },
+    { id: "c2", element: "C", x: 40, y: 0, formalCharge: 0 },
+    { id: "c3", element: "C", x: 60, y: -10, formalCharge: 0 }
+  ];
+  const bonds: MoleculeBond[] = [
+    { id: "b1", fromAtomId: "o", toAtomId: "c1", order: "single" },
+    { id: "b2", fromAtomId: "c1", toAtomId: "c2", order: "single" },
+    { id: "b3", fromAtomId: "c2", toAtomId: "c3", order: "single" }
+  ];
+
+  it("takes the selected atoms, and the bond to the unselected rest as where it attaches", () => {
+    const result = nicknameGraphFromDrawing({ atoms, bonds }, new Set(["c1", "c2", "c3"]));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.graph.attachments).toEqual([{ atomIndex: 0, x: 0, y: 0 }]);
+    expect(abbreviationDefinitionFromNickname("Prp", result.graph)).toMatchObject({ formula: "C3H7", attachmentCount: 1 });
+  });
+
+  it("reads a selected * atom as a drawn attachment mark", () => {
+    const marked = atoms.map((atom) => atom.id === "o" ? { ...atom, element: "*" } : atom);
+    const result = nicknameGraphFromDrawing({ atoms: marked, bonds }, new Set(["o", "c1", "c2", "c3"]));
+    expect(result.ok && result.graph.atoms.length).toBe(3);
+    expect(result.ok && result.graph.attachments.length).toBe(1);
+  });
+
+  it("refuses a group with no attachment, or with a label that is not a plain element", () => {
+    const whole = nicknameGraphFromDrawing({ atoms, bonds }, new Set(atoms.map((atom) => atom.id)));
+    expect(whole).toMatchObject({ ok: false, reason: expect.stringContaining("Mark where the group attaches") });
+    const labelled = atoms.map((atom) => atom.id === "c3" ? { ...atom, element: "OMe" } : atom);
+    expect(nicknameGraphFromDrawing({ atoms: labelled, bonds }, new Set(["c1", "c2", "c3"])))
+      .toMatchObject({ ok: false, reason: expect.stringContaining("not a plain element") });
+  });
+});
 
 describe("nickname definitions", () => {
   it("turns a single-site group into a table entry: hydrogens, formula, frame", () => {

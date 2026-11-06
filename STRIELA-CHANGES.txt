@@ -102,6 +102,16 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - With a nickname picked, a click on empty page places the group's whole structure there
      as real, editable atoms (in the new-structure style, selected); each attachment site
      gets a hydrogen, so "Ad" places adamantane.
+   - User templates (your own nicknames): draw the group, select it WITHOUT the atom it is
+     bonded to (that bond marks where it attaches; or draw a * atom on that bond and select
+     it too), press Define Nickname at the right end of the Main toolbar, type the
+     abbreviation in the Nicknames toolbar and press OK. Templates are listed in the
+     toolbar's "user templ." tab (x removes one), are saved on this computer, and work like
+     every other nickname: typed as a label, picked from the toolbar, placed on empty page.
+     A template with the same name as a folder nickname replaces it; built-in names (OMe,
+     Ph...) are refused.
+   - The Nicknames toolbar's text fields (search, abbreviation) can be typed into: the
+     floating toolbar takes the keyboard only while a field is in use.
 
 9. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
@@ -134,3 +144,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Zoom buttons scroll instead of shifting the page, so the whole page stays reachable
 (next)  Load nicknames from a user folder: label recognition, two-site groups, Nicknames toolbar
 (next)  Nickname tool: a click on empty page places the group's structure
+(next)  User nickname templates: Define Nickname from a selection, "user templ." tab

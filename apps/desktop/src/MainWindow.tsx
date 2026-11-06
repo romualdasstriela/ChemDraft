@@ -100,7 +100,7 @@ import {
   type TextSpan,
   AcsDocument1996StylePreset
 } from "@chemdraft/chem-core";
-import { tryNativeSingleBondGraphSmiles } from "@chemdraft/document-workflow-core";
+import { abbreviationDefinitionFromNickname, nicknameGraphFromDrawing, tryNativeSingleBondGraphSmiles } from "@chemdraft/document-workflow-core";
 import { atomLabelDraftDocumentUnchanged, createAtomLabelDraftRollback, documentOwnsAtomLabelDraft, recordAtomLabelDraftRollback, restoreAtomLabelDraft, type AtomLabelDraftState } from "./atomLabelDraft";
 import type { EditorSaveResult } from "@chemdraft/editor-adapter";
 import { sha256Utf8Hex } from "@chemdraft/cdx-compat";
@@ -365,6 +365,7 @@ import {
   textToolbarActions,
   toolbarCustomizationActions,
   nicknameActions,
+  DEFINE_NICKNAME_COMMAND_ID,
   viewActions,
   createOpenWarningsAction,
   pageCustomSizeAction,
@@ -403,6 +404,10 @@ import {
 import { elementSymbolForToolCommand } from "./periodicTable";
 import { nicknameLabelForToolCommand, nicknameToolCommandId, useUserNicknames } from "./nicknames/userNicknames";
 import { saveNicknameSettings } from "./nicknames/nicknameSettings";
+import { saveNicknameDefineRequest } from "./nicknames/userTemplates";
+
+/** The Nicknames toolbar (its "user templ." tab names Define Nickname's structures). */
+const NICKNAMES_TOOLSET_ID = "core.nicknames";
 import {
   clipboardPayloadFromDataTransfer,
   readClipboardPayload,
@@ -756,6 +761,8 @@ import {
   closeToolsetWindow,
   arrangeToolsetWindowsTopToBottom,
   broadcastNicknameSettings,
+  broadcastNicknameSignal,
+  NICKNAME_DEFINE_REQUEST_EVENT,
   type ToolsetWindowGeometry,
   type ToolsetArtPaintTarget
 } from "./window-manager";
@@ -1638,7 +1645,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.05.10.00-opus";
+const CURRENT_BUILD_STAMP = "11.06.10.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -4422,6 +4429,46 @@ export function MainWindow({
     setActiveAtomLabelEdit(undefined);
     setStatus(`${label}: click an atom to label it ${label}, or empty page to place its structure; Esc exits`);
   }, []);
+
+  // Main toolbar ▸ Define Nickname: the selected group, with where it attaches, goes to the
+  // Nicknames toolbar's "user templ." tab to be named there.
+  const defineNicknameFromSelection = useCallback(async () => {
+    const currentDocument = documentRef.current;
+    const fragments = nativeMoleculeFragmentSelections(selectedNativeMoleculePartsRef.current)
+      .filter((fragment) => fragment.atomIds.length > 0 || fragment.bondIds.length > 0);
+    let source: { molecule: MoleculeObject; atomIds: Set<string> } | undefined;
+    if (fragments.length === 1) {
+      const object = findDocumentObject(currentDocument, fragments[0]!.objectId);
+      if (object?.type === "molecule") {
+        const atomIds = new Set(fragments[0]!.atomIds);
+        for (const bond of object.bonds) {
+          if (fragments[0]!.bondIds.includes(bond.id)) { atomIds.add(bond.fromAtomId); atomIds.add(bond.toAtomId); }
+        }
+        source = { molecule: object, atomIds };
+      }
+    } else if (fragments.length === 0) {
+      const molecules = currentDocument.selection.objectIds
+        .map((id) => findDocumentObject(currentDocument, id))
+        .filter((object): object is MoleculeObject => object?.type === "molecule");
+      if (molecules.length === 1) source = { molecule: molecules[0]!, atomIds: new Set(molecules[0]!.atoms.map((atom) => atom.id)) };
+    }
+    if (!source) {
+      setStatus("Define Nickname: select the group's atoms in one structure first");
+      return;
+    }
+    const result = nicknameGraphFromDrawing(source.molecule, source.atomIds);
+    if (!result.ok) {
+      setStatus(`Define Nickname: ${result.reason}`);
+      return;
+    }
+    const preview = abbreviationDefinitionFromNickname("?", result.graph);
+    saveNicknameDefineRequest({ graph: result.graph, formula: preview.formula, sites: preview.attachmentCount, at: Date.now() });
+    await broadcastNicknameSignal(NICKNAME_DEFINE_REQUEST_EVENT).catch(() => undefined);
+    if (!visibleToolsetIdsRef.current.has(NICKNAMES_TOOLSET_ID)) {
+      await toggleToolset(NICKNAMES_TOOLSET_ID);
+    }
+    setStatus(`Define Nickname: ${preview.formula}, ${preview.attachmentCount} attachment site${preview.attachmentCount === 1 ? "" : "s"}. Name it in the Nicknames toolbar.`);
+  }, [toggleToolset]);
 
   // Preferences ▸ Nicknames ▸ Choose…: the document window owns the native folder picker.
   const chooseNicknameFolder = useCallback(async () => {
@@ -10744,7 +10791,13 @@ export function MainWindow({
     });
 
     nicknameActions.forEach((action) => {
-      register(action, () => { void chooseNicknameFolder(); });
+      register(action, () => {
+        if (action.id === DEFINE_NICKNAME_COMMAND_ID) {
+          void defineNicknameFromSelection();
+          return;
+        }
+        void chooseNicknameFolder();
+      });
     });
 
     // One tool per nickname from the user's folder, armed from the Nicknames toolbar.
@@ -10835,7 +10888,8 @@ export function MainWindow({
     toolsetRegistry,
     userNicknames.definitions,
     armNicknameTool,
-    chooseNicknameFolder
+    chooseNicknameFolder,
+    defineNicknameFromSelection
   ]);
 
   coreCommandBindingsRef.current = coreCommandBindings;

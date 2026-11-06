@@ -1584,6 +1584,37 @@ export async function listenForCompoundLayoutSettings(
   };
 }
 
+/** The user's templates changed (added or removed): every window reloads them from storage. */
+export const USER_NICKNAMES_CHANGED_EVENT = "chemdraft://user-nicknames-changed";
+/** Define Nickname stored a structure waiting for its name: the Nicknames toolbar asks for it. */
+export const NICKNAME_DEFINE_REQUEST_EVENT = "chemdraft://nickname-define-request";
+
+/** A payload-free nickname signal; the data itself is in localStorage, which every window shares. */
+export async function broadcastNicknameSignal(eventName: string): Promise<void> {
+  dispatchDomToolsetEvent(eventName, {});
+  if (!isDesktopRuntime()) {
+    return;
+  }
+  const { emit } = await import("@tauri-apps/api/event");
+  await emit(eventName, {});
+}
+
+export async function listenForNicknameSignal(eventName: string, storageKey: string, handler: () => void): Promise<Unlisten> {
+  const onStorage = (event: StorageEvent) => { if (event.key === storageKey || event.key === null) handler(); };
+  globalThis.addEventListener?.("storage", onStorage);
+  const removeStorage = () => globalThis.removeEventListener?.("storage", onStorage);
+  const unlistenDom = listenForDomToolsetEvent(eventName, () => handler());
+  if (!isDesktopRuntime()) {
+    return () => { unlistenDom(); removeStorage(); };
+  }
+  const unlistenTauri = await listenTauriEvent(eventName, () => handler());
+  return () => {
+    removeStorage();
+    unlistenDom();
+    unlistenTauri();
+  };
+}
+
 export const NICKNAME_SETTINGS_EVENT = "chemdraft://nickname-settings";
 
 /** Preferences ▸ Nicknames changed the folder: every window reloads its nicknames. */

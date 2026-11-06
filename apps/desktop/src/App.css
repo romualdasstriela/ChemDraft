@@ -1216,6 +1216,74 @@ textarea:focus-visible,
   font-size: 12px;
 }
 
+.nicknames-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--cd-border-control);
+}
+
+.nicknames-tabs button {
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+  background: transparent;
+  color: var(--cd-text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.nicknames-tabs button[aria-selected="true"] {
+  border-color: var(--cd-border-control);
+  background: var(--cd-bg-control);
+  color: var(--cd-text-primary);
+  font-weight: 600;
+}
+
+.nickname-define {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--cd-accent);
+  border-radius: 4px;
+}
+
+.nickname-define-what {
+  font-size: 11px;
+  color: var(--cd-text-secondary);
+}
+
+.nickname-define-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.nickname-item {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.nickname-remove {
+  width: 16px;
+  height: 22px;
+  margin-left: -1px;
+  padding: 0;
+  border: 1px solid var(--cd-border-control);
+  border-radius: 0 3px 3px 0;
+  background: var(--cd-bg-control);
+  color: var(--cd-text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.nickname-remove:hover {
+  color: var(--cd-text-primary);
+  border-color: var(--cd-accent);
+}
+
 .periodic-table-series-marker {
   display: grid;
   place-items: center;

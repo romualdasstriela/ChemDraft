@@ -2,8 +2,14 @@ import { useEffect, useState } from "react";
 import { readCdxmlNickname } from "@chemdraft/cdx-compat";
 import { abbreviationDefinitionFromNickname, setUserAbbreviations, type AbbreviationDefinition } from "@chemdraft/document-workflow-core";
 import { decodeDocumentBytes } from "../documentText";
-import { isDesktopRuntime, listenForNicknameSettings } from "../window-manager";
+import {
+  isDesktopRuntime,
+  listenForNicknameSettings,
+  listenForNicknameSignal,
+  USER_NICKNAMES_CHANGED_EVENT
+} from "../window-manager";
 import { loadNicknameSettings } from "./nicknameSettings";
+import { loadUserNicknameTemplates, USER_NICKNAME_TEMPLATES_STORAGE_KEY, userTemplateDefinitions } from "./userTemplates";
 
 /**
  * The user's nicknames: groups read from the nickname folder set in Preferences (one structure per
@@ -57,30 +63,52 @@ export async function loadUserNicknames(folder: string): Promise<UserNicknameLoa
   }
 }
 
+export interface UserNicknamesState extends UserNicknameLoad {
+  /** The folder's groups (as `definitions` was before user templates). */
+  folderDefinitions: AbbreviationDefinition[];
+  /** The user's own templates (Define Nickname). */
+  templateDefinitions: AbbreviationDefinition[];
+  /** Changes on every reload, so views that read labels can redraw. */
+  revision: number;
+}
+
 /**
- * The window's nicknames, kept current with Preferences. With `register`, they are also registered
- * with the label grammar (the document window; palettes only list them). `revision` changes on every
- * load, so views that read labels can redraw.
+ * The window's nicknames: the folder's groups (Preferences ▸ Nicknames) and the user's own
+ * templates, kept current with both. `definitions` holds all of them, a template first where it
+ * shares a label with a folder group. With `register`, they are also registered with the label
+ * grammar (the document window; palettes only list them).
  */
-export function useUserNicknames(register: boolean): UserNicknameLoad & { revision: number } {
-  const [state, setState] = useState<UserNicknameLoad & { revision: number }>(() => ({
-    folder: loadNicknameSettings().folder, definitions: [], skipped: [], revision: 0
+export function useUserNicknames(register: boolean): UserNicknamesState {
+  const [state, setState] = useState<UserNicknamesState>(() => ({
+    folder: loadNicknameSettings().folder, definitions: [], folderDefinitions: [], templateDefinitions: [], skipped: [], revision: 0
   }));
   useEffect(() => {
     let disposed = false;
-    let unlisten: (() => void) | undefined;
-    const load = (folder: string) => {
+    const unlisteners: Array<() => void> = [];
+    let folderLoad: UserNicknameLoad = { folder: loadNicknameSettings().folder, definitions: [], skipped: [] };
+    const publish = () => {
+      const templateDefinitions = userTemplateDefinitions(loadUserNicknameTemplates());
+      const templateLabels = new Set(templateDefinitions.map((definition) => definition.label));
+      const definitions = [...templateDefinitions, ...folderLoad.definitions.filter((definition) => !templateLabels.has(definition.label))];
+      if (register) setUserAbbreviations(definitions);
+      setState((current) => ({
+        ...folderLoad, definitions, folderDefinitions: folderLoad.definitions, templateDefinitions, revision: current.revision + 1
+      }));
+    };
+    const loadFolder = (folder: string) => {
       void loadUserNicknames(folder).then((result) => {
         if (disposed) return;
-        if (register) setUserAbbreviations(result.definitions);
-        setState((current) => ({ ...result, revision: current.revision + 1 }));
+        folderLoad = result;
+        publish();
       });
     };
-    load(loadNicknameSettings().folder);
-    void listenForNicknameSettings((settings) => load(settings.folder)).then((listener) => {
-      if (disposed) listener(); else unlisten = listener;
-    });
-    return () => { disposed = true; unlisten?.(); };
+    loadFolder(folderLoad.folder);
+    const keep = (listener: () => void) => { if (disposed) listener(); else unlisteners.push(listener); };
+    void listenForNicknameSettings((settings) => loadFolder(settings.folder)).then(keep);
+    void listenForNicknameSignal(USER_NICKNAMES_CHANGED_EVENT, USER_NICKNAME_TEMPLATES_STORAGE_KEY, () => {
+      if (!disposed) publish();
+    }).then(keep);
+    return () => { disposed = true; unlisteners.forEach((listener) => listener()); };
   }, [register]);
   return state;
 }

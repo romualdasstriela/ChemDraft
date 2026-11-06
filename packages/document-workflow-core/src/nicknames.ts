@@ -8,6 +8,7 @@ import {
   nativeElementFromAtomLabel,
   type NativeElementSymbol
 } from "@chemdraft/layout-engine";
+import type { MoleculeAtom, MoleculeObject } from "@chemdraft/chem-core";
 import type { AbbreviationAtom, AbbreviationBond, AbbreviationDefinition } from "@chemdraft/template-library";
 
 // The registry the definitions are added to lives with the abbreviation table.
@@ -84,6 +85,76 @@ export function abbreviationDefinitionFromNickname(label: string, graph: Nicknam
     bonds,
     ...(new Set(attachmentAtoms).size > 1 ? { attachmentAtoms } : {}),
     ...(source ? { source } : {})
+  };
+}
+
+export type NicknameFromDrawingResult =
+  | { ok: true; graph: NicknameGraphInput }
+  | { ok: false; reason: string };
+
+/**
+ * A nickname's structure taken from a drawing (Define Nickname): the chosen atoms of one molecule.
+ * Where it attaches is read from the drawing itself: each single bond from a chosen atom to an atom
+ * left out of the choice is one attachment, and so is a chosen "*" atom on a single bond (drawn to
+ * mark the site). Only plain element atoms and single, double or triple bonds are taken; anything
+ * else (a group label, an aromatic bond, a multiple bond to the rest) is refused with the reason, so
+ * the template never holds a structure the drawing does not.
+ */
+export function nicknameGraphFromDrawing(
+  molecule: Pick<MoleculeObject, "atoms" | "bonds">,
+  atomIds: ReadonlySet<string>
+): NicknameFromDrawingResult {
+  const isMarker = (atom: MoleculeAtom) => atom.element.trim() === "*";
+  const chosen = molecule.atoms.filter((atom) => atomIds.has(atom.id) && !isMarker(atom));
+  if (chosen.length === 0) {
+    return { ok: false, reason: "Select the atoms of the group first." };
+  }
+  for (const atom of chosen) {
+    const element = nativeElementFromAtomLabel(atom.element);
+    if (!element || element !== atom.element.trim()) {
+      return { ok: false, reason: `"${atom.element}" is not a plain element; draw it out as atoms first.` };
+    }
+  }
+  const indexById = new Map(chosen.map((atom, index) => [atom.id, index]));
+  const atomById = new Map(molecule.atoms.map((atom) => [atom.id, atom]));
+  const order = { single: 1, double: 2, triple: 3 } as const;
+  const bonds: Array<[number, number, 1 | 2 | 3]> = [];
+  const attachments: Array<{ atomIndex: number; x: number; y: number }> = [];
+  for (const bond of molecule.bonds) {
+    const from = indexById.get(bond.fromAtomId);
+    const to = indexById.get(bond.toAtomId);
+    if (from === undefined && to === undefined) continue;
+    const bondOrder = (order as Record<string, 1 | 2 | 3 | undefined>)[bond.order];
+    if (from !== undefined && to !== undefined) {
+      if (!bondOrder) return { ok: false, reason: `A ${bond.order} bond cannot be kept in a nickname; draw it as single and double bonds.` };
+      bonds.push([from, to, bondOrder]);
+      continue;
+    }
+    // One end chosen, the other outside the group (or a "*" marker): an attachment.
+    const inside = from ?? to!;
+    const outside = atomById.get(from === undefined ? bond.fromAtomId : bond.toAtomId)!;
+    if (bondOrder !== 1) return { ok: false, reason: "A group attaches by single bonds only." };
+    attachments.push({ atomIndex: inside, x: outside.x, y: outside.y });
+  }
+  if (attachments.length === 0) {
+    return {
+      ok: false,
+      reason: "Mark where the group attaches: select it without the atom it is bonded to, or draw a * atom on that bond."
+    };
+  }
+  return {
+    ok: true,
+    graph: {
+      atoms: chosen.map((atom) => ({
+        element: atom.element.trim(),
+        charge: atom.formalCharge,
+        ...(atom.hydrogenCount !== undefined ? { statedHydrogens: atom.hydrogenCount } : {}),
+        x: atom.x,
+        y: atom.y
+      })),
+      bonds,
+      attachments
+    }
   };
 }
 
