@@ -38,7 +38,20 @@ function isGraph(value: unknown): value is NicknameGraphInput {
       bond[0]! < graph.atoms.length && bond[1]! < graph.atoms.length && [1, 2, 3].includes(bond[2]!)) &&
     Array.isArray(graph.attachments) &&
     graph.attachments.every((attachment) => number(attachment?.atomIndex) && attachment.atomIndex < graph.atoms.length &&
-      number(attachment.x) && number(attachment.y));
+      number(attachment.x) && number(attachment.y)) &&
+    (graph.drawn === undefined || isDrawn(graph.drawn));
+}
+
+/** The drawing a labelled template keeps for placing ("OMe" stays OMe). */
+function isDrawn(drawn: unknown): boolean {
+  if (!drawn || typeof drawn !== "object") return false;
+  const { atoms, bonds } = drawn as NonNullable<NicknameGraphInput["drawn"]>;
+  const number = (item: unknown) => typeof item === "number" && Number.isFinite(item);
+  return Array.isArray(atoms) && atoms.length > 0 &&
+    atoms.every((atom) => typeof atom?.label === "string" && atom.label.length > 0 && number(atom.charge) && number(atom.x) && number(atom.y)) &&
+    Array.isArray(bonds) &&
+    bonds.every((bond) => Array.isArray(bond) && bond.length === 3 && bond.every(number) &&
+      bond[0]! < atoms.length && bond[1]! < atoms.length && [1, 2, 3].includes(bond[2]!));
 }
 
 function readJson(key: string): unknown {

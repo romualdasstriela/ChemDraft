@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { AcsDocument1996StylePreset, ChemDraftSyntheticStylePreset, type MoleculeObject } from "@chemdraft/chem-core";
-import { abbreviationDefinitionFromNickname } from "@chemdraft/document-workflow-core";
+import { abbreviationDefinitionFromNickname, nicknameGraphFromDrawing } from "@chemdraft/document-workflow-core";
 import { createPhase4Document, insertNicknameStructure, setNewNativeMoleculeStylePreset } from "../documentWorkflow";
 
 // Acetyl written for this test: C(=O)–CH3, joining at the carbonyl carbon.
@@ -35,5 +35,28 @@ describe("placing a nickname's structure", () => {
     const [a, b] = [molecule.atoms[0]!, molecule.atoms[2]!];
     expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeCloseTo(AcsDocument1996StylePreset.drawing.bondLengthPx, 0);
     expect(document.selection.objectIds).toEqual([molecule.id]);
+  });
+
+  it("places a template drawn with an abbreviation label with the label kept", () => {
+    // Drawn as C–C–OMe and stored with the label; placed, it is OMe again, not O–CH3.
+    const drawing = nicknameGraphFromDrawing({
+      atoms: [
+        { id: "a", element: "C", x: 0, y: 0, formalCharge: 0 },
+        { id: "b", element: "C", x: 20, y: -10, formalCharge: 0 },
+        { id: "c", element: "OMe", x: 40, y: 0, formalCharge: 0 }
+      ],
+      bonds: [
+        { id: "ab", fromAtomId: "a", toAtomId: "b", order: "single" },
+        { id: "bc", fromAtomId: "b", toAtomId: "c", order: "single" }
+      ]
+    }, new Set(["a", "b", "c"]));
+    if (!drawing.ok) throw new Error(drawing.reason);
+    const definition = abbreviationDefinitionFromNickname("EtOMe", drawing.graph);
+    const document = insertNicknameStructure(createPhase4Document("Nickname"), { x: 300, y: 250 }, definition);
+    const molecule = document.pages[0].objects.find((object): object is MoleculeObject => object.type === "molecule")!;
+    expect(molecule.atoms.map((atom) => atom.element)).toEqual(["C", "C", "OMe"]);
+    expect(molecule.bonds).toHaveLength(2);
+    // The label still counts as its atoms.
+    expect(molecule.chemistry?.formula).toBe("C3H8O");
   });
 });

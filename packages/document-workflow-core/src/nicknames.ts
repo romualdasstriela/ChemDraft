@@ -4,11 +4,13 @@
 // time and registers the result with `setUserAbbreviations`.
 
 import {
+  nativeAtomLabelReading,
   nativeAtomValenceForCharge,
   nativeElementFromAtomLabel,
   type NativeElementSymbol
 } from "@chemdraft/layout-engine";
 import type { MoleculeAtom, MoleculeObject } from "@chemdraft/chem-core";
+import { expandNativeLabelGroups } from "./atoms";
 import type { AbbreviationAtom, AbbreviationBond, AbbreviationDefinition } from "@chemdraft/template-library";
 
 // The registry the definitions are added to lives with the abbreviation table.
@@ -19,6 +21,15 @@ export interface NicknameGraphInput {
   atoms: ReadonlyArray<{ element: string; charge: number; statedHydrogens?: number; x: number; y: number }>;
   bonds: ReadonlyArray<readonly [from: number, to: number, order: 1 | 2 | 3]>;
   attachments: ReadonlyArray<{ atomIndex: number; x: number; y: number }>;
+  /**
+   * A drawn group whose atoms carry labels ("OMe"): the drawing as it was, labels kept. Its atom i is
+   * `atoms[i]` before expansion (same place), so the two share one frame; `atoms` beyond them are the
+   * labels' written-out atoms.
+   */
+  drawn?: {
+    atoms: ReadonlyArray<{ label: string; charge: number; x: number; y: number }>;
+    bonds: ReadonlyArray<readonly [from: number, to: number, order: 1 | 2 | 3]>;
+  };
 }
 
 /**
@@ -60,20 +71,30 @@ export function abbreviationDefinitionFromNickname(label: string, graph: Nicknam
   const sin = Math.sin(turn);
   const round = (value: number) => Math.round(value * 1000) / 1000 + 0;
 
+  const framed = (point: { x: number; y: number }) => {
+    const x = (point.x - origin.x) / unit;
+    const y = -(point.y - origin.y) / unit;
+    return { x: round(x * cos - y * sin), y: round(x * sin + y * cos) };
+  };
   const atoms: AbbreviationAtom[] = order.map((oldIndex, index) => {
     const atom = graph.atoms[oldIndex]!;
-    const x = (atom.x - origin.x) / unit;
-    const y = -(atom.y - origin.y) / unit;
     const element = nativeElementFromAtomLabel(atom.element) ?? atom.element;
     const implicit = Math.max(0, nativeAtomValenceForCharge(element as NativeElementSymbol, atom.charge) - bondValence[index]!);
     return {
       element,
       hydrogens: atom.statedHydrogens ?? implicit,
       ...(atom.charge !== 0 ? { charge: atom.charge } : {}),
-      x: round(x * cos - y * sin),
-      y: round(x * sin + y * cos)
+      ...framed(atom)
     };
   });
+  const display = graph.drawn ? {
+    atoms: graph.drawn.atoms.map((atom) => ({
+      label: atom.label,
+      ...(atom.charge !== 0 ? { charge: atom.charge } : {}),
+      ...framed(atom)
+    })),
+    bonds: graph.drawn.bonds.map(([from, to, bondOrder]): AbbreviationBond => [from, to, bondOrder])
+  } : undefined;
 
   const isElementSymbol = nativeElementFromAtomLabel(label) === label;
   return {
@@ -87,7 +108,8 @@ export function abbreviationDefinitionFromNickname(label: string, graph: Nicknam
     atoms,
     bonds,
     ...(new Set(attachmentAtoms).size > 1 ? { attachmentAtoms } : {}),
-    ...(source ? { source } : {})
+    ...(source ? { source } : {}),
+    ...(display ? { display } : {})
   };
 }
 
@@ -112,18 +134,47 @@ export function nicknameGraphFromDrawing(
   if (chosen.length === 0) {
     return { ok: false, reason: "Select the atoms of the group first." };
   }
+  // Abbreviation labels ("OMe", "Ph", "NHBoc", a nickname) are written out as the atoms they stand
+  // for, the same expansion the formula and the exporters use; the drawing itself, labels and all,
+  // is kept beside it (`drawn`) so the template is placed looking as it was drawn.
+  const expanded = expandNativeLabelGroups(molecule.atoms, molecule.bonds);
+  const expansionByAtomId = new Map(expanded.expansions.map((expansion) => [expansion.atomId, expansion]));
+  const expandedById = new Map(expanded.atoms.map((atom) => [atom.id, atom]));
+  const groupAtomIds: string[] = chosen.map((atom) => atom.id);
+  let hasLabels = false;
+  // A label spelling one element with its hydrogens ("OH", "NH2") is that element, hydrogens stated.
+  const spelledHydrogens = new Map<string, { element: string; hydrogens: number }>();
   for (const atom of chosen) {
-    const element = nativeElementFromAtomLabel(atom.element);
-    if (!element || element !== atom.element.trim()) {
-      return { ok: false, reason: `"${atom.element}" is not a plain element; draw it out as atoms first.` };
+    const expansion = expansionByAtomId.get(atom.id);
+    if (expansion) {
+      hasLabels = true;
+      groupAtomIds.push(...expansion.atomIds.filter((id) => id !== atom.id));
+      continue;
+    }
+    const reading = nativeAtomLabelReading(atom.element);
+    if (reading.kind === "spelled") {
+      hasLabels = true;
+      spelledHydrogens.set(atom.id, { element: reading.element, hydrogens: reading.hydrogens });
+      continue;
+    }
+    if (reading.kind !== "element") {
+      return {
+        ok: false,
+        reason: `"${atom.element}" is not an element or a known abbreviation here (or its bonds do not fit it); draw it out as atoms or fix the label first.`
+      };
     }
   }
-  const indexById = new Map(chosen.map((atom, index) => [atom.id, index]));
-  const atomById = new Map(molecule.atoms.map((atom) => [atom.id, atom]));
+  const groupAtoms = groupAtomIds.map((id) => {
+    const atom = expandedById.get(id)!;
+    const spelled = spelledHydrogens.get(id);
+    return spelled ? { ...atom, element: spelled.element, hydrogenCount: spelled.hydrogens } : atom;
+  });
+  const indexById = new Map(groupAtomIds.map((id, index) => [id, index]));
+  const atomById = new Map(expanded.atoms.map((atom) => [atom.id, atom]));
   const order = { single: 1, double: 2, triple: 3 } as const;
   const bonds: Array<[number, number, 1 | 2 | 3]> = [];
   const attachments: Array<{ atomIndex: number; x: number; y: number }> = [];
-  for (const bond of molecule.bonds) {
+  for (const bond of expanded.bonds) {
     const from = indexById.get(bond.fromAtomId);
     const to = indexById.get(bond.toAtomId);
     if (from === undefined && to === undefined) continue;
@@ -141,18 +192,35 @@ export function nicknameGraphFromDrawing(
   }
   // No attachment marked: the structure is kept whole, as drawn (it is placed on empty page and can
   // label an atom with no bonds).
+  const chosenIndex = new Map(chosen.map((atom, index) => [atom.id, index]));
+  const drawnBonds: Array<[number, number, 1 | 2 | 3]> = [];
+  for (const bond of molecule.bonds) {
+    const from = chosenIndex.get(bond.fromAtomId);
+    const to = chosenIndex.get(bond.toAtomId);
+    const bondOrder = (order as Record<string, 1 | 2 | 3 | undefined>)[bond.order];
+    if (from !== undefined && to !== undefined && bondOrder) drawnBonds.push([from, to, bondOrder]);
+  }
   return {
     ok: true,
     graph: {
-      atoms: chosen.map((atom) => ({
-        element: atom.element.trim(),
-        charge: atom.formalCharge,
-        ...(atom.hydrogenCount !== undefined ? { statedHydrogens: atom.hydrogenCount } : {}),
-        x: atom.x,
-        y: atom.y
-      })),
+      atoms: groupAtoms.map((atom) => {
+        const element = nativeElementFromAtomLabel(atom.element.trim()) ?? atom.element.trim();
+        return {
+          element,
+          charge: atom.formalCharge,
+          ...(atom.hydrogenCount !== undefined ? { statedHydrogens: atom.hydrogenCount } : {}),
+          x: atom.x,
+          y: atom.y
+        };
+      }),
       bonds,
-      attachments
+      attachments,
+      ...(hasLabels ? {
+        drawn: {
+          atoms: chosen.map((atom) => ({ label: atom.element.trim(), charge: atom.formalCharge, x: atom.x, y: atom.y })),
+          bonds: drawnBonds
+        }
+      } : {})
     }
   };
 }

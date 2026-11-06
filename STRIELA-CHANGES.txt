@@ -113,6 +113,12 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - An attachment site is optional: a whole selected structure with no bond to the rest and
      no * mark is kept as drawn (same orientation, no attachment site). It is placed on
      empty page as drawn and can label an atom with no bonds.
+   - Define Nickname reads abbreviation labels in the selection (OMe, Ph, Boc, NHAc, OH, your
+     own nicknames...): they count as the atoms they stand for in the template's formula and
+     wherever the template is used as a label, and the template remembers the drawing with
+     its labels, so placing it on empty page draws OMe as OMe, not O-CH3. A label that is not
+     an element or a known abbreviation, or one whose bonds do not fit it, is refused with
+     the reason.
    - The Nicknames toolbar's text fields (search, abbreviation) can be typed into: the
      floating toolbar takes the keyboard only while a field is in use.
 
@@ -177,3 +183,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  User templates without an attachment site are kept as drawn
 (next)  Add a Polymer Bracket tool: ( )n as one object with an editable label
 (next)  Add a narrow-head reaction arrow and make it the default arrow
+(next)  Define Nickname keeps abbreviation labels: counted as atoms, placed as labels

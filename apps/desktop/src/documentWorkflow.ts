@@ -5178,17 +5178,23 @@ export function insertSmilesMoleculeGridStatus(
  * A nickname's structure placed on the page as real atoms, centred on `point` and drawn in the new
  * structure style: what the Nicknames toolbar puts down when the click lands on empty page. Each
  * attachment site is left to the valence model, so it carries a hydrogen ("Ad" places adamantane).
+ * A user template drawn with abbreviation labels keeps them ("OMe" is placed as OMe).
  */
 export function insertNicknameStructure(
   document: ChemDraftDocument,
   point: PagePoint,
-  definition: Pick<AbbreviationDefinition, "label" | "atoms" | "bonds">
+  definition: Pick<AbbreviationDefinition, "label" | "atoms" | "bonds" | "display">
 ): ChemDraftDocument {
   const page = firstPage(document);
   const bondOrder = { 1: "single", 2: "double", 3: "triple" } as const;
+  // A user template drawn with labels ("OMe") is placed as drawn, labels kept; anything else as atoms.
+  const atoms = definition.display
+    ? definition.display.atoms.map((atom) => ({ element: atom.label, x: atom.x, y: atom.y, charge: atom.charge ?? 0 }))
+    : definition.atoms.map((atom) => ({ element: atom.element, x: atom.x, y: atom.y, charge: atom.charge ?? 0 }));
+  const bonds = definition.display?.bonds ?? definition.bonds;
   const object = createSmilesMolecule(document, point, {
-    atoms: definition.atoms.map((atom) => ({ element: atom.element, x: atom.x, y: atom.y, charge: atom.charge ?? 0 })),
-    bonds: definition.bonds.map(([from, to, order]) => ({ from, to, order: bondOrder[order], wedge: null }))
+    atoms,
+    bonds: bonds.map(([from, to, order]) => ({ from, to, order: bondOrder[order], wedge: null }))
   }, "", {
     objectIdPrefix: "mol_nickname",
     styleSource: "chemdraft-native-drawing",

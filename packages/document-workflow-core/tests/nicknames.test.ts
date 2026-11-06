@@ -79,10 +79,41 @@ describe("a nickname from the drawing", () => {
     expect(definition.atoms[1]!.y).toBeGreaterThan(0);
   });
 
-  it("refuses a label that is not a plain element", () => {
-    const labelled = atoms.map((atom) => atom.id === "c3" ? { ...atom, element: "OMe" } : atom);
-    expect(nicknameGraphFromDrawing({ atoms: labelled, bonds }, new Set(["c1", "c2", "c3"])))
-      .toMatchObject({ ok: false, reason: expect.stringContaining("not a plain element") });
+  it("writes out an abbreviation label and keeps the drawing with the label for placing", () => {
+    // C–C–OMe, selected whole: ethyl methyl ether.
+    const withOMe = atoms.map((atom) => atom.id === "o" ? { ...atom, element: "OMe" } : atom);
+    const result = nicknameGraphFromDrawing({ atoms: withOMe, bonds }, new Set(atoms.map((atom) => atom.id)));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // The OMe atom is its O, and the methyl is added after the drawn atoms.
+    expect(result.graph.atoms.map((atom) => atom.element)).toEqual(["O", "C", "C", "C", "C"]);
+    expect(result.graph.drawn?.atoms.map((atom) => atom.label)).toEqual(["OMe", "C", "C", "C"]);
+    expect(result.graph.drawn?.bonds).toEqual([[0, 1, 1], [1, 2, 1], [2, 3, 1]]);
+
+    const definition = abbreviationDefinitionFromNickname("PrOMe", result.graph);
+    expect(definition.formula).toBe("C4H10O");
+    expect(definition.atoms).toHaveLength(5);
+    expect(definition.display?.atoms.map((atom) => atom.label)).toEqual(["OMe", "C", "C", "C"]);
+    // Same frame as the atoms: the drawn O sits where the written-out O does.
+    expect(definition.display?.atoms[0]).toMatchObject({ x: definition.atoms[0]!.x, y: definition.atoms[0]!.y });
+  });
+
+  it("keeps an element written with its hydrogens, and no drawing when there are no labels", () => {
+    const withOH = atoms.map((atom) => atom.id === "o" ? { ...atom, element: "OH" } : atom);
+    const result = nicknameGraphFromDrawing({ atoms: withOH, bonds }, new Set(atoms.map((atom) => atom.id)));
+    expect(result.ok && abbreviationDefinitionFromNickname("PrOH", result.graph).formula).toBe("C3H8O");
+    const plain = nicknameGraphFromDrawing({ atoms, bonds }, new Set(atoms.map((atom) => atom.id)));
+    expect(plain.ok && plain.graph.drawn).toBeUndefined();
+  });
+
+  it("refuses a label that is neither an element nor an abbreviation that fits its bonds", () => {
+    const unknown = atoms.map((atom) => atom.id === "c3" ? { ...atom, element: "Qz" } : atom);
+    expect(nicknameGraphFromDrawing({ atoms: unknown, bonds }, new Set(["c1", "c2", "c3"])))
+      .toMatchObject({ ok: false, reason: expect.stringContaining("not an element or a known abbreviation") });
+    // OMe in the middle of a chain has two bonds, one too many: not written out, so refused.
+    const misfit = atoms.map((atom) => atom.id === "c2" ? { ...atom, element: "OMe" } : atom);
+    expect(nicknameGraphFromDrawing({ atoms: misfit, bonds }, new Set(["c1", "c2", "c3"])))
+      .toMatchObject({ ok: false });
   });
 });
 

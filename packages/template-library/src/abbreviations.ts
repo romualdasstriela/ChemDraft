@@ -71,6 +71,15 @@ export interface AbbreviationDefinition {
   attachmentAtoms?: readonly number[];
   /** Where a user-supplied group came from (a nickname file), for messages. Built-ins have none. */
   source?: string;
+  /**
+   * How a user-drawn group looks when it is placed on its own: the atoms as drawn, with their
+   * labels ("OMe") kept rather than written out, in the same frame as `atoms`. Omitted when the
+   * drawing had no labels, in which case `atoms` is the drawing.
+   */
+  display?: {
+    atoms: ReadonlyArray<{ label: string; charge?: number; x: number; y: number }>;
+    bonds: readonly AbbreviationBond[];
+  };
 }
 
 export const abbreviationDefinitions: readonly AbbreviationDefinition[] = [
