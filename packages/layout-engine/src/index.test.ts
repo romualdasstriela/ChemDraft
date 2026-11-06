@@ -13,6 +13,7 @@ import {
   type MoleculeObject
 } from "@chemdraft/chem-core";
 import {
+  projectRotationAboutPageLine,
   atomDisplayLabel,
   atomDegrees,
   atomLabelAnchorOffset,
@@ -63,6 +64,17 @@ const baseInput = {
 } satisfies Omit<BondExtensionPlanningInput, "clickPoint">;
 
 describe("layout-engine molecule growth planning", () => {
+  it("projects a 3D turn about a line in the page", () => {
+    const from = { x: 0, y: 0 };
+    const to = { x: 10, y: 0 };
+    const point = { x: 4, y: 6 };
+    expect(projectRotationAboutPageLine(point, from, to, Math.PI).x).toBeCloseTo(4, 9);
+    expect(projectRotationAboutPageLine(point, from, to, Math.PI).y).toBeCloseTo(-6, 9);
+    expect(projectRotationAboutPageLine(point, from, to, Math.PI / 2).y).toBeCloseTo(0, 9);
+    expect(projectRotationAboutPageLine(point, from, to, Math.PI / 3).y).toBeCloseTo(3, 9);
+    expect(projectRotationAboutPageLine(point, from, from, Math.PI)).toEqual(point);
+  });
+
   it("reports atom degrees from native molecule graph edges", () => {
     expect(atomDegrees(baseInput.atoms, baseInput.bonds)).toEqual(new Map([
       ["atom_001", 1],

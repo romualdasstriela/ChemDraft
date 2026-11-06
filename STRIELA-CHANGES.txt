@@ -148,7 +148,20 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - A saved toolbar customisation that hid or moved the old Reaction Arrow button no longer
      applies to the arrows button (its id changed); set it again in Customize Toolbars.
 
-11. Build checks
+11. Turning a fragment about its single bond (Shift + rotate)
+   - Select a part of a structure that hangs from the rest by ONE single bond (e.g. the
+     phenyl-R ring of a 2-bromobiphenyl, without the Br ring) and drag its rotate handle with
+     Shift held: the fragment turns in 3D about that bond, seen from the front, in 15 degree
+     steps. The rest of the molecule and the bond itself stay put.
+   - 180 degrees swings it over to the other side of the bond (R moves from beside Br to the
+     far side); 90 degrees shows it edge-on, on the bond line.
+   - Past 90 degrees the fragment's wedges become hashes (and hashes wedges) and its
+     off-centre double bonds change side, so its stereochemistry is kept.
+   - Shift can be pressed or released during the drag. A selection that meets the rest
+     through more than one bond, or through a double bond, still rotates flat in 15 degree
+     steps with Shift, as before.
+
+12. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
    - Every dev build also runs cargo clippy (-D warnings) and cargo test, as the main
      project's Windows CI does.
@@ -184,3 +197,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Add a Polymer Bracket tool: ( )n as one object with an editable label
 (next)  Add a narrow-head reaction arrow and make it the default arrow
 (next)  Define Nickname keeps abbreviation labels: counted as atoms, placed as labels
+(next)  Shift + rotate turns a fragment in 3D about the single bond it hangs from

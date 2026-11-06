@@ -7713,6 +7713,36 @@ function rotatePoint(point: LayoutPoint, center: LayoutPoint, angleRadians: numb
   };
 }
 
+/**
+ * Where `point` lands on the page after turning it by `angleRadians` in 3D about a line lying in
+ * the page (through `axisFrom` and `axisTo`), seen from the front: the part along the line stays,
+ * the part across it shrinks by cos(angle). 90 degrees puts the point on the line (seen edge-on);
+ * 180 degrees mirrors it across the line.
+ */
+export function projectRotationAboutPageLine(
+  point: LayoutPoint,
+  axisFrom: LayoutPoint,
+  axisTo: LayoutPoint,
+  angleRadians: number
+): LayoutPoint {
+  const ux = axisTo.x - axisFrom.x;
+  const uy = axisTo.y - axisFrom.y;
+  const length = Math.hypot(ux, uy);
+  if (length < 1e-9) {
+    return { x: point.x, y: point.y };
+  }
+  const nx = ux / length;
+  const ny = uy / length;
+  const dx = point.x - axisFrom.x;
+  const dy = point.y - axisFrom.y;
+  const along = dx * nx + dy * ny;
+  const cos = Math.cos(angleRadians);
+  return {
+    x: axisFrom.x + along * nx + (dx - along * nx) * cos,
+    y: axisFrom.y + along * ny + (dy - along * ny) * cos
+  };
+}
+
 function moleculeDrawingPrimitive(object: MoleculeObject): "single-bond" | undefined {
   return object.style.drawingPrimitive === "single-bond" && object.atoms.length === 2 ? "single-bond" : undefined;
 }

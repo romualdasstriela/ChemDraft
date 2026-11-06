@@ -630,6 +630,8 @@ import {
   parseSelectionClipboardPayload,
   pasteSelectionClipboardPayload,
   rotateNativeMoleculeParts,
+  rotateNativeMoleculePartAboutSingleBond,
+  nativeMoleculePartSingleBondAxis,
   rotateDocumentObject,
   rotateNativeMoleculeObjectAroundPoint,
   tiltNativeMoleculeProjectedPlane,
@@ -1649,7 +1651,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.06.13.30-opus";
+const CURRENT_BUILD_STAMP = "11.06.14.30-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -14541,6 +14543,13 @@ export function MainWindow({
 
   const objectRotateDocumentFromDrag = useCallback((drag: ObjectRotateDragState, point: ClientPoint): ChemDraftDocument => {
     const degrees = objectRotateDragDegrees(drag, point);
+    if (drag.target && drag.shiftKey) {
+      // Shift on a fragment hanging from one single bond turns it about that bond (in 3D).
+      const molecule = findDocumentObject(drag.startDocument, drag.objectId);
+      if (molecule?.type === "molecule" && nativeMoleculePartSingleBondAxis(molecule, drag.target)) {
+        return rotateNativeMoleculePartAboutSingleBond(drag.startDocument, drag.target, degrees);
+      }
+    }
     return drag.target
       ? rotateNativeMoleculeParts(drag.startDocument, drag.target, degrees)
       : rotateDocumentObject(drag.startDocument, drag.objectId, degrees);

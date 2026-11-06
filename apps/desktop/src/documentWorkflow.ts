@@ -149,6 +149,7 @@ import {
   nativeBondOrderResolution,
   nativeGroupLabelDisplay,
   resolvePageAnchorPoint,
+  projectRotationAboutPageLine,
   ringInteriorDoubleBondSides
 } from "@chemdraft/layout-engine";
 import {
@@ -12130,6 +12131,90 @@ export function rotateNativeMoleculeParts(
     atoms: molecule.atoms.map((atom) => targetAtomIds.has(atom.id)
       ? { ...atom, ...rotatePointAround(atom, center, angleRadians) }
       : atom)
+  }));
+
+  return applyPatch(
+    document,
+    { op: "updateObject", objectId: molecule.id, changes: rotated },
+    { now: phase4Timestamp }
+  );
+}
+
+/**
+ * The single bond a partial selection hangs from: exactly one bond joins the selected atoms to
+ * the rest of the molecule, and it is a single bond. `anchorAtomId` is its unselected end (it
+ * stays put), `junctionAtomId` its selected end. Undefined otherwise.
+ */
+export function nativeMoleculePartSingleBondAxis(
+  molecule: MoleculeObject,
+  target: NativeMoleculePartMoveTarget
+): { bondId: string; anchorAtomId: string; junctionAtomId: string } | undefined {
+  const targetAtomIds = nativeMoleculePartAtomIds(molecule, target);
+  if (targetAtomIds.size === 0 || targetAtomIds.size === molecule.atoms.length) {
+    return undefined;
+  }
+  const boundary = molecule.bonds.filter((bond) =>
+    targetAtomIds.has(bond.fromAtomId) !== targetAtomIds.has(bond.toAtomId)
+  );
+  const bond = boundary.length === 1 ? boundary[0] : undefined;
+  if (!bond || bond.order !== "single") {
+    return undefined;
+  }
+  return targetAtomIds.has(bond.fromAtomId)
+    ? { bondId: bond.id, anchorAtomId: bond.toAtomId, junctionAtomId: bond.fromAtomId }
+    : { bondId: bond.id, anchorAtomId: bond.fromAtomId, junctionAtomId: bond.toAtomId };
+}
+
+/**
+ * Turns a partial selection in 3D about the single bond it hangs from (see
+ * nativeMoleculePartSingleBondAxis), as seen from the front: 180 degrees swings it over to the
+ * other side of the bond. Past 90 degrees the fragment's far face is towards the viewer, so its
+ * wedges and hashes swap and its off-centre double bonds change sides, keeping its stereochemistry.
+ * Unchanged when the selection does not hang from one single bond.
+ */
+export function rotateNativeMoleculePartAboutSingleBond(
+  document: ChemDraftDocument,
+  target: NativeMoleculePartMoveTarget,
+  angleDegrees: number
+): ChemDraftDocument {
+  const page = document.pages.find((candidate) => candidate.objects.some((object) => object.id === target.objectId));
+  const molecule = page?.objects.find((object): object is MoleculeObject =>
+    object.id === target.objectId && object.type === "molecule"
+  );
+  if (!molecule || Math.abs(angleDegrees) < 0.05) {
+    return document;
+  }
+  const axis = nativeMoleculePartSingleBondAxis(molecule, target);
+  const anchor = axis && molecule.atoms.find((atom) => atom.id === axis.anchorAtomId);
+  const junction = axis && molecule.atoms.find((atom) => atom.id === axis.junctionAtomId);
+  if (!axis || !anchor || !junction) {
+    return document;
+  }
+
+  const targetAtomIds = nativeMoleculePartAtomIds(molecule, target);
+  const angleRadians = angleDegrees * Math.PI / 180;
+  const backFacing = Math.cos(angleRadians) < 0;
+  const rotated = refreshNativeCyclicDoubleBondSides(normalizeNativeMoleculeGeometry({
+    ...molecule,
+    atoms: molecule.atoms.map((atom) => targetAtomIds.has(atom.id)
+      ? { ...atom, ...projectRotationAboutPageLine(atom, anchor, junction, angleRadians) }
+      : atom),
+    bonds: backFacing
+      ? molecule.bonds.map((bond) => {
+        if (!bond.display || !targetAtomIds.has(bond.fromAtomId) || !targetAtomIds.has(bond.toAtomId)) {
+          return bond;
+        }
+        const { bondStyle, doubleBondSide } = bond.display;
+        return {
+          ...bond,
+          display: {
+            ...bond.display,
+            ...(bondStyle === "wedge" ? { bondStyle: "hashed" as const } : bondStyle === "hashed" ? { bondStyle: "wedge" as const } : {}),
+            ...(doubleBondSide === "left" ? { doubleBondSide: "right" as const } : doubleBondSide === "right" ? { doubleBondSide: "left" as const } : {})
+          }
+        };
+      })
+      : molecule.bonds
   }));
 
   return applyPatch(

@@ -250,6 +250,8 @@ import {
   rotateSelectedDocumentObjects90,
   rotateNativeMoleculeObjectAroundPoint,
   nativeMoleculePartRotationPivot,
+  nativeMoleculePartSingleBondAxis,
+  rotateNativeMoleculePartAboutSingleBond,
   rotateNativeMoleculeParts,
   snapNativeMoleculePartDragDelta,
   snapNativeMoleculePartRotationDegrees,
@@ -3964,6 +3966,59 @@ describe("Phase 4 document workflow", () => {
       kind: "bond",
       bondId: "bond_002"
     })).toEqual({ x: junction.x, y: junction.y });
+  });
+
+  it("turns a fragment in 3D about the single bond it hangs from", () => {
+    const chain = growFromAtom(
+      insertNativeSingleBondMolecule(createPhase4Document("Bond Axis"), { x: 200, y: 220 }),
+      "atom_002",
+      -60
+    );
+    const plain = selectedMolecule(chain);
+    // Make the swinging bond a wedge, to check its stereo survives the turn.
+    const withWedge: typeof chain = {
+      ...chain,
+      pages: chain.pages.map((page) => ({
+        ...page,
+        objects: page.objects.map((object) => object.id === plain.id && object.type === "molecule"
+          ? { ...object, bonds: object.bonds.map((bond) => bond.id === "bond_002" ? { ...bond, display: { bondStyle: "wedge" as const } } : bond) }
+          : object)
+      }))
+    };
+    const molecule = selectedMolecule(withWedge);
+    const fragment = { objectId: molecule.id, kind: "bond" as const, bondId: "bond_002" };
+    expect(nativeMoleculePartSingleBondAxis(molecule, fragment))
+      .toEqual({ bondId: "bond_001", anchorAtomId: "atom_001", junctionAtomId: "atom_002" });
+
+    const anchor = moleculeAtom(molecule, "atom_001");
+    const junction = moleculeAtom(molecule, "atom_002");
+    const swinging = moleculeAtom(molecule, "atom_003");
+    const ux = junction.x - anchor.x;
+    const uy = junction.y - anchor.y;
+    const side = (point: { x: number; y: number }) => ux * (point.y - anchor.y) - uy * (point.x - anchor.x);
+
+    // 180°: mirrored across the bond line, same distance from the junction, wedge now hashed.
+    const flipped = selectedMolecule(rotateNativeMoleculePartAboutSingleBond(withWedge, fragment, 180));
+    const flippedAtom = moleculeAtom(flipped, "atom_003");
+    expect(moleculeAtom(flipped, "atom_001")).toMatchObject({ x: anchor.x, y: anchor.y });
+    expect(moleculeAtom(flipped, "atom_002")).toMatchObject({ x: junction.x, y: junction.y });
+    expect(side(flippedAtom)).toBeCloseTo(-side(swinging), 6);
+    expect(Math.hypot(flippedAtom.x - junction.x, flippedAtom.y - junction.y))
+      .toBeCloseTo(Math.hypot(swinging.x - junction.x, swinging.y - junction.y), 6);
+    expect(flipped.bonds.find((bond) => bond.id === "bond_002")?.display?.bondStyle).toBe("hashed");
+
+    // 90°: seen edge-on, the atom sits on the bond line; the wedge is unchanged below 90°.
+    expect(side(moleculeAtom(selectedMolecule(rotateNativeMoleculePartAboutSingleBond(withWedge, fragment, 90)), "atom_003")))
+      .toBeCloseTo(0, 6);
+    expect(selectedMolecule(rotateNativeMoleculePartAboutSingleBond(withWedge, fragment, 45))
+      .bonds.find((bond) => bond.id === "bond_002")?.display?.bondStyle).toBe("wedge");
+
+    // A ring bond meets the rest through two bonds: no axis, nothing changes.
+    const ring = insertNativeTemplateMolecule(createPhase4Document("Bond Axis Ring"), { x: 300, y: 300 }, "cyclohexane");
+    const ringMolecule = selectedMolecule(ring);
+    const ringBond = { objectId: ringMolecule.id, kind: "bond" as const, bondId: ringMolecule.bonds[0].id };
+    expect(nativeMoleculePartSingleBondAxis(ringMolecule, ringBond)).toBeUndefined();
+    expect(rotateNativeMoleculePartAboutSingleBond(ring, ringBond, 180)).toBe(ring);
   });
 
   it("stretches a selected native molecule independently on X and Y without changing bonds", () => {
