@@ -1645,7 +1645,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.06.10.00-opus";
+const CURRENT_BUILD_STAMP = "11.06.10.30-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -4467,7 +4467,8 @@ export function MainWindow({
     if (!visibleToolsetIdsRef.current.has(NICKNAMES_TOOLSET_ID)) {
       await toggleToolset(NICKNAMES_TOOLSET_ID);
     }
-    setStatus(`Define Nickname: ${preview.formula}, ${preview.attachmentCount} attachment site${preview.attachmentCount === 1 ? "" : "s"}. Name it in the Nicknames toolbar.`);
+    const sitesText = preview.attachmentCount === 0 ? "as drawn" : `${preview.attachmentCount} attachment site${preview.attachmentCount === 1 ? "" : "s"}`;
+    setStatus(`Define Nickname: ${preview.formula}, ${sitesText}. Name it in the Nicknames toolbar.`);
   }, [toggleToolset]);
 
   // Preferences ▸ Nicknames ▸ Choose…: the document window owns the native folder picker.

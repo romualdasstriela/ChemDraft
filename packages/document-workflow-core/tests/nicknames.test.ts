@@ -64,9 +64,22 @@ describe("a nickname from the drawing", () => {
     expect(result.ok && result.graph.attachments.length).toBe(1);
   });
 
-  it("refuses a group with no attachment, or with a label that is not a plain element", () => {
+  it("keeps a whole structure with no attachment as drawn", () => {
     const whole = nicknameGraphFromDrawing({ atoms, bonds }, new Set(atoms.map((atom) => atom.id)));
-    expect(whole).toMatchObject({ ok: false, reason: expect.stringContaining("Mark where the group attaches") });
+    expect(whole.ok).toBe(true);
+    if (!whole.ok) return;
+    expect(whole.graph.attachments).toEqual([]);
+    const definition = abbreviationDefinitionFromNickname("PrOH", whole.graph);
+    expect(definition).toMatchObject({ formula: "C3H8O", attachmentCount: 0 });
+    expect(definition.attachmentAtoms).toBeUndefined();
+    // Not turned: atom order and orientation follow the drawing (y up, bond length 1).
+    expect(definition.atoms.map((atom) => atom.element)).toEqual(["O", "C", "C", "C"]);
+    expect(definition.atoms[0]).toMatchObject({ x: 0, y: 0 });
+    expect(definition.atoms[2]!.x).toBeGreaterThan(1.5);
+    expect(definition.atoms[1]!.y).toBeGreaterThan(0);
+  });
+
+  it("refuses a label that is not a plain element", () => {
     const labelled = atoms.map((atom) => atom.id === "c3" ? { ...atom, element: "OMe" } : atom);
     expect(nicknameGraphFromDrawing({ atoms: labelled, bonds }, new Set(["c1", "c2", "c3"])))
       .toMatchObject({ ok: false, reason: expect.stringContaining("not a plain element") });

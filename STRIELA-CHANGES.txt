@@ -110,6 +110,9 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      every other nickname: typed as a label, picked from the toolbar, placed on empty page.
      A template with the same name as a folder nickname replaces it; built-in names (OMe,
      Ph...) are refused.
+   - An attachment site is optional: a whole selected structure with no bond to the rest and
+     no * mark is kept as drawn (same orientation, no attachment site). It is placed on
+     empty page as drawn and can label an atom with no bonds.
    - The Nicknames toolbar's text fields (search, abbreviation) can be typed into: the
      floating toolbar takes the keyboard only while a field is in use.
 
@@ -145,3 +148,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Load nicknames from a user folder: label recognition, two-site groups, Nicknames toolbar
 (next)  Nickname tool: a click on empty page places the group's structure
 (next)  User nickname templates: Define Nickname from a selection, "user templ." tab
+(next)  User templates without an attachment site are kept as drawn

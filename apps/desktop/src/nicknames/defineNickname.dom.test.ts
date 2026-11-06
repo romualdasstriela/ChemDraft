@@ -76,13 +76,13 @@ describe("Define Nickname", () => {
     expect(loadNicknameDefineRequest()).toMatchObject({ formula: "C2H5", sites: 1 });
   });
 
-  it("explains what to select when the structure has no attachment", async () => {
+  it("takes a whole structure with no attachment as drawn", async () => {
     const drawing = applySingleBondToolAtPoint(createPhase4Document("Define"), { x: 200, y: 200 });
     await mount(selectDocumentObjects(drawing, drawing.pages[0].id, [molecule(drawing).id]));
 
     await act(async () => { await window.__CHEMDRAFT_AGENT__!.command("nicknames.defineFromSelection"); });
 
-    expect(loadNicknameDefineRequest()).toBeUndefined();
-    expect(container.querySelector('[role="status"]')?.textContent).toContain("Mark where the group attaches");
+    expect(loadNicknameDefineRequest()).toMatchObject({ formula: "C2H6", sites: 0 });
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("as drawn");
   });
 });

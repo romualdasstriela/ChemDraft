@@ -149,7 +149,7 @@ export function NicknamesWidget() {
           onSubmit={(event) => { event.preventDefault(); saveTemplate(); }}
         >
           <span className="nickname-define-what">
-            New template: {request.formula}, {request.sites} attachment site{request.sites === 1 ? "" : "s"}
+            New template: {request.formula}, {request.sites === 0 ? "as drawn" : `${request.sites} attachment site${request.sites === 1 ? "" : "s"}`}
           </span>
           <input
             ref={nameRef}
@@ -176,8 +176,8 @@ export function NicknamesWidget() {
         </p>
       ) : tab === "user" && source.length === 0 && !request ? (
         <p className="nicknames-empty">
-          No templates yet. Draw a group, select it without the atom it attaches to (or mark that bond with a *
-          atom), and press Define Nickname on the main toolbar.
+          No templates yet. Draw a structure, select it and press Define Nickname on the main toolbar. To give it
+          an attachment site, leave out the atom it attaches to (or mark that bond with a * atom).
         </p>
       ) : (
         <>

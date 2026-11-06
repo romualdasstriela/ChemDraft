@@ -2319,7 +2319,7 @@ export const nicknameActions: CommandSpec[] = [
     source: "core",
     category: "structure",
     enabled: true,
-    description: "Make the selected group a nickname: select it without the atom it attaches to (or mark that bond with a * atom), then name it in the Nicknames toolbar"
+    description: "Make the selected structure a nickname, kept as drawn (leave out the atom it attaches to, or mark that bond with a * atom, to give it an attachment site), then name it in the Nicknames toolbar"
   }
 ];
 

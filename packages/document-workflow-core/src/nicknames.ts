@@ -31,9 +31,12 @@ export interface NicknameGraphInput {
  * with bonds, as "Ac" does among the built-in groups.
  */
 export function abbreviationDefinitionFromNickname(label: string, graph: NicknameGraphInput, source?: string): AbbreviationDefinition {
-  const first = graph.attachments[0]!;
+  // A group with no connection point (a user template kept as drawn) keeps its first atom first and
+  // its drawn orientation.
+  const first = graph.attachments[0];
+  const firstAtom = first?.atomIndex ?? 0;
   // Attachment atom first, the rest in file order.
-  const order = [first.atomIndex, ...graph.atoms.map((_, index) => index).filter((index) => index !== first.atomIndex)];
+  const order = [firstAtom, ...graph.atoms.map((_, index) => index).filter((index) => index !== firstAtom)];
   const newIndex = new Map(order.map((oldIndex, index) => [oldIndex, index]));
   const bonds: AbbreviationBond[] = graph.bonds.map(([from, to, bondOrder]) => [newIndex.get(from)!, newIndex.get(to)!, bondOrder]);
   const attachmentAtoms = graph.attachments.map((attachment) => newIndex.get(attachment.atomIndex)!);
@@ -48,11 +51,11 @@ export function abbreviationDefinitionFromNickname(label: string, graph: Nicknam
 
   // Frame: translate the attachment atom to the origin, scale to unit bonds, flip y, and turn so the
   // first connection point lies along −x.
-  const origin = graph.atoms[first.atomIndex]!;
+  const origin = graph.atoms[firstAtom] ?? { x: 0, y: 0 };
   const lengths = graph.bonds.map(([from, to]) => Math.hypot(graph.atoms[from]!.x - graph.atoms[to]!.x, graph.atoms[from]!.y - graph.atoms[to]!.y));
-  const toConnection = { x: first.x - origin.x, y: -(first.y - origin.y) };
-  const unit = (lengths.length > 0 ? lengths.reduce((sum, length) => sum + length, 0) / lengths.length : Math.hypot(toConnection.x, toConnection.y)) || 1;
-  const turn = Math.PI - Math.atan2(toConnection.y, toConnection.x);
+  const toConnection = first ? { x: first.x - origin.x, y: -(first.y - origin.y) } : { x: -1, y: 0 };
+  const unit = (lengths.length > 0 ? lengths.reduce((sum, length) => sum + length, 0) / lengths.length : first ? Math.hypot(toConnection.x, toConnection.y) : 1) || 1;
+  const turn = first ? Math.PI - Math.atan2(toConnection.y, toConnection.x) : 0;
   const cos = Math.cos(turn);
   const sin = Math.sin(turn);
   const round = (value: number) => Math.round(value * 1000) / 1000 + 0;
@@ -136,12 +139,8 @@ export function nicknameGraphFromDrawing(
     if (bondOrder !== 1) return { ok: false, reason: "A group attaches by single bonds only." };
     attachments.push({ atomIndex: inside, x: outside.x, y: outside.y });
   }
-  if (attachments.length === 0) {
-    return {
-      ok: false,
-      reason: "Mark where the group attaches: select it without the atom it is bonded to, or draw a * atom on that bond."
-    };
-  }
+  // No attachment marked: the structure is kept whole, as drawn (it is placed on empty page and can
+  // label an atom with no bonds).
   return {
     ok: true,
     graph: {

@@ -36,7 +36,7 @@ function isGraph(value: unknown): value is NicknameGraphInput {
     Array.isArray(graph.bonds) &&
     graph.bonds.every((bond) => Array.isArray(bond) && bond.length === 3 && bond.every(number) &&
       bond[0]! < graph.atoms.length && bond[1]! < graph.atoms.length && [1, 2, 3].includes(bond[2]!)) &&
-    Array.isArray(graph.attachments) && graph.attachments.length > 0 &&
+    Array.isArray(graph.attachments) &&
     graph.attachments.every((attachment) => number(attachment?.atomIndex) && attachment.atomIndex < graph.atoms.length &&
       number(attachment.x) && number(attachment.y));
 }
