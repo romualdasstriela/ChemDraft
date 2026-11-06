@@ -5070,6 +5070,65 @@ textarea:focus-visible,
   pointer-events: none;
 }
 
+/* Turn a fragment about the single bond it hangs from: right of the 3D handle. */
+.object-transform-frame[data-has-bond-axis="true"] .object-rotate-handle {
+  left: calc(50% - 2 * 17px);
+}
+
+.object-transform-frame[data-has-bond-axis="true"] .object-tilt3d-handle {
+  left: 50%;
+}
+
+.object-bond-axis-handle {
+  position: absolute;
+  top: -34px;
+  left: calc(50% + 2 * 17px);
+  z-index: 3;
+  display: grid;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  color: var(--cd-accent);
+  background: var(--cd-bg-control-opaque);
+  border: 1.5px solid var(--cd-accent-border);
+  border-radius: var(--cd-radius-control);
+  box-shadow: var(--cd-focus-ring);
+  cursor: grab;
+  place-items: center;
+  pointer-events: all;
+  transform: translateX(-50%);
+}
+
+.object-bond-axis-handle:hover {
+  background: var(--cd-bg-active);
+  border-color: var(--cd-accent-strong);
+  color: var(--cd-accent-strong);
+}
+
+.object-bond-axis-handle:active {
+  cursor: grabbing;
+}
+
+.object-bond-axis-handle svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.object-bond-axis-handle .object-bond-axis-back {
+  stroke-dasharray: 2 2;
+  opacity: 0.7;
+}
+
+.object-bond-axis-handle .object-bond-axis-arrowhead {
+  fill: currentColor;
+  stroke: none;
+}
+
 .object-resize-handle {
   position: absolute;
   z-index: 3;

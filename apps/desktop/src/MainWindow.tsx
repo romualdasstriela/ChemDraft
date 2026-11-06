@@ -1174,6 +1174,8 @@ type ObjectRotateDragState = {
   artPreviewProxies?: Record<string, ArtTransformDragPreviewProxy>;
   dragging: boolean;
   spin3dModel?: Spin3dRotateSnapshot;
+  /** Started from the bond-axis handle: the fragment turns in 3D about the single bond it hangs from. */
+  aboutSingleBond?: boolean;
 };
 type ObjectRotateReadoutState = {
   objectId: string;
@@ -1651,7 +1653,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.06.14.30-opus";
+const CURRENT_BUILD_STAMP = "11.06.15.30-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -14529,6 +14531,10 @@ export function MainWindow({
   // One snap policy for live preview and release; fragments retain their bond-direction grid.
   const objectRotateDragDegrees = useCallback((drag: ObjectRotateDragState, point: ClientPoint): number => {
     const degrees = rotationDeltaDegrees(drag.centerPoint, drag.startPoint, point);
+    if (drag.aboutSingleBond) {
+      // A turn about the bond: 15° steps with Shift held, otherwise free with a click near each 15°.
+      return snapRotationDegrees(degrees, { shiftKey: drag.shiftKey });
+    }
     if (!drag.target) {
       return snapRotationDegrees(degrees, {
         shiftKey: drag.shiftKey,
@@ -14543,12 +14549,8 @@ export function MainWindow({
 
   const objectRotateDocumentFromDrag = useCallback((drag: ObjectRotateDragState, point: ClientPoint): ChemDraftDocument => {
     const degrees = objectRotateDragDegrees(drag, point);
-    if (drag.target && drag.shiftKey) {
-      // Shift on a fragment hanging from one single bond turns it about that bond (in 3D).
-      const molecule = findDocumentObject(drag.startDocument, drag.objectId);
-      if (molecule?.type === "molecule" && nativeMoleculePartSingleBondAxis(molecule, drag.target)) {
-        return rotateNativeMoleculePartAboutSingleBond(drag.startDocument, drag.target, degrees);
-      }
+    if (drag.target && drag.aboutSingleBond) {
+      return rotateNativeMoleculePartAboutSingleBond(drag.startDocument, drag.target, degrees);
     }
     return drag.target
       ? rotateNativeMoleculeParts(drag.startDocument, drag.target, degrees)
@@ -18141,7 +18143,11 @@ export function MainWindow({
     return true;
   }, [activeToolState.activeKind, selectedNativeMoleculePart, updateObjectResizeInput, updateRotationInput]);
 
-  const handleObjectRotatePointerDown = useCallback((objectId: string, event: PointerEvent<HTMLButtonElement>) => {
+  const handleObjectRotatePointerDown = useCallback((
+    objectId: string,
+    event: PointerEvent<HTMLButtonElement>,
+    aboutSingleBond = false
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     // A Shift-hovered arrow shows the size box under the arrow tools too, so its handles must work
@@ -18153,7 +18159,7 @@ export function MainWindow({
 
     const currentDocument = documentRef.current;
     const object = findDocumentObject(currentDocument, objectId);
-    if (object && isTransformHandleSecondPress(objectId, "rotate-z", event)) {
+    if (!aboutSingleBond && object && isTransformHandleSecondPress(objectId, "rotate-z", event)) {
       openObjectRotateInput(objectId);
       return;
     }
@@ -18164,6 +18170,10 @@ export function MainWindow({
     const selectedFragmentBounds = object?.type === "molecule" && selectedFragmentTarget
       ? nativeMoleculePartBounds(object, selectedFragmentTarget)
       : undefined;
+    if (aboutSingleBond && !(object?.type === "molecule" && selectedFragmentTarget &&
+      nativeMoleculePartSingleBondAxis(object, selectedFragmentTarget))) {
+      return;
+    }
     const canRotateObject =
       object?.type === "text" ||
       (object !== undefined && documentObjectSupportsArtTransform(object) && (currentDocument.selection.objectIds.includes(objectId) || shiftArrowTarget)) ||
@@ -18214,12 +18224,15 @@ export function MainWindow({
       // whole molecule (whole-molecule only; fragments/text stay on the legacy path).
       spin3dModel: !selectedFragmentTarget && object.type === "molecule"
         ? spin3dRotateSnapshotFor(object)
-        : undefined
+        : undefined,
+      aboutSingleBond: aboutSingleBond || undefined
     };
     objectRotateMachineRef.current = interactionReducer(initialInteractionState(), { type: "pointerDown", pointerId: event.pointerId, world: point, target: { kind: "object", objectId }, dragKind: "object-rotate" });
     captureGesturePointer((pageRef.current ?? event.currentTarget), event.pointerId);
     setStatus(
-      object.type === "text"
+      aboutSingleBond
+        ? "Turn the selected fragment about its single bond (180° puts it on the other side)"
+        : object.type === "text"
         ? "Rotate selected text box"
         : object.type === "molecule"
           ? selectedFragmentTarget ? "Rotate selected molecule fragment" : "Rotate selected molecule"
@@ -27090,7 +27103,7 @@ function DocumentObjectViewContent({
   onPointerUp(objectId: string, event: ObjectPointerEvent): void;
   onPointerCancel(event: ObjectPointerEvent): void;
   onPointerLeave(objectId: string, event: ObjectPointerEvent): void;
-  onRotatePointerDown(objectId: string, event: PointerEvent<HTMLButtonElement>): void;
+  onRotatePointerDown(objectId: string, event: PointerEvent<HTMLButtonElement>, aboutSingleBond?: boolean): void;
   onRotateDoubleClick(objectId: string, event: ReactMouseEvent<HTMLButtonElement>): void;
   onProjectedPlaneTiltPointerDown(objectId: string, event: PointerEvent<HTMLButtonElement>): void;
   onProjectedPlaneTiltDoubleClick(objectId: string, event: ReactMouseEvent<HTMLButtonElement>): void;
@@ -27167,6 +27180,9 @@ function DocumentObjectViewContent({
   };
   const handleRotatePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     onRotatePointerDown(object.id, event);
+  };
+  const handleBondAxisRotatePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    onRotatePointerDown(object.id, event, true);
   };
   const handleRotateDoubleClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
     onRotateDoubleClick(object.id, event);
@@ -27470,6 +27486,11 @@ function DocumentObjectViewContent({
         : undefined;
       const transformTargetLabel = selectedFragmentBounds ? "selected molecule fragment" : "selected molecule";
       const canProjectedPlaneTilt = transformFrame !== undefined;
+      // A fragment hanging from the rest by one single bond also gets a handle that turns it about
+      // that bond (shown with the other rotate handles while Shift is held).
+      const canRotateAboutSingleBond = transformFrame !== undefined && selectedFragmentBounds !== undefined &&
+        transformableSelectedPart !== undefined &&
+        nativeMoleculePartSingleBondAxis(object, transformableSelectedPart) !== undefined;
       const transformFrameStyle = transformFrame ? {
         left: `calc(${transformFrame.x}px * var(--page-scale))`,
         top: `calc(${transformFrame.y}px * var(--page-scale))`,
@@ -27717,6 +27738,7 @@ function DocumentObjectViewContent({
               className="object-transform-frame"
               data-molecule-transform-frame={selectedFragmentBounds ? "fragment" : "whole"}
               data-has-tilt3d={canProjectedPlaneTilt ? "true" : undefined}
+              data-has-bond-axis={canRotateAboutSingleBond && zRotationHandleVisible ? "true" : undefined}
               style={transformFrameStyle}
             >
               <ObjectResizeHandles
@@ -27763,6 +27785,18 @@ function DocumentObjectViewContent({
                       limited={projectedPlaneTiltReadout.limited}
                     />
                   ) : null}
+                </button>
+              ) : null}
+              {canRotateAboutSingleBond && zRotationHandleVisible ? (
+                <button
+                  type="button"
+                  className="object-bond-axis-handle"
+                  aria-label="Turn selected molecule fragment about its single bond"
+                  data-selection-bond-axis-handle="true"
+                  title="Turn selected molecule fragment about its single bond"
+                  onPointerDown={handleBondAxisRotatePointerDown}
+                >
+                  <BondAxisRotateIcon />
                 </button>
               ) : null}
               {rotationInput ? (
@@ -31244,6 +31278,18 @@ function RotateSelectionReadout({ degrees }: { degrees: number }) {
       {degrees}
       <span aria-hidden="true">°</span>
     </span>
+  );
+}
+
+/** A bond (horizontal line) with a turning loop around it: the fragment turns about the bond. */
+function BondAxisRotateIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" data-bond-axis-icon="true">
+      <path className="object-bond-axis-bond" d="M2.5 12h19" />
+      <path className="object-bond-axis-back" d="M12 4.5a3.6 7.5 0 0 0 0 15" />
+      <path className="object-bond-axis-front" d="M12 4.5a3.6 7.5 0 0 1 1.6 14.2" />
+      <path className="object-bond-axis-arrowhead" d="M10.6 16.6l2.9 2.4-3.3 1.6z" />
+    </svg>
   );
 }
 

@@ -3297,6 +3297,15 @@ describe("ChemDraft desktop shell", () => {
     expect(mainWindowSource).toContain('setStatus("3D rotate canceled")');
   });
 
+  it("offers a Shift-gated handle that turns a fragment about its single bond, apart from plain rotate", () => {
+    expect(mainWindowSource).toContain('data-selection-bond-axis-handle="true"');
+    expect(mainWindowSource).toContain("{canRotateAboutSingleBond && zRotationHandleVisible ? (");
+    expect(mainWindowSource).toContain("onRotatePointerDown(object.id, event, true);");
+    // Only that handle turns about the bond; the ordinary rotate handle (also Shift-gated) never does.
+    expect(mainWindowSource).toContain("if (drag.target && drag.aboutSingleBond) {");
+    expect(mainWindowSource).not.toContain("if (drag.target && drag.shiftKey) {");
+  });
+
   it("keeps selected molecule fragments highlighted while projected-plane 3D rotate drags", () => {
     expect(mainWindowSource.match(/setSelectedNativeMoleculePart\(projectedPlaneTiltDrag\.target\)/g) ?? []).toHaveLength(4);
     expect(mainWindowSource).not.toContain("projectedPlaneTiltDrag.dragging = true;\n        setActiveEditorObjectId(undefined);\n        setActiveTextEditObjectId(undefined);\n        setActiveAtomLabelEdit(undefined);\n        setHoveredNativeAtom(undefined);\n        setSelectedNativeMoleculePart(undefined);");
