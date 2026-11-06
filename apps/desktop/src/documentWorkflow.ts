@@ -4827,7 +4827,8 @@ export function convertNativeTextObjectToAtom(
 
 const bracketKindByToolCommandId: ReadonlyMap<string, BracketObject["bracketKind"]> = new Map([
   ["tool.bracket", "curly"],
-  ["tool.squareBracket", "square"]
+  ["tool.squareBracket", "square"],
+  ["tool.polymerBracket", "polymer"]
 ]);
 
 export function bracketKindForToolCommand(commandId: string): BracketObject["bracketKind"] | undefined {
@@ -4835,15 +4836,19 @@ export function bracketKindForToolCommand(commandId: string): BracketObject["bra
 }
 
 export const nativeBracketDefaultSize = { width: 16, height: 64 } as const;
+/** A polymer bracket "( )n" is both parentheses in one box, wide enough for a repeat unit. */
+export const nativePolymerBracketDefaultSize = { width: 64, height: 48 } as const;
+export const nativePolymerBracketDefaultLabel = "n";
 
-/** Click placement: a default-size bracket centered on the click point, clamped to the page. */
+/** Click placement: a default-size bracket centered on the click point, clamped to the page. A
+ *  polymer bracket comes with its "n" label. */
 export function insertNativeBracket(
   document: ChemDraftDocument,
   point: PagePoint,
   bracketKind: BracketObject["bracketKind"]
 ): ChemDraftDocument {
   const page = firstPage(document);
-  const { width, height } = nativeBracketDefaultSize;
+  const { width, height } = bracketKind === "polymer" ? nativePolymerBracketDefaultSize : nativeBracketDefaultSize;
   const object: BracketObject = {
     id: nextObjectId(document, "bracket"),
     type: "bracket",
@@ -4854,6 +4859,7 @@ export function insertNativeBracket(
     rotation: 0,
     style: {},
     bracketKind,
+    ...(bracketKind === "polymer" ? { label: nativePolymerBracketDefaultLabel } : {}),
     containedObjectIds: [],
     compatibility: {
       sourceFormat: "chemdraft-native",
@@ -4866,6 +4872,24 @@ export function insertNativeBracket(
     document,
     [
       { op: "addObject", pageId: page.id, object },
+      { op: "setSelection", pageId: page.id, objectIds: [object.id] }
+    ],
+    { now: phase4Timestamp }
+  );
+}
+
+/** Set the text beside a bracket ("n", "m", "3"...); blank text leaves none. Unchanged text, or an
+ *  object that is not a bracket, returns the document as it was. */
+export function setBracketLabel(document: ChemDraftDocument, objectId: string, label: string): ChemDraftDocument {
+  const page = firstPage(document);
+  const object = page.objects.find((candidate) => candidate.id === objectId);
+  if (!object || object.type !== "bracket") return document;
+  const text = label.trim();
+  if ((object.label ?? "") === text) return document;
+  return applyPatches(
+    document,
+    [
+      { op: "updateObject", objectId: object.id, changes: { label: text } },
       { op: "setSelection", pageId: page.id, objectIds: [object.id] }
     ],
     { now: phase4Timestamp }

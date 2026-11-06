@@ -316,6 +316,14 @@ export const coreDrawingToolDefinitions = [
     usageHint: usageHint("click canvas to place", "resize with the transform handles", "Esc exits")
   },
   {
+    commandId: "tool.polymerBracket",
+    title: "Polymer Bracket Tool",
+    kind: "bracket",
+    category: "annotation",
+    icon: "polymerBracket",
+    usageHint: usageHint("click canvas to place ( )n", "resize with the transform handles", "double-click to edit n")
+  },
+  {
     commandId: "tool.dagger",
     title: "Dagger Symbol Tool",
     kind: "text",

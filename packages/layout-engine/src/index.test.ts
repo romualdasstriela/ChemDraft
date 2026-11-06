@@ -40,6 +40,8 @@ import {
   placementAimDegrees,
   planReactionArrowGeometry,
   bracketGlyphPathD,
+  polymerBracketLabelAnchor,
+  polymerBracketParenDepth,
   ringInteriorDoubleBondSides,
   type ResolvedBondCrossing,
   type BondExtensionPlanningInput,
@@ -1484,9 +1486,36 @@ describe("layout-engine page SVG planner", () => {
     expect(bracketGlyphPathD("square", 16, 64)).toBe("M 15 0 L 0 0 L 0 63 L 15 63");
     expect(bracketGlyphPathD("curly", 16, 64)).toContain("C");
     expect(bracketGlyphPathD("round", 16, 64).startsWith("M 15 0 C")).toBe(true);
-    // Polymer and unknown fall back to the square outline.
-    expect(bracketGlyphPathD("polymer", 16, 64)).toBe(bracketGlyphPathD("square", 16, 64));
+    // Unknown falls back to the square outline.
     expect(bracketGlyphPathD("unknown", 16, 64)).toBe(bracketGlyphPathD("square", 16, 64));
+  });
+
+  it("draws a polymer bracket as both parentheses in one path, with its label beside the closing one", () => {
+    const d = bracketGlyphPathD("polymer", 64, 48);
+    expect(d.match(/M /g)).toHaveLength(2);
+    expect(d.match(/C /g)).toHaveLength(2);
+    // The opening parenthesis bows to the left edge, the closing one to the right edge.
+    expect(d).toContain("C 0.5 ");
+    expect(d).toContain("C 63.5 ");
+    expect(polymerBracketParenDepth(64, 48)).toBeLessThan(64 / 2);
+
+    const page = pageWithObjects([{
+      id: "poly_001", type: "bracket", x: 40, y: 60, width: 64, height: 48, rotation: 0, style: {},
+      bracketKind: "polymer", label: "n", containedObjectIds: []
+    }]);
+    const fragments = planPageSvgRender(page).fragments.filter((fragment) => fragment.attrs["data-object-id"] === "poly_001");
+    expect(fragments.map((fragment) => fragment.tag)).toEqual(["path", "text"]);
+    const anchor = polymerBracketLabelAnchor(64, 48);
+    expect(Number(fragments[1]!.attrs.x)).toBeCloseTo(40 + anchor.x);
+    expect(Number(fragments[1]!.attrs.y)).toBeCloseTo(60 + anchor.y);
+    expect(fragments[1]!.children).toEqual([expect.objectContaining({ kind: "text", text: "n" })]);
+
+    const unlabelled = pageWithObjects([{
+      id: "poly_002", type: "bracket", x: 0, y: 0, width: 64, height: 48, rotation: 0, style: {},
+      bracketKind: "polymer", containedObjectIds: []
+    }]);
+    expect(planPageSvgRender(unlabelled).fragments.filter((fragment) => fragment.attrs["data-object-id"] === "poly_002")
+      .map((fragment) => fragment.tag)).toEqual(["path"]);
   });
 
   it("plans reaction-arrow geometry per arrow kind", () => {

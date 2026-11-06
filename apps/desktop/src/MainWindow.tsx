@@ -233,6 +233,9 @@ import {
   type PageSvgFragment,
   type PageSvgRenderPlan,
   bracketGlyphPathD,
+  polymerBracketLabelAnchor,
+  polymerBracketLabelFontSizePx,
+  polymerBracketParenDepth,
   planReactionArrowGeometry,
   projectedPlaneMatrix as documentObjectProjectedPlaneMatrix,
   projectedPlaneSvgTransformForObject,
@@ -542,6 +545,7 @@ import {
   stretchNativeReactionArrowTo,
   bracketKindForToolCommand,
   insertNativeBracket,
+  setBracketLabel,
   applyNativeChainTool,
   applyFormulaTextFormatting,
   type NativeChainAnchor,
@@ -1645,7 +1649,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.06.10.30-opus";
+const CURRENT_BUILD_STAMP = "11.06.11.30-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -6759,8 +6763,35 @@ export function MainWindow({
     commitDocumentChange(insertNativeBracket(currentDocument, point, bracketKind));
     clearStampInteractionState();
     assignHoveredNativeDeleteTarget(undefined);
-    setStatus(`Inserted ${bracketKind} bracket`);
+    setStatus(bracketKind === "polymer" ? "Inserted polymer bracket ( )n; double-click it to change n" : `Inserted ${bracketKind} bracket`);
   }, [assignHoveredNativeDeleteTarget, clearStampInteractionState, commitDocumentChange]);
+
+  // The polymer bracket's label ("n") is edited in place: double-click the bracket, type, Enter.
+  const [bracketLabelEdit, setBracketLabelEdit] = useState<{ objectId: string; value: string } | undefined>();
+  const bracketLabelEditRef = useRef(bracketLabelEdit);
+  bracketLabelEditRef.current = bracketLabelEdit;
+  const handleBracketDoubleClick = useCallback((objectId: string, event: ObjectMouseEvent) => {
+    const toolId = activeToolState.activeCommandId;
+    if (toolId !== "tool.select" && toolId !== "tool.text") return;
+    const object = findDocumentObject(documentRef.current, objectId);
+    if (object?.type !== "bracket" || object.bracketKind !== "polymer") return;
+    event.preventDefault();
+    event.stopPropagation();
+    setBracketLabelEdit({ objectId, value: object.label ?? "" });
+  }, [activeToolState.activeCommandId]);
+  const finishBracketLabelEdit = useCallback((commit: boolean) => {
+    const current = bracketLabelEditRef.current;
+    if (!current) return;
+    // Cleared first: the field's blur after Enter or Esc must not commit a second time.
+    bracketLabelEditRef.current = undefined;
+    setBracketLabelEdit(undefined);
+    if (!commit) return;
+    const next = setBracketLabel(documentRef.current, current.objectId, current.value);
+    if (next !== documentRef.current) {
+      commitDocumentChange(next);
+      setStatus(current.value.trim() ? `Bracket label set to ${current.value.trim()}` : "Bracket label removed");
+    }
+  }, [commitDocumentChange]);
 
   const applyNativeArtDocumentAtPoint = useCallback((point: ClientPoint, commandId: string) => {
     const currentDocument = documentRef.current;
@@ -19972,6 +20003,7 @@ export function MainWindow({
     onPointerCancel: handleObjectPointerCancel,
     onPointerLeave: handleObjectPointerLeave,
     onTextDoubleClick: handleTextDoubleClick,
+    onBracketDoubleClick: handleBracketDoubleClick,
     onRotatePointerDown: handleObjectRotatePointerDown,
     onRotateDoubleClick: handleObjectRotateDoubleClick,
     onProjectedPlaneTiltPointerDown: handleProjectedPlaneTiltPointerDown,
@@ -20545,6 +20577,16 @@ export function MainWindow({
                   spinningObjectId={activeSpin3dState?.objectId}
                 />
                 <PageInteractionPortal target={interactionLayer}>
+                {bracketLabelEdit ? (
+                  <BracketLabelEditor
+                    edit={bracketLabelEdit}
+                    object={findDocumentObject(document, bracketLabelEdit.objectId)}
+                    pageWidth={activePage.width}
+                    pageHeight={activePage.height}
+                    onChange={(value) => setBracketLabelEdit((current) => current ? { ...current, value } : current)}
+                    onFinish={finishBracketLabelEdit}
+                  />
+                ) : null}
                 {activeNativeTemplateId && templatePreview ? (
                   <NativeTemplateGhostOverlay
                     plan={templatePreview}
@@ -26586,6 +26628,7 @@ function PageSvgSurfaceContent({
   onPointerLeave(objectId: string, event: ObjectPointerEvent): void;
   onContextMenu(objectId: string, event: ObjectMouseEvent): void;
   onTextDoubleClick(objectId: string, event: ObjectMouseEvent): void;
+  onBracketDoubleClick(objectId: string, event: ObjectMouseEvent): void;
 }) {
   const visualLayers = useMemo(() => {
     const layers: { layerIndex: number; objects: DocumentObject[] }[] = [];
@@ -26645,7 +26688,9 @@ function PageSvgSurfaceContent({
                 onPointerCancel={handlers.onPointerCancel}
                 onPointerLeave={event => handlers.onPointerLeave(object.id, event)}
                 onContextMenu={event => handlers.onContextMenu(object.id, event)}
-                onDoubleClick={object.type === "text" ? event => handlers.onTextDoubleClick(object.id, event) : undefined}
+                onDoubleClick={object.type === "text"
+                  ? event => handlers.onTextDoubleClick(object.id, event)
+                  : object.type === "bracket" ? event => handlers.onBracketDoubleClick(object.id, event) : undefined}
               >
                 {object.type === "graphic" ? (
                   // Keep the existing art renderer and its generous stroke/fill catchers.
@@ -26660,7 +26705,16 @@ function PageSvgSurfaceContent({
                   </svg>
                 ) : (
                   <>
-                    {object.type === "bracket" || object.type === "reaction-arrow" ? (
+                    {object.type === "bracket" && object.bracketKind === "polymer" ? (
+                      // Only the two parentheses and the label catch the pointer, so atoms and bonds
+                      // drawn inside the brackets stay clickable.
+                      polymerBracketHitRects(object).map((rect, index) => (
+                        <rect key={index} x={rect.x} y={rect.y} width={rect.width} height={rect.height}
+                          data-bracket-hit={rect.part}
+                          transform={projectedPlaneSvgTransformForObject(object)}
+                          fill="transparent" pointerEvents="all" />
+                      ))
+                    ) : object.type === "bracket" || object.type === "reaction-arrow" ? (
                       <rect x={object.x} y={object.y} width={object.width} height={object.height}
                         transform={projectedPlaneSvgTransformForObject(object)}
                         fill="transparent" pointerEvents="all" />
@@ -28471,6 +28525,81 @@ function arrowAnchorPointRelativeToObject(
   }
 
   return fallback;
+}
+
+/** The in-place field for a polymer bracket's label, over where the label is drawn. Enter or a
+ *  click elsewhere keeps the text, Esc drops it. */
+function BracketLabelEditor({
+  edit,
+  object,
+  pageWidth,
+  pageHeight,
+  onChange,
+  onFinish
+}: {
+  edit: { objectId: string; value: string };
+  object: DocumentObject | undefined;
+  pageWidth: number;
+  pageHeight: number;
+  onChange(value: string): void;
+  onFinish(commit: boolean): void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [edit.objectId]);
+  if (object?.type !== "bracket") return null;
+  const width = Math.max(object.width, 1);
+  const height = Math.max(object.height, 1);
+  const anchor = polymerBracketLabelAnchor(width, height);
+  const size = polymerBracketLabelFontSizePx;
+  return (
+    <input
+      ref={inputRef}
+      className="bracket-label-editor"
+      aria-label="Bracket label"
+      data-bracket-label-editor={edit.objectId}
+      value={edit.value}
+      spellCheck={false}
+      style={{
+        left: `${((object.x + anchor.x - 2) / pageWidth) * 100}%`,
+        top: `${((object.y + anchor.y - size * 1.1) / pageHeight) * 100}%`
+      }}
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") { event.preventDefault(); onFinish(true); }
+        else if (event.key === "Escape") { event.preventDefault(); onFinish(false); }
+      }}
+      onBlur={() => onFinish(true)}
+      onPointerDown={(event) => event.stopPropagation()}
+    />
+  );
+}
+
+/** Page-space pointer catchers of a polymer bracket: a strip over each parenthesis and a box over
+ *  the label. The space between the parentheses is left to whatever is drawn there. */
+export function polymerBracketHitRects(object: BracketObject): Array<{ part: "open" | "close" | "label"; x: number; y: number; width: number; height: number }> {
+  const width = Math.max(object.width, 1);
+  const height = Math.max(object.height, 1);
+  const strip = Math.min(width / 2, polymerBracketParenDepth(width, height) + 4);
+  const rects: Array<{ part: "open" | "close" | "label"; x: number; y: number; width: number; height: number }> = [
+    { part: "open", x: object.x - 2, y: object.y, width: strip, height },
+    { part: "close", x: object.x + width - strip + 2, y: object.y, width: strip, height }
+  ];
+  if (object.label) {
+    const anchor = polymerBracketLabelAnchor(width, height);
+    const size = polymerBracketLabelFontSizePx;
+    rects.push({
+      part: "label",
+      x: object.x + anchor.x - 1,
+      y: object.y + anchor.y - size,
+      width: object.label.length * size * 0.65 + 2,
+      height: size * 1.3
+    });
+  }
+  return rects;
 }
 
 function BracketGlyph({ object, projection }: { object: BracketObject; projection?: DocumentObjectProjection }) {

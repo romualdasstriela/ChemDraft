@@ -172,6 +172,8 @@ import {
   applyReactionArrowToolAtPoint,
   bracketKindForToolCommand,
   insertNativeBracket,
+  nativePolymerBracketDefaultSize,
+  setBracketLabel,
   insertNativeReactionArrow,
   planNativeChainVertices,
   planNativeFlexibleChainVertices,
@@ -2054,6 +2056,28 @@ describe("Phase 4 document workflow", () => {
       expect(object.containedObjectIds).toEqual([]);
     }
     expect(placed.selection.objectIds).toEqual([object.id]);
+  });
+
+  it("places a polymer bracket ( )n as one object and edits its label", () => {
+    expect(bracketKindForToolCommand("tool.polymerBracket")).toBe("polymer");
+    const placed = insertNativeBracket(createPhase4Document("Polymer Fixture"), { x: 200, y: 220 }, "polymer");
+    const object = placed.pages[0].objects[0]!;
+    expect(object).toMatchObject({
+      type: "bracket",
+      bracketKind: "polymer",
+      label: "n",
+      width: nativePolymerBracketDefaultSize.width,
+      height: nativePolymerBracketDefaultSize.height,
+      x: 200 - nativePolymerBracketDefaultSize.width / 2,
+      y: 220 - nativePolymerBracketDefaultSize.height / 2
+    });
+    expect(placed.pages[0].objects).toHaveLength(1);
+
+    const relabelled = setBracketLabel(placed, object.id, " m ");
+    expect(relabelled.pages[0].objects[0]).toMatchObject({ id: object.id, label: "m", bracketKind: "polymer" });
+    expect(setBracketLabel(relabelled, object.id, "m")).toBe(relabelled);
+    expect(setBracketLabel(relabelled, object.id, "")).not.toBe(relabelled);
+    expect(setBracketLabel(relabelled, "missing", "x")).toBe(relabelled);
   });
 
   it("registers orbital tools as closed art shapes with chemistry command ids", () => {

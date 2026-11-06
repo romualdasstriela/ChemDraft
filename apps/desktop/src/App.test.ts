@@ -2904,6 +2904,7 @@ describe("ChemDraft desktop shell", () => {
       "tool.sOrbital",
       "tool.bracket",
       "tool.squareBracket",
+      "tool.polymerBracket",
       "tool.chain",
       "style.formulaText",
       "layout.bringToFront",

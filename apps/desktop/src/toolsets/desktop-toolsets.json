@@ -720,6 +720,29 @@
               }
             },
             {
+              "commandId": "tool.polymerBracket",
+              "title": "Polymer Bracket Tool",
+              "icon": "polymerBracket",
+              "category": "annotation",
+              "id": "tool.polymerBracket",
+              "kind": "button",
+              "label": "Polymer Bracket Tool",
+              "primary": {
+                "type": "command",
+                "commandId": "tool.polymerBracket"
+              },
+              "submenu": null,
+              "tooltip": {
+                "title": "Polymer Bracket Tool",
+                "shortcut": null,
+                "description": "Place a pair of parentheses with an n label as one object. Resize with the handles; double-click to change n."
+              },
+              "layout": {
+                "colSpan": 1,
+                "rowSpan": 1
+              }
+            },
+            {
               "commandId": "tool.dagger",
               "title": "Dagger Symbol Tool",
               "icon": "charge",
@@ -2754,6 +2777,29 @@
               "tooltip": {
                 "title": "Square Bracket Tool",
                 "shortcut": null
+              },
+              "layout": {
+                "colSpan": 1,
+                "rowSpan": 1
+              }
+            },
+            {
+              "commandId": "tool.polymerBracket",
+              "title": "Polymer Bracket Tool",
+              "icon": "polymerBracket",
+              "category": "annotation",
+              "id": "tool.polymerBracket",
+              "kind": "button",
+              "label": "Polymer Bracket Tool",
+              "primary": {
+                "type": "command",
+                "commandId": "tool.polymerBracket"
+              },
+              "submenu": null,
+              "tooltip": {
+                "title": "Polymer Bracket Tool",
+                "shortcut": null,
+                "description": "Place a pair of parentheses with an n label as one object. Resize with the handles; double-click to change n."
               },
               "layout": {
                 "colSpan": 1,

@@ -116,7 +116,21 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - The Nicknames toolbar's text fields (search, abbreviation) can be typed into: the
      floating toolbar takes the keyboard only while a field is in use.
 
-9. Build checks
+9. Polymer bracket ( )n
+   - New Polymer Bracket Tool beside the Curly and Square Bracket tools (Main toolbar and
+     the annotation tools): a click places a pair of parentheses with an "n" label at the
+     lower right, as ONE object - it moves, copies and deletes as a whole.
+   - Resize it with the transform handles: the parentheses stretch to the box, the label
+     stays the same text size beside the closing one.
+   - Double-click it (Select or Text tool) to change the label: type, Enter keeps it, Esc
+     cancels; an empty label removes it.
+   - Only the two parentheses and the label catch clicks, so atoms and bonds drawn inside
+     the brackets stay clickable.
+   - The bracket uses the "polymer" kind the document model already had (drawn as a square
+     bracket before), so it saves in .chemdraft files. CDXML export still writes only a
+     placeholder for it, as for every native bracket.
+
+10. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
    - Every dev build also runs cargo clippy (-D warnings) and cargo test, as the main
      project's Windows CI does.
@@ -149,3 +163,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Nickname tool: a click on empty page places the group's structure
 (next)  User nickname templates: Define Nickname from a selection, "user templ." tab
 (next)  User templates without an attachment site are kept as drawn
+(next)  Add a Polymer Bracket tool: ( )n as one object with an editable label

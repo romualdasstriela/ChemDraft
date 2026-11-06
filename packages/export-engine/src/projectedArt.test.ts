@@ -88,7 +88,15 @@ describe("projected reaction arrows and brackets", () => {
     }
   );
 
-  it.each(["square", "round", "curly", "polymer", "unknown"] as const)(
+  it("projects both parentheses of a polymer bracket point by point", () => {
+    const output = svg({ ...bracket, bracketKind: "polymer", style: { tiltYDegrees: 60 } });
+    expect(output).not.toContain('transform="matrix(');
+    const d = /data-bracket-kind="polymer" d="([^"]+)"/.exec(output)?.[1] ?? "";
+    expect(d.match(/M /g)).toHaveLength(2);
+  });
+
+  // A polymer bracket is a pair of parentheses, not one open outline; it has its own case above.
+  it.each(["square", "round", "curly", "unknown"] as const)(
     "projects a %s bracket around its center", bracketKind => {
       const output = svg({ ...bracket, bracketKind, style: { tiltYDegrees: 60 } });
       expect(output).not.toContain('transform="matrix(');

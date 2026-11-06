@@ -4745,9 +4745,25 @@ function arrowAnchorPointForObject(
   return fallback;
 }
 
+/** How far a polymer bracket's parentheses bow in from the box ends: a share of the height, capped
+ *  so the two never meet in a narrow box. */
+export function polymerBracketParenDepth(width: number, height: number): number {
+  return Math.max(1, Math.min(width * 0.25, Math.max(4, height * 0.14)));
+}
+
+/** Font size (px) of a polymer bracket's repeat label ("n"). */
+export const polymerBracketLabelFontSizePx = 12;
+
+/** Where a polymer bracket's label sits, in object-local coordinates: the text's start point and
+ *  baseline, just right of the closing parenthesis and below its lower end, as a subscript. */
+export function polymerBracketLabelAnchor(width: number, height: number): LayoutPoint {
+  return { x: Math.max(width, 1) + 1.5, y: Math.max(height, 1) + polymerBracketLabelFontSizePx * 0.35 };
+}
+
 /** Shared bracket glyph outline for the canvas renderer and SVG export, in object-local
- *  coordinates. "round" is a single open curve, "curly" a brace with a center spur; "polymer" and
- *  "unknown" fall back to the square outline. An optional projection maps every path point,
+ *  coordinates. "round" is a single open curve, "curly" a brace with a center spur, "polymer" a
+ *  pair of parentheses at the two ends of the box (its label is drawn beside the closing one);
+ *  "unknown" falls back to the square outline. An optional projection maps every path point,
  *  including Bezier controls, without transforming the stroke. */
 export function bracketGlyphPathD(
   kind: BracketObject["bracketKind"],
@@ -4764,6 +4780,18 @@ export function bracketGlyphPathD(
   };
   const right = Math.max(width - 1, 0);
   const bottom = Math.max(height - 1, 0);
+  if (kind === "polymer") {
+    // A pair of parentheses at the two ends of the box: one object for "( )n".
+    const depth = polymerBracketParenDepth(width, height);
+    const top = 0.5;
+    const low = Math.max(height - 0.5, top);
+    const leftEdge = 0.5;
+    const rightEdge = Math.max(width - 0.5, leftEdge);
+    return [
+      `M ${point(leftEdge + depth, top)} C ${point(leftEdge, height * 0.22)}, ${point(leftEdge, height * 0.78)}, ${point(leftEdge + depth, low)}`,
+      `M ${point(rightEdge - depth, top)} C ${point(rightEdge, height * 0.22)}, ${point(rightEdge, height * 0.78)}, ${point(rightEdge - depth, low)}`
+    ].join(" ");
+  }
   if (kind === "round") {
     return `M ${point(right, 0)} C ${point(width * 0.18, height * 0.16)}, ${point(width * 0.18, height * 0.84)}, ${point(right, bottom)}`;
   }
@@ -4796,8 +4824,27 @@ function bracketObjectFragment(object: BracketObject, layerIndex: number): PageS
       "stroke-width": 1.5,
       "stroke-linecap": "round",
       "stroke-linejoin": "round"
-    })
+    }),
+    ...(object.bracketKind === "polymer" && object.label ? [polymerBracketLabelFragment(object, width, height, project)] : [])
   ]);
+}
+
+function polymerBracketLabelFragment(
+  object: BracketObject,
+  width: number,
+  height: number,
+  project: ((point: LayoutPoint) => LayoutPoint) | undefined
+): PageSvgElementFragment {
+  const local = polymerBracketLabelAnchor(width, height);
+  const anchor = project ? project(local) : { x: object.x + local.x, y: object.y + local.y };
+  return elementFragment("text", `bracket-label-${object.id}`, {
+    class: "bracket-label",
+    x: formatNumber(anchor.x),
+    y: formatNumber(anchor.y),
+    "font-family": "Arial, sans-serif",
+    "font-size": polymerBracketLabelFontSizePx,
+    fill: "#172026"
+  }, [textFragment(`bracket-label-text-${object.id}`, object.label!)]);
 }
 
 export interface ReactionArrowGeometry {

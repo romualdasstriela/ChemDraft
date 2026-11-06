@@ -186,7 +186,7 @@ const COMMAND_SECTION_RULES: ReadonlyArray<{ pattern: RegExp; section: string }>
   },
   // `tool.symbol` also has per-glyph variants (tool.symbol.degree, …), so the family is matched by
   // prefix rather than anchored exactly.
-  { pattern: /^tool\.(plus|minus|plusPlain|minusPlain|radicalCation|radicalAnion|radical|lonePair|mechanismArrow|mechanismFishhook|bracket|squareBracket|dagger)$|^tool\.(symbol|charge)(\.|$)/, section: "symbols" },
+  { pattern: /^tool\.(plus|minus|plusPlain|minusPlain|radicalCation|radicalAnion|radical|lonePair|mechanismArrow|mechanismFishhook|bracket|squareBracket|polymerBracket|dagger)$|^tool\.(symbol|charge)(\.|$)/, section: "symbols" },
   { pattern: /^tool\.(lobe|shadedLobe|pOrbital|sOrbital)$/, section: "orbitals" },
   { pattern: /^(structure|chemistry)\./, section: "chemistry" },
   { pattern: /^tool\.text$/, section: "text" },
