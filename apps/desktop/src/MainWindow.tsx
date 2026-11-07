@@ -241,7 +241,8 @@ import {
   projectedPlaneSvgTransformForObject,
   type NativeArtPaintPlan,
   type NativeArtVisualPlan,
-  type ResolvedBondCrossing
+  type ResolvedBondCrossing,
+  atomLabelTextWithDigitScript
 } from "@chemdraft/layout-engine";
 // `/adapter`, NOT the barrel: the barrel re-exports `./analysis`, which reaches the pKa network's
 // 4.2 MB of JSON. Measured with the repo's own vite build, that model was 4,042,470 characters of a
@@ -1653,7 +1654,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.06.15.30-opus";
+const CURRENT_BUILD_STAMP = "11.07.12.30-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -2933,12 +2934,14 @@ export function MainWindow({
       document,
       moleculeContext: currentMoleculeInspector.targets.context,
       activeTextEditObjectId,
+      atomLabelEditing: activeAtomLabelEdit !== undefined,
       // Composed from the art model, which has already planned every selected object — deriving it
       // here would re-run planNativeArtVisual per object on every document change.
       markerCapableGraphicCount: currentArtStyle?.markersSupportedCount
     }),
     [
       activeTextEditObjectId,
+      activeAtomLabelEdit !== undefined,
       currentArtStyle?.markersSupportedCount,
       currentMoleculeInspector.targets.context,
       document
@@ -7285,7 +7288,40 @@ export function MainWindow({
     startTextObjectEdit(objectId);
   }, [activeToolState.activeCommandId, startTextObjectEdit]);
 
+  // x² / x₂ while an atom label is typed: mark the selected digits, or the ones just typed, as
+  // superscript or subscript in the label text (² / ₂). The editor keeps focus and its caret.
+  const applyAtomLabelDigitScript = useCallback((state: AtomLabelEditState, script: TextSpan["script"]) => {
+    const editor = pageRef.current?.querySelector<HTMLInputElement>(
+      `:is([data-object-id="${cssEscapeIdentifier(state.objectId)}"], [data-object-controls="${cssEscapeIdentifier(state.objectId)}"]) [data-atom-label-editor="true"][data-atom-id="${cssEscapeIdentifier(state.atomId)}"]`
+    );
+    const text = editor?.value ?? state.draft;
+    const caret = editor?.selectionEnd ?? text.length;
+    const next = atomLabelTextWithDigitScript(text, editor?.selectionStart ?? caret, caret, script);
+    if (!next.changed) {
+      setStatus("Type or select the digits in the label first, then press superscript or subscript");
+      return;
+    }
+    updateAtomLabelDraft(state, next.text);
+    if (editor) {
+      editor.value = next.text;
+      editor.setSelectionRange(next.end, next.end);
+      window.requestAnimationFrame(() => {
+        if (editor.isConnected) {
+          editor.focus({ preventScroll: true });
+          editor.setSelectionRange(next.end, next.end);
+        }
+      });
+    }
+    setStatus(script === "normal" ? "Label digits set to baseline" : `Label digits set to ${script}`);
+  }, [updateAtomLabelDraft]);
+
   const applyTextStyleCommand = useCallback((commandId: string): boolean => {
+    const labelEdit = activeAtomLabelEditRef.current;
+    const labelScript = labelEdit ? textScriptForCommand(commandId) : undefined;
+    if (labelEdit && labelScript) {
+      applyAtomLabelDigitScript(labelEdit, labelScript);
+      return true;
+    }
     const currentDocument = documentRef.current;
     const toolbarStyleTarget = toolbarStyleTargetRef.current;
     const snapshotTextSelection = toolbarStyleTarget?.textRange;
@@ -7385,7 +7421,7 @@ export function MainWindow({
 
     setStatus("Updated text defaults");
     return true;
-  }, [activeTextEditObjectId, commitDocumentChange, selectedNativeMoleculePart, textStyleDefaults]);
+  }, [activeTextEditObjectId, applyAtomLabelDigitScript, commitDocumentChange, selectedNativeMoleculePart, textStyleDefaults]);
 
   const selectedMoleculeRingTargets = useCallback((): NativeMoleculeRingTarget[] => {
     return currentMoleculeInspector.rings.selectedRings.map((ring) => ({

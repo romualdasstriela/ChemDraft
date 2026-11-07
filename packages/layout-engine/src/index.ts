@@ -93,6 +93,14 @@ export {
 } from "./valence";
 
 export {
+  atomLabelDigitScript,
+  atomLabelDigitValue,
+  atomLabelTextWithDigitScript,
+  plainAtomLabelDigits
+} from "./labelScript";
+import { atomLabelDigitScript, atomLabelDigitValue } from "./labelScript";
+
+export {
   type AtomLabelAnchor,
   nativeAtomLabelReading,
   type NativeAtomLabelContext,
@@ -5796,20 +5804,29 @@ function anchoredAtomLabelLayout(
 
 function atomLabelParts(label: string): { bodyRuns: AtomLabelRun[]; chargeRun?: AtomLabelRun } {
   const { body, charge } = splitAtomLabelCharge(label);
+  // A digit marked superscript or subscript (² or ₂, set with the x² / x₂ buttons) is drawn that
+  // way as its plain digit; `marked` keeps it out of the mass-number rule below.
+  let firstRunMarked = false;
   const runs = Array.from(body).reduce<AtomLabelRun[]>((currentRuns, character) => {
-    const script = atomLabelScript(character);
+    const digitScript = atomLabelDigitScript(character);
+    const marked = digitScript === "superscript" || digitScript === "subscript";
+    const script: AtomLabelScript = marked ? digitScript : atomLabelScript(character);
+    const text = marked ? String(atomLabelDigitValue(character)) : character;
     const previous = currentRuns[currentRuns.length - 1];
     if (previous?.script === script) {
-      previous.text += character;
+      previous.text += text;
       return currentRuns;
     }
 
-    currentRuns.push({ text: character, script });
+    if (currentRuns.length === 0) {
+      firstRunMarked = marked;
+    }
+    currentRuns.push({ text, script });
     return currentRuns;
   }, []);
   // Digits BEFORE the first symbol are a mass number (a typed "13C", "2H"), and a mass number
   // sits top-left as a superscript; only a count after a symbol ("CH3") is a subscript.
-  if (runs.length > 1 && runs[0]!.script === "subscript") {
+  if (runs.length > 1 && runs[0]!.script === "subscript" && !firstRunMarked) {
     runs[0] = { ...runs[0]!, script: "superscript" };
   }
 

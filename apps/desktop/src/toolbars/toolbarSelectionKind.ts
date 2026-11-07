@@ -42,12 +42,15 @@ export interface ClassifyToolbarSelectionInput {
    *  instead of re-running target resolution avoids repeating ring perception per render. */
   moleculeContext: MoleculeInspectorContext;
   activeTextEditObjectId?: string;
+  /** True while an atom label is being typed: its x² / x₂ buttons apply to the label's digits. */
+  atomLabelEditing?: boolean;
 }
 
 export function classifyToolbarSelection({
   document,
   moleculeContext,
   activeTextEditObjectId,
+  atomLabelEditing = false,
   markerCapableGraphicCount
 }: ClassifyToolbarSelectionInput): ToolbarSelectionModel {
   const objectTypes = [...selectedDocumentObjectTypes(document)].sort();
@@ -77,7 +80,7 @@ export function classifyToolbarSelection({
   // all, even though the commands accept them. Every selected graphic must qualify: showing head
   // controls for a selection that includes a rectangle would lie about the rectangle.
   const everyGraphicCanCarryAHead = graphicCount > 0 && markerCapableGraphicCount === graphicCount;
-  const textEditing = activeTextEditObjectId !== undefined;
+  const textEditing = activeTextEditObjectId !== undefined || atomLabelEditing;
 
   return {
     kind: classifyKind({

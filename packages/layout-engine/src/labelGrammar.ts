@@ -16,6 +16,7 @@ import {
   type AbbreviationDefinition
 } from "@chemdraft/template-library";
 
+import { plainAtomLabelDigits } from "./labelScript";
 import { nativeElementFromAtomLabel, type NativeElementSymbol } from "./valence";
 
 export const nativeAtomValence: Partial<Record<NativeElementSymbol, number>> = {
@@ -182,7 +183,8 @@ export function nativeLabelReadingDependsOnBondSide(label: string): boolean {
  * actinium, praseodymium, tennessine. Exact case only.
  */
 export function nativeAtomLabelReading(label: string, context: NativeAtomLabelContext = {}): NativeAtomLabelReading {
-  const trimmed = label.trim();
+  // A digit marked superscript or subscript only changes how it is drawn: "OR²" means "OR2".
+  const trimmed = plainAtomLabelDigits(label).trim();
   if (trimmed === "D" || trimmed === "T") {
     return { kind: "heavy-hydrogen", element: trimmed };
   }

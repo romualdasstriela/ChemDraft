@@ -241,6 +241,13 @@ describe("classifyToolbarSelection", () => {
     expect(model.textEditing).toBe(true);
   });
 
+  it("shows the text layout (with x² / x₂) while an atom label is typed", () => {
+    const { document } = documentWithMolecule(true);
+    const model = classifyToolbarSelection({ document, moleculeContext: "atom", atomLabelEditing: true });
+    expect(model.kind).toBe("text");
+    expect(toolbarVariantForKind(model.kind)).toBe("text");
+  });
+
   it("produces a JSON-serializable model (the Tauri emit path serializes; Sets would silently empty)", () => {
     const document = insertNativeArtGraphicObject(
       createPhase4Document("Serializable"),

@@ -162,7 +162,18 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - The ordinary rotate handle is unchanged. A selection that meets the rest through more
      than one bond, or through a double bond, gets no third handle.
 
-12. Build checks
+12. Superscript and subscript digits in atom labels
+   - While an atom label is being typed (e.g. "OR2" on a bond end), the Main toolbar's style
+     area shows the text controls, so the x² (superscript) and x₂ (subscript) buttons are there.
+   - Press x² right after typing the digits ("OR2" -> "OR²", drawn with a raised 2), or select
+     digits in the label first and press it. x₂ makes them subscript ("OR₂"); pressing the same
+     button again puts them back to ordinary digits. The label box keeps the keyboard, so typing
+     goes on.
+   - The label stores the Unicode superscript/subscript digit (² / ₂). To the chemistry it is
+     the plain digit: "CH₂" counts as CH2, "R²" is an R-group like R2. Ordinary digits are drawn
+     as before (lowered after a symbol, raised before one).
+
+13. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
    - Every dev build also runs cargo clippy (-D warnings) and cargo test, as the main
      project's Windows CI does.
@@ -200,3 +211,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Define Nickname keeps abbreviation labels: counted as atoms, placed as labels
 (next)  Shift + rotate turns a fragment in 3D about the single bond it hangs from
 (next)  Give the single-bond turn its own Shift handle; plain rotate stays flat
+(next)  Superscript and subscript digits in atom labels from the x² / x₂ buttons

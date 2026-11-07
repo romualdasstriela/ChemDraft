@@ -53,6 +53,12 @@ export function usePaletteButtonInvoke(
     },
     onMouseDown(event: ReactMouseEvent<HTMLButtonElement>) {
       event.stopPropagation();
+      // While an atom label is being typed, a style button must not take the focus: that would end
+      // the label edit, and its x² / x₂ apply to the label being typed.
+      const focused = event.currentTarget.ownerDocument.activeElement;
+      if (focused instanceof HTMLElement && focused.dataset.atomLabelEditor === "true") {
+        event.preventDefault();
+      }
       if (pointerInvokedRef.current || disabled || event.button !== 0) {
         return;
       }
