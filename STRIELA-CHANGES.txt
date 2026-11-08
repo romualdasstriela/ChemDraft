@@ -161,6 +161,14 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      off-centre double bonds change side, so its stereochemistry is kept.
    - The ordinary rotate handle is unchanged. A selection that meets the rest through more
      than one bond, or through a double bond, gets no third handle.
+   - Which bond: the smallest piece hanging off a single bond that is in no ring and holds the
+     whole selection. So selecting the ring alone, the ring with R, one atom of that ring, or a
+     box round it that also clips the bonds to the other ring all turn that ring WITH its R
+     about the biaryl bond. (The first version needed the selection to meet the rest through
+     exactly one bond, so a box that clipped the biaryl or the Br bond showed only two handles.)
+   - Drag the handle sideways, like the other rotate handles: about 1 degree per pixel.
+   - A pointer capture that fails as a handle is grabbed is now ignored instead of raising the
+     crash report.
 
 12. Superscript and subscript digits in atom labels
    - While an atom label is being typed (e.g. "OR2" on a bond end), the Main toolbar's style
@@ -212,3 +220,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Shift + rotate turns a fragment in 3D about the single bond it hangs from
 (next)  Give the single-bond turn its own Shift handle; plain rotate stays flat
 (next)  Superscript and subscript digits in atom labels from the x² / x₂ buttons
+(next)  Bond-axis handle: find the hanging piece for any selection of it

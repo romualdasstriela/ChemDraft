@@ -3988,7 +3988,7 @@ describe("Phase 4 document workflow", () => {
     const molecule = selectedMolecule(withWedge);
     const fragment = { objectId: molecule.id, kind: "bond" as const, bondId: "bond_002" };
     expect(nativeMoleculePartSingleBondAxis(molecule, fragment))
-      .toEqual({ bondId: "bond_001", anchorAtomId: "atom_001", junctionAtomId: "atom_002" });
+      .toMatchObject({ bondId: "bond_001", anchorAtomId: "atom_001", junctionAtomId: "atom_002" });
 
     const anchor = moleculeAtom(molecule, "atom_001");
     const junction = moleculeAtom(molecule, "atom_002");
@@ -4019,6 +4019,79 @@ describe("Phase 4 document workflow", () => {
     const ringBond = { objectId: ringMolecule.id, kind: "bond" as const, bondId: ringMolecule.bonds[0].id };
     expect(nativeMoleculePartSingleBondAxis(ringMolecule, ringBond)).toBeUndefined();
     expect(rotateNativeMoleculePartAboutSingleBond(ring, ringBond, 180)).toBe(ring);
+  });
+
+  it("turns the R ring of a 2-bromo-2'-R-biphenyl about the biaryl bond, however the ring is selected", () => {
+    // Ring A (atom_001-006) from the template; ring B and the R / Br substituents added by hand.
+    const seed = insertNativeTemplateMolecule(createPhase4Document("Biphenyl"), { x: 300, y: 300 }, "benzene");
+    const benzene = selectedMolecule(seed);
+    const a = (id: string) => moleculeAtom(benzene, id);
+    const template = benzene.atoms[0]!;
+    const bondTemplate = benzene.bonds.find((bond) => bond.order === "single") ?? benzene.bonds[0]!;
+    const shift = { x: 60, y: 0 };
+    const ringB = benzene.atoms.map((atom, index) => ({ ...atom, id: `b_atom_${index + 1}`, x: atom.x + shift.x, y: atom.y + shift.y }));
+    const ringBBonds = benzene.bonds.map((bond, index) => ({
+      ...bond,
+      id: `b_bond_${index + 1}`,
+      fromAtomId: `b_${bond.fromAtomId}`,
+      toAtomId: `b_${bond.toAtomId}`
+    }));
+    const r = { ...template, id: "atom_r", element: "R", x: a("atom_001").x, y: a("atom_001").y - 25 };
+    const br = { ...template, id: "atom_br", element: "Br", x: ringB[0]!.x, y: ringB[0]!.y - 25 };
+    const biphenyl: typeof seed = {
+      ...seed,
+      pages: seed.pages.map((page) => ({
+        ...page,
+        objects: page.objects.map((object) => object.id === benzene.id && object.type === "molecule"
+          ? {
+            ...object,
+            atoms: [...object.atoms, ...ringB, r, br],
+            bonds: [
+              ...object.bonds,
+              ...ringBBonds,
+              { ...bondTemplate, id: "bond_biaryl", fromAtomId: "atom_002", toAtomId: "b_atom_6", order: "single" as const, display: undefined },
+              { ...bondTemplate, id: "bond_r", fromAtomId: "atom_001", toAtomId: "atom_r", order: "single" as const, display: undefined },
+              { ...bondTemplate, id: "bond_br", fromAtomId: "b_atom_1", toAtomId: "atom_br", order: "single" as const, display: undefined }
+            ]
+          }
+          : object)
+      }))
+    };
+    const molecule = selectedMolecule(biphenyl);
+    const ringAIds = benzene.atoms.map((atom) => atom.id);
+    const ringABondIds = benzene.bonds.map((bond) => bond.id);
+    const expectedMoving = [...ringAIds, "atom_r"].sort();
+
+    // The ring alone, the ring with R, or a single ring atom: all turn ring A with R about the biaryl bond.
+    for (const target of [
+      { objectId: molecule.id, kind: "parts" as const, atomIds: ringAIds, bondIds: ringABondIds },
+      { objectId: molecule.id, kind: "parts" as const, atomIds: [...ringAIds, "atom_r"], bondIds: [...ringABondIds, "bond_r"] },
+      { objectId: molecule.id, kind: "atom" as const, atomId: "atom_004" },
+      // A box that also caught the biaryl bond and its far atom.
+      { objectId: molecule.id, kind: "parts" as const, atomIds: [...ringAIds, "atom_r", "b_atom_6"], bondIds: [...ringABondIds, "bond_r", "bond_biaryl"] },
+      // A box round ring A and R that clipped the biaryl bond and the Br bond (atoms not inside).
+      { objectId: molecule.id, kind: "parts" as const, atomIds: [...ringAIds, "atom_r"], bondIds: [...ringABondIds, "bond_r", "bond_biaryl", "bond_br"] }
+    ]) {
+      const axis = nativeMoleculePartSingleBondAxis(molecule, target);
+      expect(axis).toMatchObject({ bondId: "bond_biaryl", anchorAtomId: "b_atom_6", junctionAtomId: "atom_002" });
+      expect([...axis!.movingAtomIds].sort()).toEqual(expectedMoving);
+    }
+
+    // 180°: R crosses to the other side of the biaryl bond; ring B and Br stay put.
+    const turned = selectedMolecule(rotateNativeMoleculePartAboutSingleBond(biphenyl, {
+      objectId: molecule.id, kind: "parts", atomIds: ringAIds, bondIds: ringABondIds
+    }, 180));
+    const anchor = moleculeAtom(molecule, "b_atom_6");
+    const junction = moleculeAtom(molecule, "atom_002");
+    const side = (point: { x: number; y: number }) =>
+      (junction.x - anchor.x) * (point.y - anchor.y) - (junction.y - anchor.y) * (point.x - anchor.x);
+    expect(Math.sign(side(moleculeAtom(turned, "atom_r")))).toBe(-Math.sign(side(moleculeAtom(molecule, "atom_r"))));
+    expect(moleculeAtom(turned, "atom_br")).toMatchObject({ x: br.x, y: br.y });
+
+    // The whole molecule hangs from nothing.
+    expect(nativeMoleculePartSingleBondAxis(molecule, {
+      objectId: molecule.id, kind: "parts", atomIds: molecule.atoms.map((atom) => atom.id), bondIds: molecule.bonds.map((bond) => bond.id)
+    })).toBeUndefined();
   });
 
   it("stretches a selected native molecule independently on X and Y without changing bonds", () => {

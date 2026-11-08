@@ -12141,32 +12141,86 @@ export function rotateNativeMoleculeParts(
 }
 
 /**
- * The single bond a partial selection hangs from: exactly one bond joins the selected atoms to
- * the rest of the molecule, and it is a single bond. `anchorAtomId` is its unselected end (it
- * stays put), `junctionAtomId` its selected end. Undefined otherwise.
+ * The single bond a partial selection hangs from, and the piece that turns about it. Cutting a
+ * single bond that is in no ring splits the molecule in two; the bond qualifies when one side
+ * holds the selected atoms (and at least two atoms) and the other side none, apart from the bond's
+ * own end there (a box drawn round a ring also catches the bond it hangs from). Of the qualifying
+ * bonds the one with the smallest moving side wins: selecting a ring of 2-bromo-2'-R-biphenyl,
+ * with or without its R, gives the biaryl bond and the ring with R. `anchorAtomId` is the bond's
+ * end that stays put, `junctionAtomId` its moving end, `movingAtomIds` every atom that turns.
+ * Undefined when no single bond separates the selection from the rest (a whole molecule, a slice
+ * of a ring, a part held by a double bond).
  */
 export function nativeMoleculePartSingleBondAxis(
   molecule: MoleculeObject,
   target: NativeMoleculePartMoveTarget
-): { bondId: string; anchorAtomId: string; junctionAtomId: string } | undefined {
-  const targetAtomIds = nativeMoleculePartAtomIds(molecule, target);
+): { bondId: string; anchorAtomId: string; junctionAtomId: string; movingAtomIds: ReadonlySet<string> } | undefined {
+  // A box selection lists the atoms it holds plus every bond it touched, even one it only clipped
+  // (the bond to a substituent on the other ring). Those bonds' far atoms are not what the user
+  // picked, so when atoms are listed, only they decide where the selection hangs from.
+  const listedAtomIds = target.kind === "parts"
+    ? new Set(target.atomIds.filter((atomId) => molecule.atoms.some((atom) => atom.id === atomId)))
+    : undefined;
+  const targetAtomIds = listedAtomIds && listedAtomIds.size > 0
+    ? listedAtomIds
+    : nativeMoleculePartAtomIds(molecule, target);
   if (targetAtomIds.size === 0 || targetAtomIds.size === molecule.atoms.length) {
     return undefined;
   }
-  const boundary = molecule.bonds.filter((bond) =>
-    targetAtomIds.has(bond.fromAtomId) !== targetAtomIds.has(bond.toAtomId)
-  );
-  const bond = boundary.length === 1 ? boundary[0] : undefined;
-  if (!bond || bond.order !== "single") {
-    return undefined;
+  const neighbours = new Map<string, Array<{ atomId: string; bondId: string }>>();
+  molecule.bonds.forEach((bond) => {
+    neighbours.set(bond.fromAtomId, [...(neighbours.get(bond.fromAtomId) ?? []), { atomId: bond.toAtomId, bondId: bond.id }]);
+    neighbours.set(bond.toAtomId, [...(neighbours.get(bond.toAtomId) ?? []), { atomId: bond.fromAtomId, bondId: bond.id }]);
+  });
+  // The atoms reachable from `start` without crossing `cutBondId`.
+  const sideOf = (start: string, cutBondId: string): Set<string> => {
+    const seen = new Set([start]);
+    const queue = [start];
+    while (queue.length > 0) {
+      const atomId = queue.pop()!;
+      for (const next of neighbours.get(atomId) ?? []) {
+        if (next.bondId !== cutBondId && !seen.has(next.atomId)) {
+          seen.add(next.atomId);
+          queue.push(next.atomId);
+        }
+      }
+    }
+    return seen;
+  };
+  const selected = [...targetAtomIds];
+  let best: { bondId: string; anchorAtomId: string; junctionAtomId: string; movingAtomIds: Set<string> } | undefined;
+  for (const bond of molecule.bonds) {
+    if (bond.order !== "single") {
+      continue;
+    }
+    const fromSide = sideOf(bond.fromAtomId, bond.id);
+    if (fromSide.has(bond.toAtomId)) {
+      continue; // a ring bond: cutting it separates nothing
+    }
+    // The selection may also hold the bond itself (a box drawn round the ring catches it), so the
+    // anchor end may be selected; nothing else on the staying side may be.
+    const fromSelected = selected.filter((atomId) => fromSide.has(atomId)).length;
+    const toSelected = selected.length - fromSelected;
+    const options = [
+      fromSelected > 0 && toSelected === (targetAtomIds.has(bond.toAtomId) ? 1 : 0)
+        ? { set: fromSide, junction: bond.fromAtomId, anchor: bond.toAtomId }
+        : undefined,
+      toSelected > 0 && fromSelected === (targetAtomIds.has(bond.fromAtomId) ? 1 : 0)
+        ? { set: sideOf(bond.toAtomId, bond.id), junction: bond.toAtomId, anchor: bond.fromAtomId }
+        : undefined
+    ];
+    for (const moving of options) {
+      if (!moving || moving.set.size < 2 || (best && best.movingAtomIds.size <= moving.set.size)) {
+        continue;
+      }
+      best = { bondId: bond.id, anchorAtomId: moving.anchor, junctionAtomId: moving.junction, movingAtomIds: moving.set };
+    }
   }
-  return targetAtomIds.has(bond.fromAtomId)
-    ? { bondId: bond.id, anchorAtomId: bond.toAtomId, junctionAtomId: bond.fromAtomId }
-    : { bondId: bond.id, anchorAtomId: bond.fromAtomId, junctionAtomId: bond.toAtomId };
+  return best;
 }
 
 /**
- * Turns a partial selection in 3D about the single bond it hangs from (see
+ * Turns the piece a partial selection belongs to in 3D about the single bond it hangs from (see
  * nativeMoleculePartSingleBondAxis), as seen from the front: 180 degrees swings it over to the
  * other side of the bond. Past 90 degrees the fragment's far face is towards the viewer, so its
  * wedges and hashes swap and its off-centre double bonds change sides, keeping its stereochemistry.
@@ -12191,7 +12245,7 @@ export function rotateNativeMoleculePartAboutSingleBond(
     return document;
   }
 
-  const targetAtomIds = nativeMoleculePartAtomIds(molecule, target);
+  const targetAtomIds = axis.movingAtomIds;
   const angleRadians = angleDegrees * Math.PI / 180;
   const backFacing = Math.cos(angleRadians) < 0;
   const rotated = refreshNativeCyclicDoubleBondSides(normalizeNativeMoleculeGeometry({
