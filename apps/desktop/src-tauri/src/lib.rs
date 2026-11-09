@@ -1267,7 +1267,7 @@ pub fn run() {
             // Word opens it here). Registered before launch arguments are handled, so a launch
             // COM made to edit an object finds the class ready.
             #[cfg(windows)]
-            ole_server::start(app.handle());
+            ole_server::start(app);
 
             app.state::<PendingOpenDocument>()
                 .setup_completed
