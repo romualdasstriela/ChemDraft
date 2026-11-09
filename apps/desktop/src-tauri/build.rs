@@ -76,6 +76,7 @@ fn main() {
             "sync_plugin_menu_items",
             "read_clipboard_payload",
             "write_clipboard_text_items",
+            "ole_embedding_saved",
             "write_clipboard_image",
             "open_tool_palette",
             "close_tool_palette",

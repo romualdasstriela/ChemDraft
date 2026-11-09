@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ole-embedding-saved"
+description = "Enables the ole_embedding_saved command without any pre-configured scope."
+commands.allow = ["ole_embedding_saved"]
+
+[[permission]]
+identifier = "deny-ole-embedding-saved"
+description = "Denies the ole_embedding_saved command without any pre-configured scope."
+commands.deny = ["ole_embedding_saved"]
