@@ -815,7 +815,12 @@ export function svgToEmf(svg: string, options: SvgToEmfOptions = {}): SvgToEmfRe
       if (!key || value === "" || value === "inherit") return;
       if (numericStyleKeys.has(key)) {
         const number = Number.parseFloat(value);
-        if (Number.isFinite(number)) (style[key] as number) = name === "font-size" && value.endsWith("em") ? number * parent.fontSize : number;
+        if (!Number.isFinite(number)) return;
+        // Sizes relative to the parent's font: "72%" (rich-text sub/superscripts), "0.8em".
+        const relativeTo = name === "font-size" ? parent.fontSize : style.fontSize;
+        (style[key] as number) = value.endsWith("%") ? number / 100 * relativeTo
+          : value.endsWith("em") ? number * relativeTo
+            : number;
       } else {
         (style[key] as string) = value;
       }

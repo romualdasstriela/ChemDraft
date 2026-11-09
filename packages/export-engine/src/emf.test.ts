@@ -98,6 +98,23 @@ describe("svgToEmf", () => {
     expect(last.kind === "cubic" && [Math.round(last.x), Math.round(last.y)]).toEqual([12, 8]);
   });
 
+  it("sizes rich-text sub- and superscripts relative to their line (72%)", () => {
+    // A text box as the page renderer writes it: "Ac₂O" with the 2 as a 72% subscript tspan.
+    const text = `<svg xmlns="http://www.w3.org/2000/svg" width="96px" height="48px" viewBox="0 0 96 48">
+      <text x="10" y="20" font-family="Arial" font-size="20"><tspan x="10">Ac</tspan><tspan baseline-shift="sub" font-size="72%">2</tspan><tspan>O</tspan></text>
+    </svg>`;
+    const result = svgToEmf(text, { domParser });
+    const view = new DataView(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength);
+    const list = records(result.bytes);
+    const fontHeights = list.filter((record) => record.type === 82).map((record) => -view.getInt32(record.offset + 12, true));
+    const unitsPerPx = 2540 / 96;
+    expect(fontHeights.map((height) => Math.round(height / unitsPerPx))).toEqual([20, 14, 20]);
+    // Each run starts where the one before ends: "O" after "Ac" (20 px) and a 14.4 px "2".
+    const starts = list.filter((record) => record.type === 84).map((record) => view.getInt32(record.offset + 36, true) / unitsPerPx);
+    expect(starts[1]).toBeCloseTo(10 + (0.667 + 0.5) * 20, 0);
+    expect(starts[2]).toBeCloseTo(10 + (0.667 + 0.5) * 20 + 0.556 * 14.4, 0);
+  });
+
   it("refuses something that is not an SVG", () => {
     expect(() => svgToEmf("<html />", { domParser })).toThrow(/could not be parsed/);
   });
