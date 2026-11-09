@@ -4615,19 +4615,37 @@ fn read_clipboard_payload() -> Result<ClipboardReadPayload, String> {
     read_clipboard_payload_impl()
 }
 
-/// `jpeg_bytes`, when given, is a picture of the same content written in the same transaction
-/// (Ctrl+C into Word); it never replaces the text items ChemDraft's own paste reads.
+/// Pictures of the copied content, written in the same transaction as the text items (Ctrl+C into
+/// Word); they never replace the text items ChemDraft's own paste reads. `emf` is an Enhanced
+/// Metafile (vector), put on the Windows clipboard only.
+#[derive(Clone, Copy, Default)]
+struct ClipboardPictures<'a> {
+    jpeg: Option<&'a [u8]>,
+    #[cfg_attr(not(windows), allow(dead_code))]
+    emf: Option<&'a [u8]>,
+}
+
+impl<'a> ClipboardPictures<'a> {
+    fn from_bytes(jpeg: &'a Option<Vec<u8>>, emf: &'a Option<Vec<u8>>) -> Self {
+        Self {
+            jpeg: jpeg.as_deref().filter(|bytes| !bytes.is_empty()),
+            emf: emf.as_deref().filter(|bytes| !bytes.is_empty()),
+        }
+    }
+}
+
 #[cfg(windows)]
 #[tauri::command]
 async fn write_clipboard_text_items(
     app: tauri::AppHandle,
     items: Vec<ClipboardWriteTextItem>,
     jpeg_bytes: Option<Vec<u8>>,
+    emf_bytes: Option<Vec<u8>>,
 ) -> Result<(), String> {
     write_clipboard_text_items_impl(
         &app,
         normalize_clipboard_write_text_items(items)?,
-        jpeg_bytes.as_deref().filter(|bytes| !bytes.is_empty()),
+        ClipboardPictures::from_bytes(&jpeg_bytes, &emf_bytes),
     )
 }
 
@@ -4637,11 +4655,12 @@ fn write_clipboard_text_items(
     app: tauri::AppHandle,
     items: Vec<ClipboardWriteTextItem>,
     jpeg_bytes: Option<Vec<u8>>,
+    emf_bytes: Option<Vec<u8>>,
 ) -> Result<(), String> {
     write_clipboard_text_items_impl(
         &app,
         normalize_clipboard_write_text_items(items)?,
-        jpeg_bytes.as_deref().filter(|bytes| !bytes.is_empty()),
+        ClipboardPictures::from_bytes(&jpeg_bytes, &emf_bytes),
     )
 }
 
@@ -4764,12 +4783,13 @@ fn read_clipboard_payload_impl() -> Result<ClipboardReadPayload, String> {
 fn write_clipboard_text_items_impl(
     _app: &tauri::AppHandle,
     items: Vec<ClipboardWriteTextItem>,
-    jpeg: Option<&[u8]>,
+    pictures: ClipboardPictures<'_>,
 ) -> Result<(), String> {
     use objc2_foundation::NSData;
 
     write_native_clipboard_text_items(items)?;
-    if let Some(jpeg) = jpeg {
+    // The EMF is a Windows picture format; macOS apps take the JPEG.
+    if let Some(jpeg) = pictures.jpeg {
         // Added after the text items, on the same cleared pasteboard.
         let jpeg_type = NSString::from_str("public.jpeg");
         if !NSPasteboard::generalPasteboard()
@@ -5012,9 +5032,14 @@ fn read_clipboard_payload_impl() -> Result<ClipboardReadPayload, String> {
 fn write_clipboard_text_items_impl(
     app: &tauri::AppHandle,
     items: Vec<ClipboardWriteTextItem>,
-    jpeg: Option<&[u8]>,
+    pictures: ClipboardPictures<'_>,
 ) -> Result<(), String> {
-    windows_clipboard::native::write_text_items(clipboard_owner_window(app), &items, jpeg)
+    windows_clipboard::native::write_text_items(
+        clipboard_owner_window(app),
+        &items,
+        pictures.jpeg,
+        pictures.emf,
+    )
 }
 
 #[cfg(not(any(target_os = "macos", windows)))]
@@ -5029,7 +5054,7 @@ fn read_clipboard_payload_impl() -> Result<ClipboardReadPayload, String> {
 fn write_clipboard_text_items_impl(
     _app: &tauri::AppHandle,
     _items: Vec<ClipboardWriteTextItem>,
-    _jpeg: Option<&[u8]>,
+    _pictures: ClipboardPictures<'_>,
 ) -> Result<(), String> {
     Err("Native clipboard writes are only implemented for macOS and Windows.".to_string())
 }

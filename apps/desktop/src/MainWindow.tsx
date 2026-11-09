@@ -257,6 +257,7 @@ import { SmilesListPasteError, depictSmilesForPaste, depictSmilesListForPaste } 
 import type { Generate3DConformerResult, StructureAnalysisResult } from "@chemdraft/chemistry-adapter";
 import {
   getExportFormatDescriptor,
+  svgToEmf,
   type ExportFormatId,
   type ExportResult
 } from "@chemdraft/export-engine";
@@ -1654,7 +1655,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.08.15.00-opus";
+const CURRENT_BUILD_STAMP = "11.09.15.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -7047,9 +7048,14 @@ export function MainWindow({
       return;
     }
 
-    // A JPEG picture rides along so Ctrl+C pastes into Word; a failed render still copies.
+    // Pictures ride along so Ctrl+C pastes into Word: a vector EMF (Windows) and a JPEG for apps
+    // that take only bitmaps. A failed render still copies.
     const jpegBytes = await renderSelectionClipboardJpeg(documentRef.current, payload).catch(() => undefined);
-    const didWrite = await writeClipboardTextItems(selectionClipboardWriteItems(payload, jpegBytes !== undefined), { jpegBytes });
+    const emfBytes = renderSelectionClipboardEmf(documentRef.current, payload);
+    const didWrite = await writeClipboardTextItems(
+      selectionClipboardWriteItems(payload, jpegBytes !== undefined || emfBytes !== undefined),
+      { jpegBytes, emfBytes }
+    );
     if (!didWrite) {
       setStatus(mode === "copy" ? "Copy failed: clipboard unavailable" : "Cut canceled: clipboard unavailable");
       return;
@@ -23246,6 +23252,28 @@ async function renderSelectionClipboardJpeg(
     cssPxPerInch: CSS_PX_PER_INCH
   });
   return bytes.length > 0 ? bytes : undefined;
+}
+
+/** The Ctrl+C vector picture: the copied objects as an Enhanced Metafile, at their drawn size and
+ *  with no background, so Word, PowerPoint and Excel paste sharp lines and real text (desktop only;
+ *  only Windows puts it on the clipboard). */
+export function renderSelectionClipboardEmf(
+  document: ChemDraftDocument,
+  payload: ChemDraftSelectionClipboardPayload
+): Uint8Array | undefined {
+  if (!isDesktopRuntime()) {
+    return undefined;
+  }
+  try {
+    const svg = exportPhase4Svg(selectionClipboardImageDocument(document, payload), {
+      includeWarnings: false,
+      background: "transparent"
+    }).contents;
+    const { bytes } = svgToEmf(svg);
+    return bytes.length > 0 ? bytes : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function selectionClipboardPayloadKey(payload: ChemDraftSelectionClipboardPayload): string {

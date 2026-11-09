@@ -510,15 +510,38 @@ pub(crate) mod native {
         unsafe { RegisterClipboardFormatW(wide(name).as_ptr()) }
     }
 
+    /// Hand an Enhanced Metafile to the clipboard as `CF_ENHMETAFILE`: the bytes become a metafile
+    /// handle the clipboard owns on success; on failure the handle is deleted here.
+    fn set_enhanced_metafile(emf: &[u8]) -> bool {
+        use windows_sys::Win32::Graphics::Gdi::{DeleteEnhMetaFile, SetEnhMetaFileBits};
+        let Ok(length) = u32::try_from(emf.len()) else {
+            return false;
+        };
+        // SAFETY: SetEnhMetaFileBits copies `length` bytes from the slice; the handle it returns is
+        // either given to the clipboard (which then owns it) or deleted.
+        unsafe {
+            let metafile = SetEnhMetaFileBits(length, emf.as_ptr());
+            if metafile.is_null() {
+                return false;
+            }
+            if SetClipboardData(CF_ENHMETAFILE, metafile as HANDLE).is_null() {
+                DeleteEnhMetaFile(metafile);
+                return false;
+            }
+            true
+        }
+    }
+
     /// Replace the clipboard with `items`, all in one transaction so readers see them together.
     /// `owner` must be a window: with a null owner, EmptyClipboard leaves no owner and every
-    /// SetClipboardData after it fails. A `jpeg` picture of the same content rides along (as
-    /// `JFIF` and `CF_DIBV5`) so Ctrl+C pastes into Word as an image; ChemDraft's own paste still
-    /// reads the text items.
+    /// SetClipboardData after it fails. Pictures of the same content ride along so Ctrl+C pastes
+    /// into Word as an image: an `emf` (vector, `CF_ENHMETAFILE`) and a `jpeg` (as `JFIF` and
+    /// `CF_DIBV5`) for apps that take only bitmaps. ChemDraft's own paste still reads the text items.
     pub(crate) fn write_text_items(
         owner: HWND,
         items: &[ClipboardWriteTextItem],
         jpeg: Option<&[u8]>,
+        emf: Option<&[u8]>,
     ) -> Result<(), String> {
         // Decode before opening: the clipboard stays locked to other apps while it is open.
         let dib = jpeg.map(jpeg_to_dibv5).transpose()?;
@@ -553,12 +576,16 @@ pub(crate) mod native {
             .map(|item| item.r#type.clone())
             .collect::<Vec<_>>();
 
+        // The vector picture goes first: Office takes the first picture format it can use.
+        let emf_ok = emf.is_some_and(set_enhanced_metafile);
         if let (Some(jpeg), Some(dib)) = (jpeg, dib) {
             let jfif_ok = set_bytes(registered("JFIF"), jpeg);
             let dib_ok = set_bytes(CF_DIBV5, &dib);
-            if !jfif_ok && !dib_ok {
+            if !jfif_ok && !dib_ok && !emf_ok {
                 return Err("Could not write the picture to the clipboard.".to_string());
             }
+        } else if emf.is_some() && !emf_ok {
+            return Err("Could not write the picture to the clipboard.".to_string());
         }
 
         if failed_types.is_empty() {

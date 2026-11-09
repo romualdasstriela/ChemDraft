@@ -58,6 +58,13 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - When a picture is on the clipboard, plain text is left off (Word would paste text
      instead of the picture), so text no longer pastes into Notepad from Ctrl+C.
    - The macOS side (public.jpeg) is written but untested.
+   - Windows: Ctrl+C also puts a vector picture (Enhanced Metafile, CF_ENHMETAFILE) on the
+     clipboard, so Word, PowerPoint and Excel paste sharp lines and real Arial text at the
+     drawing's real size, with no white box behind it. The JPEG stays for apps that take only
+     bitmaps. The metafile is written from the exported SVG (export-engine svgToEmf); shadows,
+     glows and clip paths are left out, gradients become one colour, transparency is blended
+     against white, and the white outline behind labels is left out (bonds already stop short
+     of labels). macOS keeps the JPEG only.
 
 6. ACS Document 1996 as the default drawing style
    - Every new structure (drawn, placed from a template, or pasted as SMILES or molfile)
@@ -221,3 +228,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Give the single-bond turn its own Shift handle; plain rotate stays flat
 (next)  Superscript and subscript digits in atom labels from the x² / x₂ buttons
 (next)  Bond-axis handle: find the hanging piece for any selection of it
+(next)  Copy a vector picture (EMF) to the Windows clipboard with Ctrl+C

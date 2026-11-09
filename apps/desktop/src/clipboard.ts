@@ -26,6 +26,8 @@ export async function writeClipboardText(text: string): Promise<boolean> {
 export interface ClipboardWriteOptions {
   /** A picture of the same content, written in the same transaction (desktop only). */
   jpegBytes?: Uint8Array;
+  /** The same picture as an Enhanced Metafile (vector), written only on Windows. */
+  emfBytes?: Uint8Array;
 }
 
 export async function writeClipboardTextItems(
@@ -42,7 +44,8 @@ export async function writeClipboardTextItems(
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("write_clipboard_text_items", {
         items: normalizedItems,
-        ...(options.jpegBytes ? { jpegBytes: Array.from(options.jpegBytes) } : {})
+        ...(options.jpegBytes ? { jpegBytes: Array.from(options.jpegBytes) } : {}),
+        ...(options.emfBytes ? { emfBytes: Array.from(options.emfBytes) } : {})
       });
       return true;
     } catch {
