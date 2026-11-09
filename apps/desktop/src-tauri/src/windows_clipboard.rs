@@ -538,11 +538,16 @@ pub(crate) mod native {
     /// into Word as an image: an `emf` (vector, `CF_ENHMETAFILE`) and a `jpeg` for apps that take
     /// only bitmaps (as `CF_DIBV5`, plus `JFIF` only when there is no metafile, since Word prefers
     /// `JFIF` to it). ChemDraft's own paste still reads the text items.
+    ///
+    /// `embedding`, when given, is the drawing as an Office-embeddable object: the bytes of its
+    /// structured storage ("Embed Source", which OLE hands Office as an `IStorage`) and its
+    /// "Object Descriptor". Word's paste then makes it a ChemDraft object showing the EMF.
     pub(crate) fn write_text_items(
         owner: HWND,
         items: &[ClipboardWriteTextItem],
         jpeg: Option<&[u8]>,
         emf: Option<&[u8]>,
+        embedding: Option<(&[u8], &[u8])>,
     ) -> Result<(), String> {
         // Decode before opening: the clipboard stays locked to other apps while it is open.
         let dib = jpeg.map(jpeg_to_dibv5).transpose()?;
@@ -577,6 +582,15 @@ pub(crate) mod native {
             .map(|item| item.r#type.clone())
             .collect::<Vec<_>>();
 
+        // The embeddable object first, then the pictures. A failed embedding still leaves the
+        // pictures, so the paste falls back to one.
+        if let Some((storage, descriptor)) = embedding {
+            if !set_bytes(registered("Embed Source"), storage)
+                || !set_bytes(registered("Object Descriptor"), descriptor)
+            {
+                eprintln!("ChemDraft: could not put the embeddable drawing on the clipboard");
+            }
+        }
         // Word's plain paste takes `JFIF` over a metafile (it pasted the JPEG while Paste Special
         // offered the EMF), so with the vector picture written the JPEG goes only as `CF_DIBV5`:
         // bitmap-only apps still get pixels, and Word takes the metafile.

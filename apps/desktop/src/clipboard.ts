@@ -28,6 +28,9 @@ export interface ClipboardWriteOptions {
   jpegBytes?: Uint8Array;
   /** The same picture as an Enhanced Metafile (vector), written only on Windows. */
   emfBytes?: Uint8Array;
+  /** The copied drawing as a ChemDraft file; on Windows it is offered as an embeddable object
+   *  (with `emfBytes` as its picture), which Word pastes as an editable ChemDraft object. */
+  embedDocument?: string;
 }
 
 export async function writeClipboardTextItems(
@@ -45,7 +48,8 @@ export async function writeClipboardTextItems(
       await invoke("write_clipboard_text_items", {
         items: normalizedItems,
         ...(options.jpegBytes ? { jpegBytes: Array.from(options.jpegBytes) } : {}),
-        ...(options.emfBytes ? { emfBytes: Array.from(options.emfBytes) } : {})
+        ...(options.emfBytes ? { emfBytes: Array.from(options.emfBytes) } : {}),
+        ...(options.embedDocument ? { embedDocument: options.embedDocument } : {})
       });
       return true;
     } catch {

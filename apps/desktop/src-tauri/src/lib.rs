@@ -15,6 +15,9 @@ mod network_error;
 #[cfg(test)]
 mod network_test_http;
 mod ocsr_engine;
+mod ole_registration;
+#[cfg(windows)]
+mod ole_server;
 mod opsin;
 mod panel_window;
 mod perf_log;
@@ -1260,6 +1263,12 @@ pub fn run() {
             // (prewarm_toolset_tooltip). Building it in setup put a hidden webview ahead of every
             // palette in the queue for window creation.
 
+            // Offer the "ChemDraft Drawing" object to Office (Ctrl+C embeds it; a double-click in
+            // Word opens it here). Registered before launch arguments are handled, so a launch
+            // COM made to edit an object finds the class ready.
+            #[cfg(windows)]
+            ole_server::start(app.handle());
+
             app.state::<PendingOpenDocument>()
                 .setup_completed
                 .store(true, Ordering::SeqCst);
@@ -1348,6 +1357,7 @@ pub fn run() {
             sync_plugin_menu_items,
             read_clipboard_payload,
             write_clipboard_text_items,
+            ole_embedding_saved,
             write_clipboard_image,
             toggle_spin3d_debugger_window,
             toggle_preferences_window,
@@ -4617,19 +4627,28 @@ fn read_clipboard_payload() -> Result<ClipboardReadPayload, String> {
 
 /// Pictures of the copied content, written in the same transaction as the text items (Ctrl+C into
 /// Word); they never replace the text items ChemDraft's own paste reads. `emf` is an Enhanced
-/// Metafile (vector), put on the Windows clipboard only.
+/// Metafile (vector), and `embed_document` the copied drawing as a ChemDraft file, which goes on
+/// the clipboard as an Office-embeddable "ChemDraft Drawing" with the EMF as its picture. Both are
+/// Windows only.
 #[derive(Clone, Copy, Default)]
 struct ClipboardPictures<'a> {
     jpeg: Option<&'a [u8]>,
     #[cfg_attr(not(windows), allow(dead_code))]
     emf: Option<&'a [u8]>,
+    #[cfg_attr(not(windows), allow(dead_code))]
+    embed_document: Option<&'a str>,
 }
 
 impl<'a> ClipboardPictures<'a> {
-    fn from_bytes(jpeg: &'a Option<Vec<u8>>, emf: &'a Option<Vec<u8>>) -> Self {
+    fn from_bytes(
+        jpeg: &'a Option<Vec<u8>>,
+        emf: &'a Option<Vec<u8>>,
+        embed_document: &'a Option<String>,
+    ) -> Self {
         Self {
             jpeg: jpeg.as_deref().filter(|bytes| !bytes.is_empty()),
             emf: emf.as_deref().filter(|bytes| !bytes.is_empty()),
+            embed_document: embed_document.as_deref().filter(|text| !text.is_empty()),
         }
     }
 }
@@ -4641,11 +4660,12 @@ async fn write_clipboard_text_items(
     items: Vec<ClipboardWriteTextItem>,
     jpeg_bytes: Option<Vec<u8>>,
     emf_bytes: Option<Vec<u8>>,
+    embed_document: Option<String>,
 ) -> Result<(), String> {
     write_clipboard_text_items_impl(
         &app,
         normalize_clipboard_write_text_items(items)?,
-        ClipboardPictures::from_bytes(&jpeg_bytes, &emf_bytes),
+        ClipboardPictures::from_bytes(&jpeg_bytes, &emf_bytes, &embed_document),
     )
 }
 
@@ -4656,12 +4676,29 @@ fn write_clipboard_text_items(
     items: Vec<ClipboardWriteTextItem>,
     jpeg_bytes: Option<Vec<u8>>,
     emf_bytes: Option<Vec<u8>>,
+    embed_document: Option<String>,
 ) -> Result<(), String> {
     write_clipboard_text_items_impl(
         &app,
         normalize_clipboard_write_text_items(items)?,
-        ClipboardPictures::from_bytes(&jpeg_bytes, &emf_bytes),
+        ClipboardPictures::from_bytes(&jpeg_bytes, &emf_bytes, &embed_document),
     )
+}
+
+/// A file was saved: if it is the temporary copy of a drawing embedded in an Office document and
+/// opened from there for editing, hand the saved drawing and its picture (`emf_bytes`) back to that
+/// document. Returns whether it was one; always false off Windows.
+#[tauri::command]
+fn ole_embedding_saved(path: String, emf_bytes: Option<Vec<u8>>) -> bool {
+    #[cfg(windows)]
+    {
+        ole_server::embedding_saved(&path, emf_bytes)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (path, emf_bytes);
+        false
+    }
 }
 
 /// Copy As ▸ PNG: put raster image bytes on the system pasteboard as `public.png`.
@@ -5034,11 +5071,19 @@ fn write_clipboard_text_items_impl(
     items: Vec<ClipboardWriteTextItem>,
     pictures: ClipboardPictures<'_>,
 ) -> Result<(), String> {
+    // The drawing as an embeddable object, with the vector picture as what Office shows.
+    let embedding = pictures
+        .emf
+        .zip(pictures.embed_document)
+        .and_then(|(emf, document)| ole_server::clipboard_embedding(document, emf));
     windows_clipboard::native::write_text_items(
         clipboard_owner_window(app),
         &items,
         pictures.jpeg,
         pictures.emf,
+        embedding
+            .as_ref()
+            .map(|(storage, descriptor)| (storage.as_slice(), descriptor.as_slice())),
     )
 }
 

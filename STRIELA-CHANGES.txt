@@ -230,3 +230,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Superscript and subscript digits in atom labels from the x² / x₂ buttons
 (next)  Bond-axis handle: find the hanging piece for any selection of it
 (next)  Copy a vector picture (EMF) to the Windows clipboard with Ctrl+C
+(next)  Embed copied drawings in Office as ChemDraft objects that open here for editing

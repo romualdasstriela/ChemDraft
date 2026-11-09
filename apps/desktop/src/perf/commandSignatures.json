@@ -540,7 +540,7 @@
     "name": "write_clipboard_text_items",
     "async": true,
     "generics": "",
-    "parameters": "app: tauri::AppHandle, items: Vec<ClipboardWriteTextItem>, jpeg_bytes: Option<Vec<u8>>, emf_bytes: Option<Vec<u8>>,",
+    "parameters": "app: tauri::AppHandle, items: Vec<ClipboardWriteTextItem>, jpeg_bytes: Option<Vec<u8>>, emf_bytes: Option<Vec<u8>>, embed_document: Option<String>,",
     "returnType": "Result<(), String>"
   },
   {
@@ -548,8 +548,16 @@
     "name": "write_clipboard_text_items",
     "async": false,
     "generics": "",
-    "parameters": "app: tauri::AppHandle, items: Vec<ClipboardWriteTextItem>, jpeg_bytes: Option<Vec<u8>>, emf_bytes: Option<Vec<u8>>,",
+    "parameters": "app: tauri::AppHandle, items: Vec<ClipboardWriteTextItem>, jpeg_bytes: Option<Vec<u8>>, emf_bytes: Option<Vec<u8>>, embed_document: Option<String>,",
     "returnType": "Result<(), String>"
+  },
+  {
+    "file": "lib.rs",
+    "name": "ole_embedding_saved",
+    "async": false,
+    "generics": "",
+    "parameters": "path: String, emf_bytes: Option<Vec<u8>>",
+    "returnType": "bool"
   },
   {
     "file": "lib.rs",
