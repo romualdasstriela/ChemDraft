@@ -7052,12 +7052,9 @@ export function MainWindow({
     // that take only bitmaps. A failed render still copies.
     const jpegBytes = await renderSelectionClipboardJpeg(documentRef.current, payload).catch(() => undefined);
     const emfBytes = renderSelectionClipboardEmf(documentRef.current, payload);
-    // With the picture, the drawing itself goes along as a ChemDraft file: on Windows, Word pastes
-    // it as a ChemDraft object that a double-click opens here for editing.
-    const embedDocument = emfBytes ? selectionClipboardEmbedDocument(documentRef.current, payload) : undefined;
     const didWrite = await writeClipboardTextItems(
       selectionClipboardWriteItems(payload, jpegBytes !== undefined || emfBytes !== undefined),
-      { jpegBytes, emfBytes, embedDocument }
+      { jpegBytes, emfBytes }
     );
     if (!didWrite) {
       setStatus(mode === "copy" ? "Copy failed: clipboard unavailable" : "Cut canceled: clipboard unavailable");
@@ -9790,14 +9787,6 @@ export function MainWindow({
       const finalPath = ensureChemDraftFileExtension(path);
       await writeNativeTextFile(finalPath, payload.contents);
       finishSave(finalPath);
-      // A drawing opened from Word for editing: saving it updates the object in Word.
-      void notifyEmbeddedDrawingSaved(finalPath, savingDocument).then((updated) => {
-        if (updated && savingTabId === activeDocumentTabIdRef.current) {
-          setStatus("Saved; the drawing in the Office document is updated");
-        }
-      }).catch((error: unknown) => {
-        setStatus(`Saved, but the Office document could not be updated: ${error instanceof Error ? error.message : String(error)}`);
-      });
       return true;
     } catch (error) {
       const message = `Save failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -23275,44 +23264,16 @@ export function renderSelectionClipboardEmf(
   if (!isDesktopRuntime()) {
     return undefined;
   }
-  return documentPictureEmf(selectionClipboardImageDocument(document, payload));
-}
-
-/** A document's objects as an Enhanced Metafile, cropped to them, with no background. */
-export function documentPictureEmf(document: ChemDraftDocument): Uint8Array | undefined {
   try {
-    const svg = exportPhase4Svg(document, { includeWarnings: false, background: "transparent" }).contents;
+    const svg = exportPhase4Svg(selectionClipboardImageDocument(document, payload), {
+      includeWarnings: false,
+      background: "transparent"
+    }).contents;
     const { bytes } = svgToEmf(svg);
     return bytes.length > 0 ? bytes : undefined;
   } catch {
     return undefined;
   }
-}
-
-/** The copied objects as a ChemDraft file, which Ctrl+C embeds in Word as an editable object. */
-export function selectionClipboardEmbedDocument(
-  document: ChemDraftDocument,
-  payload: ChemDraftSelectionClipboardPayload
-): string | undefined {
-  if (!isDesktopRuntime()) {
-    return undefined;
-  }
-  try {
-    return createNativeSavePayload(selectionClipboardImageDocument(document, payload)).contents;
-  } catch {
-    return undefined;
-  }
-}
-
-/** After a save: when the file is the temporary copy of a drawing embedded in Word (or another
- *  Office document), send the saved drawing and its picture back there. Other files: nothing. */
-async function notifyEmbeddedDrawingSaved(path: string, document: ChemDraftDocument): Promise<boolean> {
-  if (!isDesktopRuntime() || !/\.chemdraft$/i.test(path)) {
-    return false;
-  }
-  const { invoke } = await import("@tauri-apps/api/core");
-  const picture = documentPictureEmf(copyAsScopedDocument({ ...document, selection: { ...document.selection, objectIds: [] } }));
-  return invoke<boolean>("ole_embedding_saved", { path, emfBytes: picture ? Array.from(picture) : null });
 }
 
 export function selectionClipboardPayloadKey(payload: ChemDraftSelectionClipboardPayload): string {
