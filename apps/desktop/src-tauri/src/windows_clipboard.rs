@@ -535,8 +535,9 @@ pub(crate) mod native {
     /// Replace the clipboard with `items`, all in one transaction so readers see them together.
     /// `owner` must be a window: with a null owner, EmptyClipboard leaves no owner and every
     /// SetClipboardData after it fails. Pictures of the same content ride along so Ctrl+C pastes
-    /// into Word as an image: an `emf` (vector, `CF_ENHMETAFILE`) and a `jpeg` (as `JFIF` and
-    /// `CF_DIBV5`) for apps that take only bitmaps. ChemDraft's own paste still reads the text items.
+    /// into Word as an image: an `emf` (vector, `CF_ENHMETAFILE`) and a `jpeg` for apps that take
+    /// only bitmaps (as `CF_DIBV5`, plus `JFIF` only when there is no metafile, since Word prefers
+    /// `JFIF` to it). ChemDraft's own paste still reads the text items.
     pub(crate) fn write_text_items(
         owner: HWND,
         items: &[ClipboardWriteTextItem],
@@ -576,10 +577,12 @@ pub(crate) mod native {
             .map(|item| item.r#type.clone())
             .collect::<Vec<_>>();
 
-        // The vector picture goes first: Office takes the first picture format it can use.
+        // Word's plain paste takes `JFIF` over a metafile (it pasted the JPEG while Paste Special
+        // offered the EMF), so with the vector picture written the JPEG goes only as `CF_DIBV5`:
+        // bitmap-only apps still get pixels, and Word takes the metafile.
         let emf_ok = emf.is_some_and(set_enhanced_metafile);
         if let (Some(jpeg), Some(dib)) = (jpeg, dib) {
-            let jfif_ok = set_bytes(registered("JFIF"), jpeg);
+            let jfif_ok = !emf_ok && set_bytes(registered("JFIF"), jpeg);
             let dib_ok = set_bytes(CF_DIBV5, &dib);
             if !jfif_ok && !dib_ok && !emf_ok {
                 return Err("Could not write the picture to the clipboard.".to_string());

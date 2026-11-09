@@ -60,8 +60,9 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - The macOS side (public.jpeg) is written but untested.
    - Windows: Ctrl+C also puts a vector picture (Enhanced Metafile, CF_ENHMETAFILE) on the
      clipboard, so Word, PowerPoint and Excel paste sharp lines and real Arial text at the
-     drawing's real size, with no white box behind it. The JPEG stays for apps that take only
-     bitmaps. The metafile is written from the exported SVG (export-engine svgToEmf); shadows,
+     drawing's real size, with no white box behind it. The JPEG stays, as a plain bitmap
+     (CF_DIBV5) for apps that take only bitmaps; its "JFIF" entry is left out when the vector
+     picture is there, because Word's plain paste took the JPEG over it. The metafile is written from the exported SVG (export-engine svgToEmf); shadows,
      glows and clip paths are left out, gradients become one colour, transparency is blended
      against white, and the white outline behind labels is left out (bonds already stop short
      of labels). macOS keeps the JPEG only.
