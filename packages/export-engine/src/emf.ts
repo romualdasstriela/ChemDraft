@@ -136,6 +136,10 @@ class EmfWriter {
 const EMR = {
   HEADER: 1,
   POLYBEZIERTO: 5,
+  SETWINDOWEXTEX: 9,
+  SETWINDOWORGEX: 10,
+  SETVIEWPORTEXTEX: 11,
+  SETVIEWPORTORGEX: 12,
   EOF: 14,
   SETMAPMODE: 17,
   SETBKMODE: 18,
@@ -568,7 +572,16 @@ export function svgToEmf(svg: string, options: SvgToEmfOptions = {}): SvgToEmfRe
     if (id) byId.set(id, element);
   }
 
-  writer.ints(EMR.SETMAPMODE, [1]); // MM_TEXT: one logical unit = one device unit = 0.01 mm
+  // Logical units are 0.01 mm, mapped onto a 96 dpi reference screen. Word sizes a pasted picture
+  // from its device bounds at screen resolution, not from the millimetre frame, so the device
+  // must be a realistic screen (a 0.01 mm device made Word read a 2 m wide picture).
+  const deviceWidth = Math.max(1, Math.round(widthHmm / 2540 * 96));
+  const deviceHeight = Math.max(1, Math.round(heightHmm / 2540 * 96));
+  writer.ints(EMR.SETMAPMODE, [8]); // MM_ANISOTROPIC
+  writer.ints(EMR.SETWINDOWORGEX, [0, 0]);
+  writer.ints(EMR.SETWINDOWEXTEX, [widthHmm, heightHmm]);
+  writer.ints(EMR.SETVIEWPORTORGEX, [0, 0]);
+  writer.ints(EMR.SETVIEWPORTEXTEX, [deviceWidth, deviceHeight]);
   writer.ints(EMR.SETBKMODE, [1]); // TRANSPARENT
   writer.ints(EMR.SETTEXTALIGN, [24]); // TA_BASELINE | TA_LEFT
   let polyFillMode = 0;
@@ -941,10 +954,10 @@ export function svgToEmf(svg: string, options: SvgToEmfOptions = {}): SvgToEmfRe
   const totalRecords = writer.records + 1;
   view.setUint32(0, EMR.HEADER, true);
   view.setUint32(4, headerLength, true);
-  view.setInt32(8, 0, true); // rclBounds, device units, inclusive
+  view.setInt32(8, 0, true); // rclBounds, reference-device pixels, inclusive
   view.setInt32(12, 0, true);
-  view.setInt32(16, widthHmm - 1, true);
-  view.setInt32(20, heightHmm - 1, true);
+  view.setInt32(16, deviceWidth - 1, true);
+  view.setInt32(20, deviceHeight - 1, true);
   view.setInt32(24, 0, true); // rclFrame, 0.01 mm, inclusive
   view.setInt32(28, 0, true);
   view.setInt32(32, widthHmm - 1, true);
@@ -958,16 +971,16 @@ export function svgToEmf(svg: string, options: SvgToEmfOptions = {}): SvgToEmfRe
   view.setUint32(60, 0, true); // description
   view.setUint32(64, 0, true);
   view.setUint32(68, 0, true); // palette entries
-  // Reference device: one device unit = 0.01 mm.
-  view.setInt32(72, 32000, true);
-  view.setInt32(76, 24000, true);
-  view.setInt32(80, 320, true);
-  view.setInt32(84, 240, true);
+  // Reference device: a 1920 × 1080 screen at 96 dpi (508 × 285.75 mm).
+  view.setInt32(72, 1920, true);
+  view.setInt32(76, 1080, true);
+  view.setInt32(80, 508, true);
+  view.setInt32(84, 286, true);
   view.setUint32(88, 0, true); // pixel format
   view.setUint32(92, 0, true);
   view.setUint32(96, 0, true); // OpenGL
-  view.setInt32(100, 320000, true); // micrometres
-  view.setInt32(104, 240000, true);
+  view.setInt32(100, 508000, true); // micrometres
+  view.setInt32(104, 285750, true);
 
   return { bytes: writer.finish(header), widthHmm, heightHmm, omitted: [...omitted] };
 }

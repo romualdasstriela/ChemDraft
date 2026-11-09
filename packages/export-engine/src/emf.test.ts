@@ -54,6 +54,9 @@ describe("svgToEmf", () => {
     expect(result.widthHmm).toBe(2540);
     expect(result.heightHmm).toBe(1270);
     expect(view.getInt32(32, true)).toBe(2539);
+    // Device bounds are pixels of a 96 dpi screen (Word sizes the picture from them).
+    expect(view.getInt32(16, true)).toBe(95);
+    expect(view.getInt32(20, true)).toBe(47);
     const list = records(result.bytes);
     expect(view.getUint32(48, true)).toBe(result.bytes.length);
     expect(view.getUint32(52, true)).toBe(list.length);
