@@ -858,8 +858,12 @@ impl IOleObject_Impl for Drawing_Impl {
         if dwdrawaspect != DVASPECT_CONTENT || psizel.is_null() {
             return Err(E_FAIL.into());
         }
+        // The drawing's size is its picture's: a container's size is not kept. Word handed back a
+        // size it had converted with the screen's physical resolution, and returning that on the
+        // next GetExtent grew the object by that ratio (1.47x on a 141 dpi screen) at every update.
         // SAFETY: COM passes a valid SIZE pointer.
-        lock(&self.state).extent = unsafe { *psizel };
+        let size = unsafe { *psizel };
+        log(&format!("SetExtent {} x {} (not kept)", size.cx, size.cy));
         Ok(())
     }
 
@@ -868,12 +872,11 @@ impl IOleObject_Impl for Drawing_Impl {
             return Err(E_FAIL.into());
         }
         let state = lock(&self.state);
-        if state.extent.cx > 0 && state.extent.cy > 0 {
-            return Ok(state.extent);
-        }
-        ole_registration::emf_frame_himetric(&state.picture)
+        let size = ole_registration::emf_frame_himetric(&state.picture)
             .map(|(cx, cy)| SIZE { cx, cy })
-            .ok_or_else(|| E_FAIL.into())
+            .or((state.extent.cx > 0 && state.extent.cy > 0).then_some(state.extent));
+        log(&format!("GetExtent: {size:?}"));
+        size.ok_or_else(|| E_FAIL.into())
     }
 
     fn Advise(&self, padvsink: Ref<'_, IAdviseSink>) -> Result<u32> {
