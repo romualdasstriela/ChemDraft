@@ -12,16 +12,15 @@
 //! stores it through `IPersistStorage::Save`, and the data-change notice makes Word refresh the
 //! picture through `IDataObject::GetData`.
 //!
-//! COM calls arrive on the main thread (an STA running the window message loop); everything that
-//! touches COM objects runs there too.
+//! COM calls arrive on COM's threads: the process's main thread is in the multithreaded apartment,
+//! so they come from its thread pool. Object state is shared behind a lock, and calls out to the
+//! container are made from the apartment the object lives in.
 
-use std::cell::RefCell;
 use std::collections::HashSet;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use windows::core::{
     implement, IUnknown, IUnknownImpl, Interface, Ref, Result, BOOL, GUID, HRESULT, PCWSTR, PWSTR,
@@ -79,15 +78,44 @@ static SERVER: OnceLock<Server> = OnceLock::new();
 static EDITING_PATHS: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 static NEXT_EDIT: AtomicU64 = AtomicU64::new(1);
 
-thread_local! {
-    /// Drawings open for editing, by temporary file (main thread only, like every COM object here).
-    static OPEN_DRAWINGS: RefCell<Vec<OpenDrawing>> = const { RefCell::new(Vec::new()) };
-}
+/// Drawings open for editing, by temporary file. COM may call the objects on any of its threads
+/// (the process's main thread is in the multithreaded apartment), so this is shared, not per thread.
+static OPEN_DRAWINGS: Mutex<Vec<OpenDrawing>> = Mutex::new(Vec::new());
 
 struct OpenDrawing {
     path_key: String,
-    state: Rc<RefCell<DrawingState>>,
+    state: Arc<Mutex<DrawingState>>,
     data_object: IDataObject,
+    /// Whether the object lives in the multithreaded apartment (any MTA thread may call into the
+    /// container then); otherwise it lives in the main thread's single-threaded apartment.
+    multithreaded: bool,
+}
+
+// SAFETY: the interface pointers inside are only used from the apartment that got them: from any
+// thread of the multithreaded apartment, or (for a single-threaded one) only on the main thread,
+// where the hand-back is then run.
+unsafe impl Send for OpenDrawing {}
+unsafe impl Send for DrawingState {}
+
+fn lock(state: &Mutex<DrawingState>) -> MutexGuard<'_, DrawingState> {
+    state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn open_drawings() -> MutexGuard<'static, Vec<OpenDrawing>> {
+    OPEN_DRAWINGS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Whether the calling thread is in the multithreaded apartment.
+fn in_multithreaded_apartment() -> bool {
+    use windows::Win32::System::Com::{CoGetApartmentType, APTTYPE, APTTYPEQUALIFIER, APTTYPE_MTA};
+    let mut kind = APTTYPE::default();
+    let mut qualifier = APTTYPEQUALIFIER::default();
+    // SAFETY: plain query of the calling thread's apartment into two locals.
+    unsafe { CoGetApartmentType(&mut kind, &mut qualifier) }.is_ok() && kind == APTTYPE_MTA
 }
 
 fn path_key(path: &Path) -> String {
@@ -142,7 +170,8 @@ pub(crate) fn start(app: &tauri::AppHandle) {
     // SAFETY: COM initialisation on the main thread (already an STA when the windowing layer set it
     // up; then this only adds a reference), and registering a factory object that COM keeps alive.
     unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let joined = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        log(&format!("main thread COM: {joined:?}"));
         let factory: IClassFactory = DrawingFactory.into();
         match CoRegisterClassObject(&clsid, &factory, CLSCTX_LOCAL_SERVER, REGCLS_MULTIPLEUSE) {
             // The registration lives as long as the process; COM revokes it at exit.
@@ -210,9 +239,26 @@ pub(crate) fn embedding_saved(path: &str, emf: Option<Vec<u8>>) -> bool {
     log(&format!(
         "saved {path}: handing it back to the Office document"
     ));
-    // The save arrives inside the webview's message callback, where Windows refuses calls out to
-    // another program (RPC_E_CANTCALLOUT_ININPUTSYNCCALL), so Office never heard of the save. Queue
-    // the hand-back from another thread: it then runs from the event loop, outside any callback.
+    let multithreaded = open_drawings()
+        .iter()
+        .find(|drawing| drawing.path_key == key)
+        .map(|drawing| drawing.multithreaded);
+    let Some(multithreaded) = multithreaded else {
+        log("saved: the drawing is no longer open for editing");
+        return false;
+    };
+    // Call the container from the apartment the object lives in, and never from inside the
+    // webview's message callback this save arrives in (Windows refuses calls out to another program
+    // there). Multithreaded: a fresh thread in that apartment. Single-threaded (the main thread):
+    // queue it on the event loop from another thread, so it runs outside the callback.
+    if multithreaded {
+        std::thread::spawn(move || {
+            // SAFETY: joins this new thread to the multithreaded apartment for the calls below.
+            let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+            hand_back(&key, contents, emf);
+        });
+        return true;
+    }
     let app = server.app.clone();
     let queued =
         std::thread::spawn(move || app.run_on_main_thread(move || hand_back(&key, contents, emf)))
@@ -225,22 +271,19 @@ pub(crate) fn embedding_saved(path: &str, emf: Option<Vec<u8>>) -> bool {
     queued
 }
 
-/// On the main thread: store the saved drawing in its object and tell the container.
+/// In the object's apartment: store the saved drawing in its object and tell the container.
 fn hand_back(key: &str, contents: String, emf: Option<Vec<u8>>) {
     {
-        let found = OPEN_DRAWINGS.with(|drawings| {
-            drawings
-                .borrow()
-                .iter()
-                .find(|drawing| drawing.path_key == key)
-                .map(|drawing| (drawing.state.clone(), drawing.data_object.clone()))
-        });
+        let found = open_drawings()
+            .iter()
+            .find(|drawing| drawing.path_key == key)
+            .map(|drawing| (drawing.state.clone(), drawing.data_object.clone()));
         let Some((state, data_object)) = found else {
             log("hand-back: the drawing is no longer open for editing");
             return;
         };
         {
-            let mut state = state.borrow_mut();
+            let mut state = lock(&state);
             state.document = contents;
             if let Some(emf) = emf.filter(|bytes| !bytes.is_empty()) {
                 if let Some(size) = ole_registration::emf_frame_himetric(&emf) {
@@ -258,9 +301,9 @@ fn hand_back(key: &str, contents: String, emf: Option<Vec<u8>>) {
 }
 
 /// Tell the container the drawing changed: save it, refresh its picture.
-fn notify_saved(state: &Rc<RefCell<DrawingState>>, data_object: &IDataObject) {
+fn notify_saved(state: &Arc<Mutex<DrawingState>>, data_object: &IDataObject) {
     let (site, data_advise, ole_advise) = {
-        let state = state.borrow();
+        let state = lock(state);
         (
             state.client_site.clone(),
             state.data_advise.clone(),
@@ -451,13 +494,13 @@ struct DrawingState {
 
 #[implement(IOleObject, IDataObject, IPersistStorage)]
 struct Drawing {
-    state: Rc<RefCell<DrawingState>>,
+    state: Arc<Mutex<DrawingState>>,
 }
 
 impl Drawing {
     fn new() -> Self {
         Self {
-            state: Rc::new(RefCell::new(DrawingState {
+            state: Arc::new(Mutex::new(DrawingState {
                 client_site: None,
                 ole_advise: None,
                 data_advise: None,
@@ -501,7 +544,7 @@ impl Drawing_Impl {
     fn open_for_editing(&self) -> Result<()> {
         let server = server()?;
         let (document, path) = {
-            let mut state = self.state.borrow_mut();
+            let mut state = lock(&self.state);
             if state.document.trim().is_empty() {
                 return Err(E_FAIL.into());
             }
@@ -533,15 +576,26 @@ impl Drawing_Impl {
             paths.get_or_insert_with(HashSet::new).insert(key.clone());
         }
         let data_object: IDataObject = self.to_interface();
-        OPEN_DRAWINGS.with(|drawings| {
-            let mut drawings = drawings.borrow_mut();
+        let multithreaded = in_multithreaded_apartment();
+        log(&format!(
+            "editing {} ({} apartment)",
+            path.display(),
+            if multithreaded {
+                "multithreaded"
+            } else {
+                "single-threaded"
+            }
+        ));
+        {
+            let mut drawings = open_drawings();
             drawings.retain(|drawing| drawing.path_key != key);
             drawings.push(OpenDrawing {
                 path_key: key,
                 state: self.state.clone(),
                 data_object,
+                multithreaded,
             });
-        });
+        }
 
         let display_name = path
             .file_name()
@@ -556,9 +610,9 @@ impl Drawing_Impl {
             eprintln!("ChemDraft: could not open the embedded drawing: {error}");
             return Err(E_FAIL.into());
         }
-        let site = self.state.borrow().client_site.clone();
+        let site = lock(&self.state).client_site.clone();
         if let Some(site) = site {
-            // SAFETY: COM calls on the main thread; failures only affect the container's display.
+            // SAFETY: COM calls in the object's apartment; failures only affect the container's display.
             unsafe {
                 let _ = site.ShowObject();
                 let _ = site.OnShowWindow(true);
@@ -568,7 +622,7 @@ impl Drawing_Impl {
     }
 
     fn forget_editing(&self) {
-        let path = self.state.borrow().temp_path.clone();
+        let path = lock(&self.state).temp_path.clone();
         if let Some(path) = path {
             let key = path_key(&path);
             if let Ok(mut paths) = EDITING_PATHS.lock() {
@@ -576,16 +630,12 @@ impl Drawing_Impl {
                     paths.remove(&key);
                 }
             }
-            OPEN_DRAWINGS.with(|drawings| {
-                drawings
-                    .borrow_mut()
-                    .retain(|drawing| drawing.path_key != key)
-            });
+            open_drawings().retain(|drawing| drawing.path_key != key);
         }
     }
 
     fn picture_handle(&self) -> Option<HENHMETAFILE> {
-        let state = self.state.borrow();
+        let state = lock(&self.state);
         if state.picture.is_empty() {
             return None;
         }
@@ -609,13 +659,12 @@ fn format_supported(format: &FORMATETC) -> Option<u16> {
 impl IOleObject_Impl for Drawing_Impl {
     fn SetClientSite(&self, pclientsite: Ref<'_, IOleClientSite>) -> Result<()> {
         log(&format!("SetClientSite (site: {})", !pclientsite.is_null()));
-        self.state.borrow_mut().client_site = pclientsite.cloned();
+        lock(&self.state).client_site = pclientsite.cloned();
         Ok(())
     }
 
     fn GetClientSite(&self) -> Result<IOleClientSite> {
-        self.state
-            .borrow()
+        lock(&self.state)
             .client_site
             .clone()
             .ok_or_else(|| E_FAIL.into())
@@ -625,7 +674,7 @@ impl IOleObject_Impl for Drawing_Impl {
         if !szcontainerobj.is_null() {
             // SAFETY: COM passes a NUL-terminated string valid for this call.
             let name = unsafe { szcontainerobj.to_string() }.unwrap_or_default();
-            self.state.borrow_mut().container_object = name;
+            lock(&self.state).container_object = name;
         }
         Ok(())
     }
@@ -633,7 +682,7 @@ impl IOleObject_Impl for Drawing_Impl {
     fn Close(&self, _dwsaveoption: &OLECLOSE) -> Result<()> {
         log("Close");
         let (holder, site) = {
-            let state = self.state.borrow();
+            let state = lock(&self.state);
             (state.ole_advise.clone(), state.client_site.clone())
         };
         // SAFETY: COM calls on the main thread.
@@ -687,8 +736,8 @@ impl IOleObject_Impl for Drawing_Impl {
         if iverb == OLEIVERB_HIDE.0 {
             return Ok(());
         }
-        if self.state.borrow().client_site.is_none() {
-            self.state.borrow_mut().client_site = pactivesite.cloned();
+        if lock(&self.state).client_site.is_none() {
+            lock(&self.state).client_site = pactivesite.cloned();
         }
         // Every other verb (Edit, Open, Show, the primary verb) opens the drawing in ChemDraft.
         self.open_for_editing()
@@ -721,7 +770,7 @@ impl IOleObject_Impl for Drawing_Impl {
             return Err(E_FAIL.into());
         }
         // SAFETY: COM passes a valid SIZE pointer.
-        self.state.borrow_mut().extent = unsafe { *psizel };
+        lock(&self.state).extent = unsafe { *psizel };
         Ok(())
     }
 
@@ -729,7 +778,7 @@ impl IOleObject_Impl for Drawing_Impl {
         if dwdrawaspect != DVASPECT_CONTENT {
             return Err(E_FAIL.into());
         }
-        let state = self.state.borrow();
+        let state = lock(&self.state);
         if state.extent.cx > 0 && state.extent.cy > 0 {
             return Ok(state.extent);
         }
@@ -741,7 +790,7 @@ impl IOleObject_Impl for Drawing_Impl {
     fn Advise(&self, padvsink: Ref<'_, IAdviseSink>) -> Result<u32> {
         log("Advise");
         let holder = {
-            let mut state = self.state.borrow_mut();
+            let mut state = lock(&self.state);
             if state.ole_advise.is_none() {
                 // SAFETY: creates a standard COM advise holder.
                 state.ole_advise = Some(unsafe { CreateOleAdviseHolder()? });
@@ -758,7 +807,7 @@ impl IOleObject_Impl for Drawing_Impl {
     }
 
     fn Unadvise(&self, dwconnection: u32) -> Result<()> {
-        let holder = self.state.borrow().ole_advise.clone();
+        let holder = lock(&self.state).ole_advise.clone();
         // SAFETY: COM call.
         unsafe {
             holder
@@ -768,7 +817,7 @@ impl IOleObject_Impl for Drawing_Impl {
     }
 
     fn EnumAdvise(&self) -> Result<IEnumSTATDATA> {
-        let holder = self.state.borrow().ole_advise.clone();
+        let holder = lock(&self.state).ole_advise.clone();
         // SAFETY: COM call.
         unsafe {
             holder
@@ -845,7 +894,7 @@ impl IDataObject_Impl for Drawing_Impl {
         }
         // SAFETY: COM passes a valid FORMATETC.
         let format = unsafe { &*pformatetc };
-        if format_supported(format).is_some() && !self.state.borrow().picture.is_empty() {
+        if format_supported(format).is_some() && !lock(&self.state).picture.is_empty() {
             S_OK
         } else {
             DV_E_FORMATETC
@@ -886,7 +935,7 @@ impl IDataObject_Impl for Drawing_Impl {
     ) -> Result<u32> {
         log(&format!("DAdvise (advf {advf})"));
         let holder = {
-            let mut state = self.state.borrow_mut();
+            let mut state = lock(&self.state);
             if state.data_advise.is_none() {
                 // SAFETY: creates a standard COM data advise holder.
                 state.data_advise = Some(unsafe { CreateDataAdviseHolder()? });
@@ -904,7 +953,7 @@ impl IDataObject_Impl for Drawing_Impl {
     }
 
     fn DUnadvise(&self, dwconnection: u32) -> Result<()> {
-        let holder = self.state.borrow().data_advise.clone();
+        let holder = lock(&self.state).data_advise.clone();
         // SAFETY: COM call.
         unsafe {
             holder
@@ -914,7 +963,7 @@ impl IDataObject_Impl for Drawing_Impl {
     }
 
     fn EnumDAdvise(&self) -> Result<IEnumSTATDATA> {
-        let holder = self.state.borrow().data_advise.clone();
+        let holder = lock(&self.state).data_advise.clone();
         // SAFETY: COM call.
         unsafe {
             holder
@@ -969,7 +1018,7 @@ impl IPersist_Impl for Drawing_Impl {
 
 impl IPersistStorage_Impl for Drawing_Impl {
     fn IsDirty(&self) -> HRESULT {
-        if self.state.borrow().dirty {
+        if lock(&self.state).dirty {
             S_OK
         } else {
             S_FALSE
@@ -993,7 +1042,7 @@ impl IPersistStorage_Impl for Drawing_Impl {
                 read_stream(storage, PICTURE_STREAM).unwrap_or_default(),
             )
         };
-        let mut state = self.state.borrow_mut();
+        let mut state = lock(&self.state);
         state.document = String::from_utf8_lossy(&document).into_owned();
         if let Some((cx, cy)) = ole_registration::emf_frame_himetric(&picture) {
             state.extent = SIZE { cx, cy };
@@ -1008,7 +1057,7 @@ impl IPersistStorage_Impl for Drawing_Impl {
         let storage = pstgsave.ok()?;
         let server = server()?;
         let (document, picture) = {
-            let state = self.state.borrow();
+            let state = lock(&self.state);
             (state.document.clone(), state.picture.clone())
         };
         // SAFETY: COM writes into the storage the container hands over for this call.
@@ -1021,7 +1070,7 @@ impl IPersistStorage_Impl for Drawing_Impl {
                 &picture,
             )?
         };
-        self.state.borrow_mut().dirty = false;
+        lock(&self.state).dirty = false;
         Ok(())
     }
 
