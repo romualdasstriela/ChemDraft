@@ -38,12 +38,13 @@ use windows::Win32::System::Com::StructuredStorage::{
     IStorage, ReadClassStg, StgCreateDocfileOnILockBytes, WriteClassStg, WriteFmtUserTypeStg,
 };
 use windows::Win32::System::Com::{
-    CoInitializeEx, CoRegisterClassObject, CreateDataAdviseHolder, IAdviseSink, IClassFactory,
-    IClassFactory_Impl, IDataAdviseHolder, IDataObject, IDataObject_Impl, IEnumFORMATETC,
-    IEnumSTATDATA, IMoniker, IPersist_Impl, IStream, CLSCTX_LOCAL_SERVER, COINIT_APARTMENTTHREADED,
-    COINIT_MULTITHREADED, DVASPECT, DVASPECT_CONTENT, FORMATETC, REGCLS_MULTIPLEUSE,
-    STATFLAG_NONAME, STATSTG, STGMEDIUM, STGMEDIUM_0, STGM_CREATE, STGM_READ, STGM_READWRITE,
-    STGM_SHARE_EXCLUSIVE, TYMED_ENHMF, TYMED_MFPICT,
+    CoCreateInstance, CoInitializeEx, CoRegisterClassObject, CreateDataAdviseHolder, IAdviseSink,
+    IClassFactory, IClassFactory_Impl, IDataAdviseHolder, IDataObject, IDataObject_Impl,
+    IEnumFORMATETC, IEnumSTATDATA, IGlobalInterfaceTable, IMoniker, IPersist_Impl, IStream,
+    CLSCTX_INPROC_SERVER, CLSCTX_LOCAL_SERVER, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED,
+    DVASPECT, DVASPECT_CONTENT, FORMATETC, REGCLS_MULTIPLEUSE, STATFLAG_NONAME, STATSTG, STGMEDIUM,
+    STGMEDIUM_0, STGM_CREATE, STGM_READ, STGM_READWRITE, STGM_SHARE_EXCLUSIVE, TYMED_ENHMF,
+    TYMED_MFPICT,
 };
 use windows::Win32::System::DataExchange::{RegisterClipboardFormatW, METAFILEPICT};
 use windows::Win32::System::Memory::{
@@ -52,7 +53,7 @@ use windows::Win32::System::Memory::{
 use windows::Win32::System::Ole::{
     CreateOleAdviseHolder, IEnumOLEVERB, IOleAdviseHolder, IOleClientSite, IOleObject,
     IOleObject_Impl, OleRegEnumFormatEtc, OleRegEnumVerbs, OleRegGetUserType, OLECLOSE,
-    OLEGETMONIKER, OLEIVERB_HIDE, OLEMISC, OLEWHICHMK, USERCLASSTYPE,
+    OLECLOSE_NOSAVE, OLEGETMONIKER, OLEIVERB_HIDE, OLEMISC, OLEWHICHMK, USERCLASSTYPE,
 };
 use windows::Win32::UI::WindowsAndMessaging::MSG;
 
@@ -85,16 +86,13 @@ static OPEN_DRAWINGS: Mutex<Vec<OpenDrawing>> = Mutex::new(Vec::new());
 struct OpenDrawing {
     path_key: String,
     state: Arc<Mutex<DrawingState>>,
-    data_object: IDataObject,
-    /// Whether the object lives in the multithreaded apartment (any MTA thread may call into the
-    /// container then); otherwise it lives in the main thread's single-threaded apartment.
-    multithreaded: bool,
+    /// The object's IOleObject in the global interface table, so another thread can have COM run
+    /// a call on the object's own thread.
+    cookie: u32,
 }
 
-// SAFETY: the interface pointers inside are only used from the apartment that got them: from any
-// thread of the multithreaded apartment, or (for a single-threaded one) only on the main thread,
-// where the hand-back is then run.
-unsafe impl Send for OpenDrawing {}
+// SAFETY: the interface pointers in the state are only called on the object's own thread (in its
+// COM methods); other threads only read and write its plain data, behind the lock.
 unsafe impl Send for DrawingState {}
 
 fn lock(state: &Mutex<DrawingState>) -> MutexGuard<'_, DrawingState> {
@@ -239,67 +237,90 @@ pub(crate) fn embedding_saved(path: &str, emf: Option<Vec<u8>>) -> bool {
     log(&format!(
         "saved {path}: handing it back to the Office document"
     ));
-    let multithreaded = open_drawings()
+    let found = open_drawings()
         .iter()
         .find(|drawing| drawing.path_key == key)
-        .map(|drawing| drawing.multithreaded);
-    let Some(multithreaded) = multithreaded else {
+        .map(|drawing| (drawing.state.clone(), drawing.cookie));
+    let Some((state, cookie)) = found else {
         log("saved: the drawing is no longer open for editing");
         return false;
     };
-    // Call the container from the apartment the object lives in, and never from inside the
-    // webview's message callback this save arrives in (Windows refuses calls out to another program
-    // there). Multithreaded: a fresh thread in that apartment. Single-threaded (the main thread):
-    // queue it on the event loop from another thread, so it runs outside the callback.
-    if multithreaded {
-        std::thread::spawn(move || {
-            // SAFETY: joins this new thread to the multithreaded apartment for the calls below.
-            let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
-            hand_back(&key, contents, emf);
-        });
-        return true;
-    }
-    let app = server.app.clone();
-    let queued =
-        std::thread::spawn(move || app.run_on_main_thread(move || hand_back(&key, contents, emf)))
-            .join()
-            .map(|result| result.is_ok())
-            .unwrap_or(false);
-    if !queued {
-        log("could not queue the hand-back on the main thread");
-    }
-    queued
-}
-
-/// In the object's apartment: store the saved drawing in its object and tell the container.
-fn hand_back(key: &str, contents: String, emf: Option<Vec<u8>>) {
     {
-        let found = open_drawings()
-            .iter()
-            .find(|drawing| drawing.path_key == key)
-            .map(|drawing| (drawing.state.clone(), drawing.data_object.clone()));
-        let Some((state, data_object)) = found else {
-            log("hand-back: the drawing is no longer open for editing");
-            return;
-        };
-        {
-            let mut state = lock(&state);
-            state.document = contents;
-            if let Some(emf) = emf.filter(|bytes| !bytes.is_empty()) {
-                if let Some(size) = ole_registration::emf_frame_himetric(&emf) {
-                    state.extent = SIZE {
-                        cx: size.0,
-                        cy: size.1,
-                    };
-                }
-                state.picture = emf;
+        let mut state = lock(&state);
+        state.document = contents;
+        if let Some(emf) = emf.filter(|bytes| !bytes.is_empty()) {
+            if let Some(size) = ole_registration::emf_frame_himetric(&emf) {
+                state.extent = SIZE {
+                    cx: size.0,
+                    cy: size.1,
+                };
             }
-            state.dirty = true;
+            state.picture = emf;
         }
-        notify_saved(&state, &data_object);
+        state.dirty = true;
+        state.pending_save = true;
     }
+    // The container's interfaces may only be called from the thread that received them (calling
+    // from any other gave RPC_E_WRONG_THREAD), and never from inside the webview's message callback
+    // this save arrives in. So ask the object itself, through COM, to pass the save on: a call on
+    // its marshalled interface runs on its own thread, which then calls the container.
+    let _ = server;
+    std::thread::spawn(move || {
+        call_on_object_thread(cookie, "Update", |object| unsafe { object.Update() })
+    });
+    true
 }
 
+/// A drawing's ChemDraft tab was closed: tell the container the editing ended, so it stops showing
+/// the object as open (hatched) and keeps what was last saved.
+pub(crate) fn embedding_closed(path: &str) -> bool {
+    let key = path_key(Path::new(path));
+    let cookie = open_drawings()
+        .iter()
+        .find(|drawing| drawing.path_key == key)
+        .map(|drawing| drawing.cookie);
+    let Some(cookie) = cookie else {
+        return false;
+    };
+    log(&format!("closed {path}"));
+    std::thread::spawn(move || {
+        call_on_object_thread(cookie, "Close", |object| unsafe {
+            object.Close(OLECLOSE_NOSAVE)
+        })
+    });
+    true
+}
+
+/// The standard Global Interface Table (CLSID_StdGlobalInterfaceTable), which hands out an
+/// interface marshalled for whichever thread asks.
+const STD_GLOBAL_INTERFACE_TABLE: GUID = GUID::from_u128(0x00000323_0000_0000_c000_000000000046);
+
+fn global_interface_table() -> Result<IGlobalInterfaceTable> {
+    // SAFETY: creates the process's free-threaded interface table.
+    unsafe { CoCreateInstance(&STD_GLOBAL_INTERFACE_TABLE, None, CLSCTX_INPROC_SERVER) }
+}
+
+fn revoke_from_global(cookie: u32) {
+    // SAFETY: removes this cookie's entry from the process's interface table.
+    let _ = global_interface_table()
+        .and_then(|table| unsafe { table.RevokeInterfaceFromGlobal(cookie) });
+}
+/// On a fresh thread of the multithreaded apartment: get the object's interface from the global
+/// table (a proxy into the object's own thread) and call `call` on it; COM runs the call there.
+fn call_on_object_thread(cookie: u32, name: &str, call: impl FnOnce(&IOleObject) -> Result<()>) {
+    // SAFETY: joins this thread to the multithreaded apartment and gets an interface marshalled for
+    // it from the global table; `from_raw` takes over the reference it returns.
+    let result = unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        global_interface_table().and_then(|table| {
+            let mut raw = std::ptr::null_mut();
+            table.GetInterfaceFromGlobal(cookie, &IOleObject::IID, &mut raw)?;
+            let object = IOleObject::from_raw(raw);
+            call(&object)
+        })
+    };
+    log(&format!("{name} on the object's thread: {result:?}"));
+}
 /// Tell the container the drawing changed: save it, refresh its picture.
 fn notify_saved(state: &Arc<Mutex<DrawingState>>, data_object: &IDataObject) {
     let (site, data_advise, ole_advise) = {
@@ -310,8 +331,8 @@ fn notify_saved(state: &Arc<Mutex<DrawingState>>, data_object: &IDataObject) {
             state.ole_advise.clone(),
         )
     };
-    // SAFETY: COM calls on the main thread with live interface pointers; the container may call
-    // back into this object (Save, GetData) during them, which only borrows its state briefly.
+    // SAFETY: COM calls on the object's own thread with live interface pointers; the container may
+    // call back into this object (Save, GetData) during them, which only locks its state briefly.
     unsafe {
         match site {
             Some(site) => log(&format!("SaveObject: {:?}", site.SaveObject())),
@@ -490,6 +511,8 @@ struct DrawingState {
     container_object: String,
     temp_path: Option<PathBuf>,
     dirty: bool,
+    /// A save from ChemDraft waiting to be passed to the container (by `Update`, on this thread).
+    pending_save: bool,
 }
 
 #[implement(IOleObject, IDataObject, IPersistStorage)]
@@ -510,6 +533,7 @@ impl Drawing {
                 container_object: String::new(),
                 temp_path: None,
                 dirty: false,
+                pending_save: false,
             })),
         }
     }
@@ -575,12 +599,15 @@ impl Drawing_Impl {
         if let Ok(mut paths) = EDITING_PATHS.lock() {
             paths.get_or_insert_with(HashSet::new).insert(key.clone());
         }
-        let data_object: IDataObject = self.to_interface();
-        let multithreaded = in_multithreaded_apartment();
+        let object: IOleObject = self.to_interface();
+        // SAFETY: registers this object's interface in the process's free-threaded table.
+        let cookie = global_interface_table().and_then(|table| unsafe {
+            table.RegisterInterfaceInGlobal(&object, &IOleObject::IID)
+        })?;
         log(&format!(
             "editing {} ({} apartment)",
             path.display(),
-            if multithreaded {
+            if in_multithreaded_apartment() {
                 "multithreaded"
             } else {
                 "single-threaded"
@@ -588,12 +615,14 @@ impl Drawing_Impl {
         ));
         {
             let mut drawings = open_drawings();
+            for old in drawings.iter().filter(|drawing| drawing.path_key == key) {
+                revoke_from_global(old.cookie);
+            }
             drawings.retain(|drawing| drawing.path_key != key);
             drawings.push(OpenDrawing {
                 path_key: key,
                 state: self.state.clone(),
-                data_object,
-                multithreaded,
+                cookie,
             });
         }
 
@@ -630,7 +659,13 @@ impl Drawing_Impl {
                     paths.remove(&key);
                 }
             }
-            open_drawings().retain(|drawing| drawing.path_key != key);
+            open_drawings().retain(|drawing| {
+                let keep = drawing.path_key != key;
+                if !keep {
+                    revoke_from_global(drawing.cookie);
+                }
+                keep
+            });
         }
     }
 
@@ -749,6 +784,13 @@ impl IOleObject_Impl for Drawing_Impl {
     }
 
     fn Update(&self) -> Result<()> {
+        // A save from ChemDraft, passed here through COM so the container is called from the
+        // thread that holds its interfaces.
+        let pending = std::mem::take(&mut lock(&self.state).pending_save);
+        if pending {
+            let data_object: IDataObject = self.to_interface();
+            notify_saved(&self.state, &data_object);
+        }
         Ok(())
     }
 

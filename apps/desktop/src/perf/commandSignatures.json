@@ -553,6 +553,14 @@
   },
   {
     "file": "lib.rs",
+    "name": "ole_embedding_closed",
+    "async": false,
+    "generics": "",
+    "parameters": "path: String",
+    "returnType": "bool"
+  },
+  {
+    "file": "lib.rs",
     "name": "ole_embedding_saved",
     "async": false,
     "generics": "",

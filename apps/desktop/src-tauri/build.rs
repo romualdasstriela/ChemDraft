@@ -77,6 +77,7 @@ fn main() {
             "read_clipboard_payload",
             "write_clipboard_text_items",
             "ole_embedding_saved",
+            "ole_embedding_closed",
             "write_clipboard_image",
             "open_tool_palette",
             "close_tool_palette",

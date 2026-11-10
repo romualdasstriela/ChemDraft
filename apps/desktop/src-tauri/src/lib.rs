@@ -1358,6 +1358,7 @@ pub fn run() {
             read_clipboard_payload,
             write_clipboard_text_items,
             ole_embedding_saved,
+            ole_embedding_closed,
             write_clipboard_image,
             toggle_spin3d_debugger_window,
             toggle_preferences_window,
@@ -4685,6 +4686,20 @@ fn write_clipboard_text_items(
     )
 }
 
+/// A tab closed: if it held the temporary copy of a drawing opened from an Office document, tell
+/// that document the editing ended. Returns whether it was one; always false off Windows.
+#[tauri::command]
+fn ole_embedding_closed(path: String) -> bool {
+    #[cfg(windows)]
+    {
+        ole_server::embedding_closed(&path)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        false
+    }
+}
 /// A file was saved: if it is the temporary copy of a drawing embedded in an Office document and
 /// opened from there for editing, hand the saved drawing and its picture (`emf_bytes`) back to that
 /// document. Returns whether it was one; always false off Windows.

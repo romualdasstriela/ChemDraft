@@ -1655,7 +1655,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.10.10.30-opus";
+const CURRENT_BUILD_STAMP = "11.10.11.30-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -8800,6 +8800,11 @@ export function MainWindow({
     let tabs = documentTabsRef.current;
     const index = tabs.findIndex((tab) => tab.id === id);
     if (index < 0) return;
+    // A drawing opened from Word for editing: closing its tab ends the editing there.
+    const closingPath = id === activeDocumentTabIdRef.current
+      ? fileStateRef.current.path
+      : documentTabSnapshotsRef.current.get(id)?.file.path;
+    if (closingPath) void notifyEmbeddedDrawingClosed(closingPath).catch(() => undefined);
     pluginRuntimeRef.current?.closeProposalDocumentTab(id, tabs[index]!.title);
     void dialogCoordinatorRef.current?.closeTab(id);
     exportGrantsRef.current.delete(id);
@@ -23328,6 +23333,16 @@ async function notifyEmbeddedDrawingSaved(path: string, document: ChemDraftDocum
   const { invoke } = await import("@tauri-apps/api/core");
   const picture = documentPictureEmf(copyAsScopedDocument({ ...document, selection: { ...document.selection, objectIds: [] } }));
   return invoke<boolean>("ole_embedding_saved", { path, emfBytes: picture ? Array.from(picture) : null });
+}
+
+/** A tab closed: when it held a drawing opened from an Office document, tell that document the
+ *  editing ended (it stops showing the object as open). Other files: nothing. */
+async function notifyEmbeddedDrawingClosed(path: string): Promise<boolean> {
+  if (!isDesktopRuntime() || !/\.chemdraft$/i.test(path)) {
+    return false;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<boolean>("ole_embedding_closed", { path });
 }
 
 export function selectionClipboardPayloadKey(payload: ChemDraftSelectionClipboardPayload): string {
