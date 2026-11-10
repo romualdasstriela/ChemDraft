@@ -1655,7 +1655,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.09.19.45-opus";
+const CURRENT_BUILD_STAMP = "11.10.09.30-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -23289,7 +23289,9 @@ export function documentPictureEmf(document: ChemDraftDocument): Uint8Array | un
   }
 }
 
-/** The copied objects as a ChemDraft file, which Ctrl+C embeds in Word as an editable object. */
+/** The copied objects as a ChemDraft file, which Ctrl+C embeds in Word as an editable object. It
+ *  keeps the whole page (size, margins, style) with the objects where they were drawn, so editing
+ *  it from Word has room for bigger changes; the picture Word shows stays cropped to the drawing. */
 export function selectionClipboardEmbedDocument(
   document: ChemDraftDocument,
   payload: ChemDraftSelectionClipboardPayload
@@ -23298,10 +23300,23 @@ export function selectionClipboardEmbedDocument(
     return undefined;
   }
   try {
-    return createNativeSavePayload(selectionClipboardImageDocument(document, payload)).contents;
+    return createNativeSavePayload(selectionClipboardPageDocument(document, payload)).contents;
   } catch {
     return undefined;
   }
+}
+
+/** The document's first page holding only the copied objects, uncropped and with nothing selected. */
+export function selectionClipboardPageDocument(
+  document: ChemDraftDocument,
+  payload: ChemDraftSelectionClipboardPayload
+): ChemDraftDocument {
+  const [page] = document.pages;
+  return {
+    ...document,
+    pages: page ? [{ ...page, objects: [...payload.objects] }] : document.pages,
+    selection: { ...document.selection, objectIds: [] }
+  };
 }
 
 /** After a save: when the file is the temporary copy of a drawing embedded in Word (or another

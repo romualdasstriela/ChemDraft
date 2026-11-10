@@ -146,10 +146,8 @@ pub(crate) fn start(app: &tauri::AppHandle) {
         let factory: IClassFactory = DrawingFactory.into();
         match CoRegisterClassObject(&clsid, &factory, CLSCTX_LOCAL_SERVER, REGCLS_MULTIPLEUSE) {
             // The registration lives as long as the process; COM revokes it at exit.
-            Ok(_cookie) => {}
-            Err(error) => {
-                eprintln!("ChemDraft: could not offer the embedding class to COM: {error}")
-            }
+            Ok(_cookie) => log("class offered to COM"),
+            Err(error) => log(&format!("could not offer the class to COM: {error}")),
         }
     }
 }
@@ -176,6 +174,10 @@ pub(crate) fn clipboard_embedding(document: &str, emf: &[u8]) -> Option<(Vec<u8>
         server.class.user_type,
         server.class.short_name,
     );
+    log(&format!(
+        "clipboard embedding: {} bytes of storage",
+        storage.len()
+    ));
     Some((storage, descriptor))
 }
 
@@ -191,6 +193,11 @@ pub(crate) fn embedding_saved(path: &str, emf: Option<Vec<u8>>) -> bool {
         return false;
     };
     if !editing {
+        if path.contains("ChemDraft Office drawings") {
+            log(&format!(
+                "saved {path}: not a drawing open for editing (key {key})"
+            ));
+        }
         return false;
     }
     let contents = match std::fs::read(path) {
@@ -200,7 +207,27 @@ pub(crate) fn embedding_saved(path: &str, emf: Option<Vec<u8>>) -> bool {
             return false;
         }
     };
-    let result = server.app.run_on_main_thread(move || {
+    log(&format!(
+        "saved {path}: handing it back to the Office document"
+    ));
+    // The save arrives inside the webview's message callback, where Windows refuses calls out to
+    // another program (RPC_E_CANTCALLOUT_ININPUTSYNCCALL), so Office never heard of the save. Queue
+    // the hand-back from another thread: it then runs from the event loop, outside any callback.
+    let app = server.app.clone();
+    let queued =
+        std::thread::spawn(move || app.run_on_main_thread(move || hand_back(&key, contents, emf)))
+            .join()
+            .map(|result| result.is_ok())
+            .unwrap_or(false);
+    if !queued {
+        log("could not queue the hand-back on the main thread");
+    }
+    queued
+}
+
+/// On the main thread: store the saved drawing in its object and tell the container.
+fn hand_back(key: &str, contents: String, emf: Option<Vec<u8>>) {
+    {
         let found = OPEN_DRAWINGS.with(|drawings| {
             drawings
                 .borrow()
@@ -209,6 +236,7 @@ pub(crate) fn embedding_saved(path: &str, emf: Option<Vec<u8>>) -> bool {
                 .map(|drawing| (drawing.state.clone(), drawing.data_object.clone()))
         });
         let Some((state, data_object)) = found else {
+            log("hand-back: the drawing is no longer open for editing");
             return;
         };
         {
@@ -226,8 +254,7 @@ pub(crate) fn embedding_saved(path: &str, emf: Option<Vec<u8>>) -> bool {
             state.dirty = true;
         }
         notify_saved(&state, &data_object);
-    });
-    result.is_ok()
+    }
 }
 
 /// Tell the container the drawing changed: save it, refresh its picture.
@@ -243,17 +270,45 @@ fn notify_saved(state: &Rc<RefCell<DrawingState>>, data_object: &IDataObject) {
     // SAFETY: COM calls on the main thread with live interface pointers; the container may call
     // back into this object (Save, GetData) during them, which only borrows its state briefly.
     unsafe {
-        if let Some(site) = site {
-            if let Err(error) = site.SaveObject() {
-                eprintln!("ChemDraft: the Office document did not take the drawing: {error}");
-            }
+        match site {
+            Some(site) => log(&format!("SaveObject: {:?}", site.SaveObject())),
+            None => log("hand-back: no client site to save through"),
         }
-        if let Some(holder) = data_advise {
-            let _ = holder.SendOnDataChange(data_object, None, 0);
+        match data_advise {
+            Some(holder) => log(&format!(
+                "SendOnDataChange: {:?}",
+                holder.SendOnDataChange(data_object, None, 0)
+            )),
+            None => log("hand-back: nobody asked for data changes"),
         }
         if let Some(holder) = ole_advise {
-            let _ = holder.SendOnSave();
+            log(&format!("SendOnSave: {:?}", holder.SendOnSave()));
         }
+    }
+}
+
+/// Append one line to `%TEMP%\ChemDraft Office drawings\ole-log.txt`, the trace of the embedding
+/// round trip (a GUI app has no console). The log restarts once it passes 256 KB.
+fn log(message: &str) {
+    use std::io::Write;
+    let folder = std::env::temp_dir().join("ChemDraft Office drawings");
+    if std::fs::create_dir_all(&folder).is_err() {
+        return;
+    }
+    let path = folder.join("ole-log.txt");
+    let restart = std::fs::metadata(&path).is_ok_and(|meta| meta.len() > 256 * 1024);
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(!restart)
+        .truncate(restart)
+        .open(&path);
+    if let Ok(mut file) = file {
+        let seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs_f64())
+            .unwrap_or(0.0);
+        let _ = writeln!(file, "{seconds:.3} [{}] {message}", std::process::id());
     }
 }
 
@@ -553,6 +608,7 @@ fn format_supported(format: &FORMATETC) -> Option<u16> {
 
 impl IOleObject_Impl for Drawing_Impl {
     fn SetClientSite(&self, pclientsite: Ref<'_, IOleClientSite>) -> Result<()> {
+        log(&format!("SetClientSite (site: {})", !pclientsite.is_null()));
         self.state.borrow_mut().client_site = pclientsite.cloned();
         Ok(())
     }
@@ -575,6 +631,7 @@ impl IOleObject_Impl for Drawing_Impl {
     }
 
     fn Close(&self, _dwsaveoption: &OLECLOSE) -> Result<()> {
+        log("Close");
         let (holder, site) = {
             let state = self.state.borrow();
             (state.ole_advise.clone(), state.client_site.clone())
@@ -626,6 +683,7 @@ impl IOleObject_Impl for Drawing_Impl {
         _hwndparent: HWND,
         _lprcposrect: *const RECT,
     ) -> Result<()> {
+        log(&format!("DoVerb {iverb}"));
         if iverb == OLEIVERB_HIDE.0 {
             return Ok(());
         }
@@ -681,6 +739,7 @@ impl IOleObject_Impl for Drawing_Impl {
     }
 
     fn Advise(&self, padvsink: Ref<'_, IAdviseSink>) -> Result<u32> {
+        log("Advise");
         let holder = {
             let mut state = self.state.borrow_mut();
             if state.ole_advise.is_none() {
@@ -734,6 +793,10 @@ impl IDataObject_Impl for Drawing_Impl {
         }
         // SAFETY: COM passes a valid FORMATETC.
         let format = unsafe { &*pformatetcin };
+        log(&format!(
+            "GetData format {} tymed {}",
+            format.cfFormat, format.tymed
+        ));
         match format_supported(format) {
             Some(CF_ENHMETAFILE) => {
                 let handle = self
@@ -821,6 +884,7 @@ impl IDataObject_Impl for Drawing_Impl {
         advf: u32,
         padvsink: Ref<'_, IAdviseSink>,
     ) -> Result<u32> {
+        log(&format!("DAdvise (advf {advf})"));
         let holder = {
             let mut state = self.state.borrow_mut();
             if state.data_advise.is_none() {
@@ -917,6 +981,7 @@ impl IPersistStorage_Impl for Drawing_Impl {
     }
 
     fn Load(&self, pstg: Ref<'_, IStorage>) -> Result<()> {
+        log("Load");
         let storage = pstg.ok()?;
         // SAFETY: COM reads of the container's storage for this object.
         let (document, picture) = unsafe {
@@ -939,6 +1004,7 @@ impl IPersistStorage_Impl for Drawing_Impl {
     }
 
     fn Save(&self, pstgsave: Ref<'_, IStorage>, _fsameasload: BOOL) -> Result<()> {
+        log("Save");
         let storage = pstgsave.ok()?;
         let server = server()?;
         let (document, picture) = {
