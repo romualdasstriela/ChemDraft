@@ -725,14 +725,41 @@ impl Drawing_Impl {
         Ok(())
     }
 
+    /// The picture for the container, described against this computer's screen (see
+    /// `emf_with_reference_device`), so Word keeps it at its real size.
     fn picture_handle(&self) -> Option<HENHMETAFILE> {
-        let state = lock(&self.state);
-        if state.picture.is_empty() {
+        let picture = lock(&self.state).picture.clone();
+        if picture.is_empty() {
             return None;
         }
+        let bytes = screen_metrics()
+            .and_then(|(px, mm)| ole_registration::emf_with_reference_device(&picture, px, mm))
+            .unwrap_or(picture);
         // SAFETY: the bytes are copied into a new metafile handle the caller owns.
-        let handle = unsafe { SetEnhMetaFileBits(&state.picture) };
+        let handle = unsafe { SetEnhMetaFileBits(&bytes) };
         (!handle.is_invalid()).then_some(handle)
+    }
+}
+
+/// The screen's size in pixels and millimetres, as GDI reports it.
+fn screen_metrics() -> Option<((i32, i32), (i32, i32))> {
+    use windows::Win32::Graphics::Gdi::{GetDeviceCaps, HORZRES, HORZSIZE, VERTRES, VERTSIZE};
+    // SAFETY: reads four device capabilities of the screen DC, released right after.
+    unsafe {
+        let screen = GetDC(None);
+        if screen.is_invalid() {
+            return None;
+        }
+        let px = (
+            GetDeviceCaps(Some(screen), HORZRES),
+            GetDeviceCaps(Some(screen), VERTRES),
+        );
+        let mm = (
+            GetDeviceCaps(Some(screen), HORZSIZE),
+            GetDeviceCaps(Some(screen), VERTSIZE),
+        );
+        ReleaseDC(None, screen);
+        (px.0 > 0 && px.1 > 0 && mm.0 > 0 && mm.1 > 0).then_some((px, mm))
     }
 }
 
