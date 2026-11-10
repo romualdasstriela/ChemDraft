@@ -9,17 +9,20 @@
 //! run its primary verb. The verb writes the drawing to a temporary `.chemdraft` file and opens it
 //! like any double-clicked file. Saving that file in ChemDraft (`embedding_saved`) hands the new
 //! drawing and picture back: the object asks Word to save it (`IOleClientSite::SaveObject`), Word
-//! stores it through `IPersistStorage::Save`, and the data-change notice makes Word refresh the
-//! picture through `IDataObject::GetData`.
+//! stores it through `IPersistStorage::Save`, and the data-change notice gives Word the new
+//! picture. Closing the drawing's tab (`embedding_closed`) tells Word the editing ended.
 //!
-//! COM calls arrive on COM's threads: the process's main thread is in the multithreaded apartment,
-//! so they come from its thread pool. Object state is shared behind a lock, and calls out to the
-//! container are made from the apartment the object lives in.
+//! Threads: COM interfaces Word hands us (the client site, the advise sinks) may only be called
+//! from the apartment that received them, and our objects (agile, as `#[implement]` makes them)
+//! may be called on any thread. So every interface from Word is parked in the global interface
+//! table as it arrives, and every call to Word takes a fresh copy from the table, which COM makes
+//! valid for the calling thread. Calls to Word are made from a worker thread in the multithreaded
+//! apartment, never from inside the webview's message callback a save or a tab close arrives in.
 
 use std::collections::HashSet;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use windows::core::{
@@ -38,11 +41,11 @@ use windows::Win32::System::Com::StructuredStorage::{
     IStorage, ReadClassStg, StgCreateDocfileOnILockBytes, WriteClassStg, WriteFmtUserTypeStg,
 };
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoRegisterClassObject, CreateDataAdviseHolder, IAdviseSink,
-    IClassFactory, IClassFactory_Impl, IDataAdviseHolder, IDataObject, IDataObject_Impl,
-    IEnumFORMATETC, IEnumSTATDATA, IGlobalInterfaceTable, IMoniker, IPersist_Impl, IStream,
-    CLSCTX_INPROC_SERVER, CLSCTX_LOCAL_SERVER, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED,
-    DVASPECT, DVASPECT_CONTENT, FORMATETC, REGCLS_MULTIPLEUSE, STATFLAG_NONAME, STATSTG, STGMEDIUM,
+    CoCreateInstance, CoInitializeEx, CoRegisterClassObject, IAdviseSink, IClassFactory,
+    IClassFactory_Impl, IDataObject, IDataObject_Impl, IEnumFORMATETC, IEnumSTATDATA,
+    IGlobalInterfaceTable, IMoniker, IPersist_Impl, IStream, ADVF_NODATA, CLSCTX_INPROC_SERVER,
+    CLSCTX_LOCAL_SERVER, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED, DVASPECT,
+    DVASPECT_CONTENT, FORMATETC, REGCLS_MULTIPLEUSE, STATFLAG_NONAME, STATSTG, STGMEDIUM,
     STGMEDIUM_0, STGM_CREATE, STGM_READ, STGM_READWRITE, STGM_SHARE_EXCLUSIVE, TYMED_ENHMF,
     TYMED_MFPICT,
 };
@@ -51,9 +54,9 @@ use windows::Win32::System::Memory::{
     GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE,
 };
 use windows::Win32::System::Ole::{
-    CreateOleAdviseHolder, IEnumOLEVERB, IOleAdviseHolder, IOleClientSite, IOleObject,
-    IOleObject_Impl, OleRegEnumFormatEtc, OleRegEnumVerbs, OleRegGetUserType, OLECLOSE,
-    OLECLOSE_NOSAVE, OLEGETMONIKER, OLEIVERB_HIDE, OLEMISC, OLEWHICHMK, USERCLASSTYPE,
+    IEnumOLEVERB, IOleClientSite, IOleObject, IOleObject_Impl, OleRegEnumFormatEtc,
+    OleRegEnumVerbs, OleRegGetUserType, ReleaseStgMedium, OLECLOSE, OLEGETMONIKER, OLEIVERB_HIDE,
+    OLEMISC, OLEWHICHMK, USERCLASSTYPE,
 };
 use windows::Win32::UI::WindowsAndMessaging::MSG;
 
@@ -67,6 +70,8 @@ const PICTURE_STREAM: &str = "ChemDraftPicture";
 const CF_ENHMETAFILE: u16 = 14;
 const CF_METAFILEPICT: u16 = 3;
 const MM_ANISOTROPIC: i32 = 8;
+/// The standard Global Interface Table (CLSID_StdGlobalInterfaceTable).
+const STD_GLOBAL_INTERFACE_TABLE: GUID = GUID::from_u128(0x00000323_0000_0000_c000_000000000046);
 
 struct Server {
     app: tauri::AppHandle,
@@ -75,45 +80,20 @@ struct Server {
 }
 
 static SERVER: OnceLock<Server> = OnceLock::new();
-/// Temporary files of drawings open for editing (lower-cased paths), readable from any thread.
+/// Temporary files of drawings open for editing (lower-cased paths).
 static EDITING_PATHS: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 static NEXT_EDIT: AtomicU64 = AtomicU64::new(1);
+/// Connection numbers handed out by Advise and DAdvise.
+static NEXT_CONNECTION: AtomicU32 = AtomicU32::new(1);
 
-/// Drawings open for editing, by temporary file. COM may call the objects on any of its threads
-/// (the process's main thread is in the multithreaded apartment), so this is shared, not per thread.
+/// Drawings open for editing, by temporary file, shared by every thread.
 static OPEN_DRAWINGS: Mutex<Vec<OpenDrawing>> = Mutex::new(Vec::new());
 
 struct OpenDrawing {
     path_key: String,
     state: Arc<Mutex<DrawingState>>,
-    /// The object's IOleObject in the global interface table, so another thread can have COM run
-    /// a call on the object's own thread.
-    cookie: u32,
-}
-
-// SAFETY: the interface pointers in the state are only called on the object's own thread (in its
-// COM methods); other threads only read and write its plain data, behind the lock.
-unsafe impl Send for DrawingState {}
-
-fn lock(state: &Mutex<DrawingState>) -> MutexGuard<'_, DrawingState> {
-    state
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-fn open_drawings() -> MutexGuard<'static, Vec<OpenDrawing>> {
-    OPEN_DRAWINGS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-/// Whether the calling thread is in the multithreaded apartment.
-fn in_multithreaded_apartment() -> bool {
-    use windows::Win32::System::Com::{CoGetApartmentType, APTTYPE, APTTYPEQUALIFIER, APTTYPE_MTA};
-    let mut kind = APTTYPE::default();
-    let mut qualifier = APTTYPEQUALIFIER::default();
-    // SAFETY: plain query of the calling thread's apartment into two locals.
-    unsafe { CoGetApartmentType(&mut kind, &mut qualifier) }.is_ok() && kind == APTTYPE_MTA
+    /// The object's IDataObject in the global interface table (data-change notices carry it).
+    data_cookie: u32,
 }
 
 fn path_key(path: &Path) -> String {
@@ -134,12 +114,70 @@ fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
+fn lock(state: &Mutex<DrawingState>) -> MutexGuard<'_, DrawingState> {
+    state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn open_drawings() -> MutexGuard<'static, Vec<OpenDrawing>> {
+    OPEN_DRAWINGS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+// ---------------------------------------------------------------------------------------------
+// The global interface table
+
+fn global_interface_table() -> Result<IGlobalInterfaceTable> {
+    // SAFETY: creates (or returns) the process's free-threaded interface table.
+    unsafe { CoCreateInstance(&STD_GLOBAL_INTERFACE_TABLE, None, CLSCTX_INPROC_SERVER) }
+}
+
+/// Park `interface` in the global table; the cookie gets it back on any thread.
+fn park<T: Interface>(interface: &T) -> Result<u32> {
+    let unknown: IUnknown = interface.cast()?;
+    // SAFETY: registers a live interface pointer in the process's table, under its own IID.
+    global_interface_table()
+        .and_then(|table| unsafe { table.RegisterInterfaceInGlobal(&unknown, &T::IID) })
+}
+
+/// The parked interface, marshalled for the calling thread.
+fn fetch<T: Interface>(cookie: u32) -> Result<T> {
+    // SAFETY: the table AddRefs the interface it returns; `from_raw` takes over that reference.
+    unsafe {
+        let table = global_interface_table()?;
+        let mut raw = std::ptr::null_mut();
+        table.GetInterfaceFromGlobal(cookie, &T::IID, &mut raw)?;
+        Ok(T::from_raw(raw))
+    }
+}
+
+fn unpark(cookie: u32) {
+    // SAFETY: removes this cookie's entry from the process's table.
+    let _ = global_interface_table()
+        .and_then(|table| unsafe { table.RevokeInterfaceFromGlobal(cookie) });
+}
+
+/// Run `work` on a fresh thread of the multithreaded apartment (where interfaces fetched from the
+/// table are valid, and which is never inside a webview callback).
+fn on_worker_thread(work: impl FnOnce() + Send + 'static) {
+    std::thread::spawn(move || {
+        // SAFETY: joins this new thread to the multithreaded apartment.
+        let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+        work();
+    });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Start-up and the clipboard
+
 /// Register the class for this user and offer its factory to COM. Call once, on the main thread,
 /// during setup. Failures are logged: copying and pasting pictures still works without them.
 pub(crate) fn start(app: &tauri::AppHandle) {
     let class = ole_registration::ole_class_for_identifier(&app.config().identifier);
     let Some(clsid) = guid_from_class(&class) else {
-        eprintln!("ChemDraft: invalid embedding class id {}", class.class_id);
+        log(&format!("invalid embedding class id {}", class.class_id));
         return;
     };
     match std::env::current_exe() {
@@ -147,13 +185,15 @@ pub(crate) fn start(app: &tauri::AppHandle) {
             let entries = ole_registration::registry_entries(&class, &exe.to_string_lossy());
             let failed = ole_registration::native::write_registry_entries(&entries);
             if !failed.is_empty() {
-                eprintln!(
-                    "ChemDraft: could not register the embedding class: {}",
+                log(&format!(
+                    "could not register the embedding class: {}",
                     failed.join(", ")
-                );
+                ));
             }
         }
-        Err(error) => eprintln!("ChemDraft: no executable path for the embedding class: {error}"),
+        Err(error) => log(&format!(
+            "no executable path for the embedding class: {error}"
+        )),
     }
     if SERVER
         .set(Server {
@@ -165,8 +205,8 @@ pub(crate) fn start(app: &tauri::AppHandle) {
     {
         return;
     }
-    // SAFETY: COM initialisation on the main thread (already an STA when the windowing layer set it
-    // up; then this only adds a reference), and registering a factory object that COM keeps alive.
+    // SAFETY: COM initialisation on the main thread (already done by the windowing layer, so this
+    // only adds a reference), and registering a factory object that COM keeps alive.
     unsafe {
         let joined = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         log(&format!("main thread COM: {joined:?}"));
@@ -189,7 +229,7 @@ pub(crate) fn clipboard_embedding(document: &str, emf: &[u8]) -> Option<(Vec<u8>
     let storage = match storage_bytes(&server.clsid, &server.class, document, emf) {
         Ok(bytes) => bytes,
         Err(error) => {
-            eprintln!("ChemDraft: could not build the embedded drawing: {error}");
+            log(&format!("could not build the embedded drawing: {error}"));
             return None;
         }
     };
@@ -208,147 +248,172 @@ pub(crate) fn clipboard_embedding(document: &str, emf: &[u8]) -> Option<(Vec<u8>
     Some((storage, descriptor))
 }
 
-/// A saved file: if it is the temporary copy of a drawing open for editing, hand the drawing and
-/// its picture back to the Office document. Returns whether it was one.
-pub(crate) fn embedding_saved(path: &str, emf: Option<Vec<u8>>) -> bool {
+// ---------------------------------------------------------------------------------------------
+// Saves and closes from ChemDraft
+
+fn open_drawing(path: &str) -> Option<(Arc<Mutex<DrawingState>>, u32)> {
     let key = path_key(Path::new(path));
     let editing = EDITING_PATHS
         .lock()
         .map(|paths| paths.as_ref().is_some_and(|paths| paths.contains(&key)))
         .unwrap_or(false);
-    let Some(server) = SERVER.get() else {
-        return false;
-    };
     if !editing {
+        return None;
+    }
+    open_drawings()
+        .iter()
+        .find(|drawing| drawing.path_key == key)
+        .map(|drawing| (drawing.state.clone(), drawing.data_cookie))
+}
+
+/// A saved file: if it is the temporary copy of a drawing open for editing, hand the drawing and
+/// its picture back to the Office document. Returns whether it was one.
+pub(crate) fn embedding_saved(path: &str, emf: Option<Vec<u8>>) -> bool {
+    let Some((state, data_cookie)) = open_drawing(path) else {
         if path.contains("ChemDraft Office drawings") {
-            log(&format!(
-                "saved {path}: not a drawing open for editing (key {key})"
-            ));
+            log(&format!("saved {path}: not a drawing open for editing"));
         }
         return false;
-    }
+    };
     let contents = match std::fs::read(path) {
         Ok(bytes) => crate::decode_document_text(&bytes),
         Err(error) => {
-            eprintln!("ChemDraft: could not read the saved embedded drawing: {error}");
+            log(&format!("could not read the saved drawing {path}: {error}"));
             return false;
         }
     };
     log(&format!(
         "saved {path}: handing it back to the Office document"
     ));
-    let found = open_drawings()
-        .iter()
-        .find(|drawing| drawing.path_key == key)
-        .map(|drawing| (drawing.state.clone(), drawing.cookie));
-    let Some((state, cookie)) = found else {
-        log("saved: the drawing is no longer open for editing");
-        return false;
-    };
     {
         let mut state = lock(&state);
         state.document = contents;
         if let Some(emf) = emf.filter(|bytes| !bytes.is_empty()) {
-            if let Some(size) = ole_registration::emf_frame_himetric(&emf) {
-                state.extent = SIZE {
-                    cx: size.0,
-                    cy: size.1,
-                };
+            if let Some((cx, cy)) = ole_registration::emf_frame_himetric(&emf) {
+                state.extent = SIZE { cx, cy };
             }
             state.picture = emf;
         }
         state.dirty = true;
-        state.pending_save = true;
     }
-    // The container's interfaces may only be called from the thread that received them (calling
-    // from any other gave RPC_E_WRONG_THREAD), and never from inside the webview's message callback
-    // this save arrives in. So ask the object itself, through COM, to pass the save on: a call on
-    // its marshalled interface runs on its own thread, which then calls the container.
-    let _ = server;
-    std::thread::spawn(move || {
-        call_on_object_thread(cookie, "Update", |object| unsafe { object.Update() })
-    });
+    on_worker_thread(move || notify_saved(&state, data_cookie));
     true
 }
 
-/// A drawing's ChemDraft tab was closed: tell the container the editing ended, so it stops showing
-/// the object as open (hatched) and keeps what was last saved.
+/// A drawing's ChemDraft tab was closed: tell the container the editing ended, so it stops
+/// showing the object as open (hatched) and keeps what was last saved.
 pub(crate) fn embedding_closed(path: &str) -> bool {
-    let key = path_key(Path::new(path));
-    let cookie = open_drawings()
-        .iter()
-        .find(|drawing| drawing.path_key == key)
-        .map(|drawing| drawing.cookie);
-    let Some(cookie) = cookie else {
+    let Some((state, _)) = open_drawing(path) else {
         return false;
     };
     log(&format!("closed {path}"));
-    std::thread::spawn(move || {
-        call_on_object_thread(cookie, "Close", |object| unsafe {
-            object.Close(OLECLOSE_NOSAVE)
-        })
+    on_worker_thread(move || {
+        notify_closed(&state);
+        forget_editing(&state);
     });
     true
 }
 
-/// The standard Global Interface Table (CLSID_StdGlobalInterfaceTable), which hands out an
-/// interface marshalled for whichever thread asks.
-const STD_GLOBAL_INTERFACE_TABLE: GUID = GUID::from_u128(0x00000323_0000_0000_c000_000000000046);
-
-fn global_interface_table() -> Result<IGlobalInterfaceTable> {
-    // SAFETY: creates the process's free-threaded interface table.
-    unsafe { CoCreateInstance(&STD_GLOBAL_INTERFACE_TABLE, None, CLSCTX_INPROC_SERVER) }
-}
-
-fn revoke_from_global(cookie: u32) {
-    // SAFETY: removes this cookie's entry from the process's interface table.
-    let _ = global_interface_table()
-        .and_then(|table| unsafe { table.RevokeInterfaceFromGlobal(cookie) });
-}
-/// On a fresh thread of the multithreaded apartment: get the object's interface from the global
-/// table (a proxy into the object's own thread) and call `call` on it; COM runs the call there.
-fn call_on_object_thread(cookie: u32, name: &str, call: impl FnOnce(&IOleObject) -> Result<()>) {
-    // SAFETY: joins this thread to the multithreaded apartment and gets an interface marshalled for
-    // it from the global table; `from_raw` takes over the reference it returns.
-    let result = unsafe {
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        global_interface_table().and_then(|table| {
-            let mut raw = std::ptr::null_mut();
-            table.GetInterfaceFromGlobal(cookie, &IOleObject::IID, &mut raw)?;
-            let object = IOleObject::from_raw(raw);
-            call(&object)
-        })
-    };
-    log(&format!("{name} on the object's thread: {result:?}"));
-}
-/// Tell the container the drawing changed: save it, refresh its picture.
-fn notify_saved(state: &Arc<Mutex<DrawingState>>, data_object: &IDataObject) {
-    let (site, data_advise, ole_advise) = {
+/// Tell the container the drawing changed: save it, then hand every data sink the new picture
+/// and every object sink the save notice.
+fn notify_saved(state: &Arc<Mutex<DrawingState>>, data_cookie: u32) {
+    let (site, data_sinks, object_sinks) = {
         let state = lock(state);
         (
-            state.client_site.clone(),
-            state.data_advise.clone(),
-            state.ole_advise.clone(),
+            state.client_site,
+            state.data_sinks.clone(),
+            state.object_sinks.clone(),
         )
     };
-    // SAFETY: COM calls on the object's own thread with live interface pointers; the container may
-    // call back into this object (Save, GetData) during them, which only locks its state briefly.
-    unsafe {
-        match site {
-            Some(site) => log(&format!("SaveObject: {:?}", site.SaveObject())),
-            None => log("hand-back: no client site to save through"),
-        }
-        match data_advise {
-            Some(holder) => log(&format!(
-                "SendOnDataChange: {:?}",
-                holder.SendOnDataChange(data_object, None, 0)
-            )),
-            None => log("hand-back: nobody asked for data changes"),
-        }
-        if let Some(holder) = ole_advise {
-            log(&format!("SendOnSave: {:?}", holder.SendOnSave()));
+    match site.map(fetch::<IOleClientSite>) {
+        // SAFETY: a COM call through an interface marshalled for this thread.
+        Some(Ok(site)) => log(&format!("SaveObject: {:?}", unsafe { site.SaveObject() })),
+        Some(Err(error)) => log(&format!("SaveObject: no client site ({error})")),
+        None => log("SaveObject: no client site"),
+    }
+    let data_object = fetch::<IDataObject>(data_cookie).ok();
+    for sink in data_sinks {
+        let result = fetch::<IAdviseSink>(sink.cookie).map(|advise| {
+            let mut medium = if sink.advf & ADVF_NODATA.0 as u32 != 0 {
+                None
+            } else {
+                data_object.as_ref().and_then(|data| {
+                    // SAFETY: asks this object for its picture through COM.
+                    unsafe { data.GetData(&sink.format) }.ok()
+                })
+            };
+            let empty = STGMEDIUM {
+                tymed: 0,
+                u: STGMEDIUM_0 {
+                    hGlobal: HGLOBAL::default(),
+                },
+                pUnkForRelease: ManuallyDrop::new(None),
+            };
+            // SAFETY: the sink copies what it keeps; the medium is released right after.
+            unsafe {
+                advise.OnDataChange(&sink.format, medium.as_ref().unwrap_or(&empty));
+                if let Some(medium) = medium.as_mut() {
+                    ReleaseStgMedium(medium);
+                }
+            }
+        });
+        log(&format!(
+            "OnDataChange (format {}): {result:?}",
+            sink.format.cfFormat
+        ));
+    }
+    for cookie in object_sinks.iter().map(|sink| sink.1) {
+        let result = fetch::<IAdviseSink>(cookie).map(|advise| {
+            // SAFETY: COM calls through an interface marshalled for this thread.
+            unsafe {
+                advise.OnViewChange(DVASPECT_CONTENT.0, -1);
+                advise.OnSave();
+            }
+        });
+        log(&format!("OnSave: {result:?}"));
+    }
+}
+
+/// Tell the container the editing ended.
+fn notify_closed(state: &Arc<Mutex<DrawingState>>) {
+    let (site, object_sinks) = {
+        let state = lock(state);
+        (state.client_site, state.object_sinks.clone())
+    };
+    if let Some(site) = site.and_then(|cookie| fetch::<IOleClientSite>(cookie).ok()) {
+        // SAFETY: a COM call through an interface marshalled for this thread.
+        log(&format!("OnShowWindow(false): {:?}", unsafe {
+            site.OnShowWindow(false)
+        }));
+    }
+    for cookie in object_sinks.iter().map(|sink| sink.1) {
+        let result = fetch::<IAdviseSink>(cookie).map(|advise| {
+            // SAFETY: a COM call through an interface marshalled for this thread.
+            unsafe { advise.OnClose() }
+        });
+        log(&format!("OnClose: {result:?}"));
+    }
+}
+
+/// Stop treating the drawing as open for editing.
+fn forget_editing(state: &Arc<Mutex<DrawingState>>) {
+    let path = lock(state).temp_path.clone();
+    let Some(path) = path else {
+        return;
+    };
+    let key = path_key(&path);
+    if let Ok(mut paths) = EDITING_PATHS.lock() {
+        if let Some(paths) = paths.as_mut() {
+            paths.remove(&key);
         }
     }
+    open_drawings().retain(|drawing| {
+        let keep = drawing.path_key != key;
+        if !keep {
+            unpark(drawing.data_cookie);
+        }
+        keep
+    });
 }
 
 /// Append one line to `%TEMP%\ChemDraft Office drawings\ole-log.txt`, the trace of the embedding
@@ -372,9 +437,17 @@ fn log(message: &str) {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|elapsed| elapsed.as_secs_f64())
             .unwrap_or(0.0);
-        let _ = writeln!(file, "{seconds:.3} [{}] {message}", std::process::id());
+        let _ = writeln!(
+            file,
+            "{seconds:.3} [{} {:?}] {message}",
+            std::process::id(),
+            std::thread::current().id()
+        );
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Structured storage
 
 fn storage_bytes(clsid: &GUID, class: &OleClass, document: &str, emf: &[u8]) -> Result<Vec<u8>> {
     // SAFETY: an in-memory docfile on an HGLOBAL this function owns until it copies the bytes out.
@@ -497,10 +570,21 @@ impl IClassFactory_Impl for DrawingFactory_Impl {
 // ---------------------------------------------------------------------------------------------
 // The drawing object
 
+/// A data sink from DAdvise: the format it wants and its advise flags.
+#[derive(Clone)]
+struct DataSink {
+    connection: u32,
+    cookie: u32,
+    format: FORMATETC,
+    advf: u32,
+}
+
 struct DrawingState {
-    client_site: Option<IOleClientSite>,
-    ole_advise: Option<IOleAdviseHolder>,
-    data_advise: Option<IDataAdviseHolder>,
+    /// The container's client site, parked in the global interface table.
+    client_site: Option<u32>,
+    /// Object sinks from Advise: (connection, table cookie).
+    object_sinks: Vec<(u32, u32)>,
+    data_sinks: Vec<DataSink>,
     /// The ChemDraft file (UTF-8 text).
     document: String,
     /// The picture, an Enhanced Metafile.
@@ -511,9 +595,11 @@ struct DrawingState {
     container_object: String,
     temp_path: Option<PathBuf>,
     dirty: bool,
-    /// A save from ChemDraft waiting to be passed to the container (by `Update`, on this thread).
-    pending_save: bool,
 }
+
+// SAFETY: the only raw pointer inside is a data sink's FORMATETC target device, always null here;
+// interfaces are kept as global-table cookies, not pointers.
+unsafe impl Send for DrawingState {}
 
 #[implement(IOleObject, IDataObject, IPersistStorage)]
 struct Drawing {
@@ -525,15 +611,14 @@ impl Drawing {
         Self {
             state: Arc::new(Mutex::new(DrawingState {
                 client_site: None,
-                ole_advise: None,
-                data_advise: None,
+                object_sinks: Vec::new(),
+                data_sinks: Vec::new(),
                 document: String::new(),
                 picture: Vec::new(),
                 extent: SIZE { cx: 0, cy: 0 },
                 container_object: String::new(),
                 temp_path: None,
                 dirty: false,
-                pending_save: false,
             })),
         }
     }
@@ -599,30 +684,19 @@ impl Drawing_Impl {
         if let Ok(mut paths) = EDITING_PATHS.lock() {
             paths.get_or_insert_with(HashSet::new).insert(key.clone());
         }
-        let object: IOleObject = self.to_interface();
-        // SAFETY: registers this object's interface in the process's free-threaded table.
-        let cookie = global_interface_table().and_then(|table| unsafe {
-            table.RegisterInterfaceInGlobal(&object, &IOleObject::IID)
-        })?;
-        log(&format!(
-            "editing {} ({} apartment)",
-            path.display(),
-            if in_multithreaded_apartment() {
-                "multithreaded"
-            } else {
-                "single-threaded"
-            }
-        ));
+        let data_object: IDataObject = self.to_interface();
+        let data_cookie = park(&data_object)?;
+        log(&format!("editing {}", path.display()));
         {
             let mut drawings = open_drawings();
             for old in drawings.iter().filter(|drawing| drawing.path_key == key) {
-                revoke_from_global(old.cookie);
+                unpark(old.data_cookie);
             }
             drawings.retain(|drawing| drawing.path_key != key);
             drawings.push(OpenDrawing {
                 path_key: key,
                 state: self.state.clone(),
-                cookie,
+                data_cookie,
             });
         }
 
@@ -636,37 +710,19 @@ impl Drawing_Impl {
             contents: document,
         };
         if let Err(error) = crate::deliver_opened_document(&server.app, payload) {
-            eprintln!("ChemDraft: could not open the embedded drawing: {error}");
+            log(&format!("could not open the embedded drawing: {error}"));
             return Err(E_FAIL.into());
         }
-        let site = lock(&self.state).client_site.clone();
-        if let Some(site) = site {
-            // SAFETY: COM calls in the object's apartment; failures only affect the container's display.
+        let site = lock(&self.state).client_site;
+        if let Some(site) = site.and_then(|cookie| fetch::<IOleClientSite>(cookie).ok()) {
+            // SAFETY: COM calls through an interface marshalled for this thread; failures only
+            // affect the container's display.
             unsafe {
                 let _ = site.ShowObject();
                 let _ = site.OnShowWindow(true);
             }
         }
         Ok(())
-    }
-
-    fn forget_editing(&self) {
-        let path = lock(&self.state).temp_path.clone();
-        if let Some(path) = path {
-            let key = path_key(&path);
-            if let Ok(mut paths) = EDITING_PATHS.lock() {
-                if let Some(paths) = paths.as_mut() {
-                    paths.remove(&key);
-                }
-            }
-            open_drawings().retain(|drawing| {
-                let keep = drawing.path_key != key;
-                if !keep {
-                    revoke_from_global(drawing.cookie);
-                }
-                keep
-            });
-        }
     }
 
     fn picture_handle(&self) -> Option<HENHMETAFILE> {
@@ -694,15 +750,22 @@ fn format_supported(format: &FORMATETC) -> Option<u16> {
 impl IOleObject_Impl for Drawing_Impl {
     fn SetClientSite(&self, pclientsite: Ref<'_, IOleClientSite>) -> Result<()> {
         log(&format!("SetClientSite (site: {})", !pclientsite.is_null()));
-        lock(&self.state).client_site = pclientsite.cloned();
+        let cookie = match pclientsite.as_ref() {
+            Some(site) => Some(park(site)?),
+            None => None,
+        };
+        let old = std::mem::replace(&mut lock(&self.state).client_site, cookie);
+        if let Some(old) = old {
+            unpark(old);
+        }
         Ok(())
     }
 
     fn GetClientSite(&self) -> Result<IOleClientSite> {
-        lock(&self.state)
-            .client_site
-            .clone()
-            .ok_or_else(|| E_FAIL.into())
+        let cookie = lock(&self.state).client_site;
+        cookie
+            .ok_or_else(|| windows::core::Error::from(E_FAIL))
+            .and_then(fetch::<IOleClientSite>)
     }
 
     fn SetHostNames(&self, _szcontainerapp: &PCWSTR, szcontainerobj: &PCWSTR) -> Result<()> {
@@ -716,20 +779,8 @@ impl IOleObject_Impl for Drawing_Impl {
 
     fn Close(&self, _dwsaveoption: &OLECLOSE) -> Result<()> {
         log("Close");
-        let (holder, site) = {
-            let state = lock(&self.state);
-            (state.ole_advise.clone(), state.client_site.clone())
-        };
-        // SAFETY: COM calls on the main thread.
-        unsafe {
-            if let Some(site) = site {
-                let _ = site.OnShowWindow(false);
-            }
-            if let Some(holder) = holder {
-                let _ = holder.SendOnClose();
-            }
-        }
-        self.forget_editing();
+        notify_closed(&self.state);
+        forget_editing(&self.state);
         Ok(())
     }
 
@@ -772,7 +823,10 @@ impl IOleObject_Impl for Drawing_Impl {
             return Ok(());
         }
         if lock(&self.state).client_site.is_none() {
-            lock(&self.state).client_site = pactivesite.cloned();
+            if let Some(site) = pactivesite.as_ref() {
+                let cookie = park(site)?;
+                lock(&self.state).client_site = Some(cookie);
+            }
         }
         // Every other verb (Edit, Open, Show, the primary verb) opens the drawing in ChemDraft.
         self.open_for_editing()
@@ -784,13 +838,6 @@ impl IOleObject_Impl for Drawing_Impl {
     }
 
     fn Update(&self) -> Result<()> {
-        // A save from ChemDraft, passed here through COM so the container is called from the
-        // thread that holds its interfaces.
-        let pending = std::mem::take(&mut lock(&self.state).pending_save);
-        if pending {
-            let data_object: IDataObject = self.to_interface();
-            notify_saved(&self.state, &data_object);
-        }
         Ok(())
     }
 
@@ -831,41 +878,26 @@ impl IOleObject_Impl for Drawing_Impl {
 
     fn Advise(&self, padvsink: Ref<'_, IAdviseSink>) -> Result<u32> {
         log("Advise");
-        let holder = {
-            let mut state = lock(&self.state);
-            if state.ole_advise.is_none() {
-                // SAFETY: creates a standard COM advise holder.
-                state.ole_advise = Some(unsafe { CreateOleAdviseHolder()? });
-            }
-            state.ole_advise.clone()
-        };
-        let sink = padvsink.ok()?;
-        // SAFETY: COM call with a live sink.
-        unsafe {
-            holder
-                .ok_or_else(|| windows::core::Error::from(E_FAIL))?
-                .Advise(sink)
-        }
+        let cookie = park(padvsink.ok()?)?;
+        let connection = NEXT_CONNECTION.fetch_add(1, Ordering::SeqCst);
+        lock(&self.state).object_sinks.push((connection, cookie));
+        Ok(connection)
     }
 
     fn Unadvise(&self, dwconnection: u32) -> Result<()> {
-        let holder = lock(&self.state).ole_advise.clone();
-        // SAFETY: COM call.
-        unsafe {
-            holder
-                .ok_or_else(|| windows::core::Error::from(E_FAIL))?
-                .Unadvise(dwconnection)
-        }
+        let mut state = lock(&self.state);
+        state.object_sinks.retain(|(connection, cookie)| {
+            let keep = *connection != dwconnection;
+            if !keep {
+                unpark(*cookie);
+            }
+            keep
+        });
+        Ok(())
     }
 
     fn EnumAdvise(&self) -> Result<IEnumSTATDATA> {
-        let holder = lock(&self.state).ole_advise.clone();
-        // SAFETY: COM call.
-        unsafe {
-            holder
-                .ok_or_else(|| windows::core::Error::from(E_FAIL))?
-                .EnumAdvise()
-        }
+        Err(E_NOTIMPL.into())
     }
 
     fn GetMiscStatus(&self, _dwaspect: DVASPECT) -> Result<OLEMISC> {
@@ -976,42 +1008,37 @@ impl IDataObject_Impl for Drawing_Impl {
         padvsink: Ref<'_, IAdviseSink>,
     ) -> Result<u32> {
         log(&format!("DAdvise (advf {advf})"));
-        let holder = {
-            let mut state = lock(&self.state);
-            if state.data_advise.is_none() {
-                // SAFETY: creates a standard COM data advise holder.
-                state.data_advise = Some(unsafe { CreateDataAdviseHolder()? });
-            }
-            state.data_advise.clone()
-        };
-        let data_object: IDataObject = self.to_interface();
-        let sink = padvsink.ok()?;
-        // SAFETY: COM call with live interfaces.
-        unsafe {
-            holder
-                .ok_or_else(|| windows::core::Error::from(E_FAIL))?
-                .Advise(&data_object, pformatetc, advf, sink)
+        if pformatetc.is_null() {
+            return Err(DV_E_FORMATETC.into());
         }
+        // SAFETY: COM passes a valid FORMATETC; its target device is not kept.
+        let mut format = unsafe { *pformatetc };
+        format.ptd = std::ptr::null_mut();
+        let cookie = park(padvsink.ok()?)?;
+        let connection = NEXT_CONNECTION.fetch_add(1, Ordering::SeqCst);
+        lock(&self.state).data_sinks.push(DataSink {
+            connection,
+            cookie,
+            format,
+            advf,
+        });
+        Ok(connection)
     }
 
     fn DUnadvise(&self, dwconnection: u32) -> Result<()> {
-        let holder = lock(&self.state).data_advise.clone();
-        // SAFETY: COM call.
-        unsafe {
-            holder
-                .ok_or_else(|| windows::core::Error::from(OLE_E_ADVISENOTSUPPORTED))?
-                .Unadvise(dwconnection)
-        }
+        let mut state = lock(&self.state);
+        state.data_sinks.retain(|sink| {
+            let keep = sink.connection != dwconnection;
+            if !keep {
+                unpark(sink.cookie);
+            }
+            keep
+        });
+        Ok(())
     }
 
     fn EnumDAdvise(&self) -> Result<IEnumSTATDATA> {
-        let holder = lock(&self.state).data_advise.clone();
-        // SAFETY: COM call.
-        unsafe {
-            holder
-                .ok_or_else(|| windows::core::Error::from(OLE_E_ADVISENOTSUPPORTED))?
-                .EnumAdvise()
-        }
+        Err(OLE_E_ADVISENOTSUPPORTED.into())
     }
 }
 
