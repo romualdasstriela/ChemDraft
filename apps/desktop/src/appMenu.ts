@@ -232,6 +232,7 @@ export function buildAppMenuModel(context: AppMenuContext): AppMenuSection[] {
         command("document.open", "Open…", { accelerator: "Cmd+O" }),
         command("document.save", "Save", { accelerator: "Cmd+S" }),
         command("document.saveAs", "Save As…", { accelerator: "Shift+Cmd+S" }),
+        command("document.closeAndReturn", "Close and Return to Office Document"),
         separator(),
         buildPageSetupSubmenu(),
         separator(),

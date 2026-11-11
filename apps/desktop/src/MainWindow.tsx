@@ -363,6 +363,7 @@ import {
   structureCleanupCommandId,
   structureInteractive3dCommandId,
   structureSpin3dCommandId,
+  isOfficeDrawingPath,
   textScriptForCommand,
   textStylePatchForCommand,
   copyAsActions,
@@ -1655,7 +1656,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.11.10.00-opus";
+const CURRENT_BUILD_STAMP = "11.11.11.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -3046,9 +3047,10 @@ export function MainWindow({
       canUndo,
       canRedo,
       hasMultipleTabs: documentTabs.length > 1,
+      isOfficeDrawing: isOfficeDrawingPath(fileState.path),
       hasMoleculeFragmentSelection: selectedNativeMoleculeParts.length > 0
     })),
-    [canRedo, canUndo, document, documentTabs.length, selectedMolecule, selectedNativeMoleculeParts]
+    [canRedo, canUndo, document, documentTabs.length, fileState.path, selectedMolecule, selectedNativeMoleculeParts]
   );
   const compoundLayoutsEnabledRef = useRef(compoundLayoutsEnabled);
   compoundLayoutsEnabledRef.current = compoundLayoutsEnabled;
@@ -3133,13 +3135,19 @@ export function MainWindow({
   const shellCommandSpecs = useMemo(
     () => applyKeybindingSchemeToCommands(
       allShellCommands(document, selectedMolecule, {
-        availability: { canUndo, canRedo, hasMultipleTabs: documentTabs.length > 1, hasOpenWarnings: openWarnings !== undefined },
+        availability: {
+          canUndo,
+          canRedo,
+          hasMultipleTabs: documentTabs.length > 1,
+          hasOpenWarnings: openWarnings !== undefined,
+          isOfficeDrawing: isOfficeDrawingPath(fileState.path)
+        },
         registry: toolsetRegistry,
         compoundLayoutsEnabled
       }),
       keybindingScheme
     ),
-    [canRedo, canUndo, document, documentTabs.length, keybindingScheme, openWarnings, selectedMolecule, toolsetRegistry, compoundLayoutsEnabled]
+    [canRedo, canUndo, document, documentTabs.length, fileState.path, keybindingScheme, openWarnings, selectedMolecule, toolsetRegistry, compoundLayoutsEnabled]
   );
   const shellCommandsById = useMemo(
     () => createShellCommandMap(shellCommandSpecs),
@@ -9180,8 +9188,12 @@ export function MainWindow({
         return;
       }
       lastNativeOpenPayloadKeyRef.current = { key: payloadKey, at: now };
+      // A new drawing from Insert > Object in an Office document arrives empty: open an empty page.
+      const contents = payload.contents.trim().length === 0 && isOfficeDrawingPath(payload.path)
+        ? createNativeSavePayload(createPhase4Document()).contents
+        : payload.contents;
       try {
-        await openDocumentContents(payload.contents, payload.displayName, payload.path);
+        await openDocumentContents(contents, payload.displayName, payload.path);
       } catch (error) {
         const failure = `Open failed: ${error instanceof Error ? error.message : String(error)}`;
         setStatus(failure);
@@ -10309,6 +10321,16 @@ export function MainWindow({
         }
         if (action.id === "document.saveAs") {
           await saveCurrentDocument(true);
+        }
+        // A drawing opened from an Office document: save it back there (if changed), close its tab.
+        if (action.id === "document.closeAndReturn") {
+          const tabId = activeDocumentTabIdRef.current;
+          if (!isOfficeDrawingPath(fileStateRef.current.path)) {
+            setStatus("Close and Return: this drawing was not opened from an Office document");
+          } else if (!fileStateRef.current.dirty || await saveCurrentDocument(false)) {
+            removeDocumentTab(tabId);
+            setStatus("Returned the drawing to the Office document");
+          }
         }
         if (action.id === "clipboard.paste") {
           await pasteClipboard();

@@ -74,8 +74,12 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      reopens without ChemDraft running; ChemDraft is started for the double-click if needed.
    - ChemDraft registers the object type for this user at every start (HKCU\Software\Classes,
      no admin rights); the dev build ("ChemDraft (dev) Drawing") and the stable app have
-     separate types and never open each other's objects. Not offered under Insert > Object
-     (a new, empty object has nothing to open). Office for Mac cannot edit such objects.
+     separate types and never open each other's objects. Office for Mac cannot edit such
+     objects.
+   - Insert > Object > "ChemDraft (dev) Drawing" in Word starts a new drawing: ChemDraft opens
+     an empty page (Word shows a blank 40 x 20 mm placeholder until the first Ctrl+S).
+   - File > Close and Return to Office Document (enabled only for a drawing opened from an
+     Office document) saves the drawing back if it changed and closes its tab.
    - The drawing opens as the whole page with the copied objects where they were drawn; Word
      shows it hatched while it is open in ChemDraft, and closing the ChemDraft tab ends the
      editing (the hatching goes). The pasted object has the drawing's size at 100% zoom and

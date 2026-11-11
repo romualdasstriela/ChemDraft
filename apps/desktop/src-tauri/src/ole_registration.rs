@@ -118,6 +118,9 @@ pub(crate) fn registry_entries(class: &OleClass, exe_path: &str) -> Vec<Registry
             "",
             Some(class.class_id.to_string()),
         ),
+        // Offered under Insert > Object: a new object opens as an empty page in ChemDraft.
+        entry(format!("{clsid}\\Insertable"), "", None),
+        entry(format!("{}\\Insertable", class.prog_id), "", None),
     ];
     for (index, format) in DATA_FORMATS.iter().enumerate() {
         entries.push(entry(
@@ -127,6 +130,38 @@ pub(crate) fn registry_entries(class: &OleClass, exe_path: &str) -> Vec<Registry
         ));
     }
     entries
+}
+
+/// An empty Enhanced Metafile `width` x `height` HIMETRIC (0.01 mm) in size, at the 96 dpi
+/// reference the drawings use: the placeholder an object inserted from Office shows until its
+/// first drawing is saved.
+pub(crate) fn blank_emf(width: i32, height: i32) -> Vec<u8> {
+    let pixels = |hmm: i32| ((f64::from(hmm) / 2540.0 * 96.0).round() as i32).max(1);
+    let mut emf = Vec::with_capacity(128);
+    let mut push = |value: i32| emf.extend_from_slice(&value.to_le_bytes());
+    push(1); // EMR_HEADER
+    push(108);
+    for value in [0, 0, pixels(width) - 1, pixels(height) - 1] {
+        push(value); // rclBounds, device pixels
+    }
+    for value in [0, 0, width - 1, height - 1] {
+        push(value); // rclFrame, 0.01 mm
+    }
+    push(0x464d_4520); // " EMF"
+    push(0x10000); // version
+    push(128); // nBytes
+    push(2); // nRecords
+    push(1); // nHandles (u16) and reserved (u16)
+    for value in [0, 0, 0] {
+        push(value); // description (count, offset), palette entries
+    }
+    for value in [1920, 1080, 508, 286, 0, 0, 0, 508_000, 285_750] {
+        push(value); // reference device, pixel format, OpenGL, micrometres
+    }
+    for value in [14, 20, 0, 16, 20] {
+        push(value); // EMR_EOF: no palette, offset, size
+    }
+    emf
 }
 
 /// The `OBJECTDESCRIPTOR` block Office reads from the clipboard's "Object Descriptor" format: the
@@ -324,10 +359,27 @@ mod tests {
             value(&format!("{clsid}\\Verb\\0")).as_deref(),
             Some("&Edit,0,2")
         );
-        // Not offered under Insert > Object: a new, empty object has nothing to open yet.
-        assert!(!entries
-            .iter()
-            .any(|entry| entry.subkey.ends_with("\\Insertable")));
+        // Offered under Insert > Object, on both the class and its ProgID (keys without a value).
+        for subkey in [
+            format!("{clsid}\\Insertable"),
+            "ChemDraft.Drawing.1\\Insertable".to_string(),
+        ] {
+            assert!(entries
+                .iter()
+                .any(|entry| entry.subkey == subkey && entry.data.is_none()));
+        }
+    }
+
+    #[test]
+    fn blank_emf_is_a_well_formed_empty_picture_of_the_given_size() {
+        let emf = blank_emf(4000, 2000);
+        let int = |offset: usize| i32::from_le_bytes(emf[offset..offset + 4].try_into().unwrap());
+        assert_eq!(emf_frame_himetric(&emf), Some((4000, 2000)));
+        assert_eq!(int(48) as usize, emf.len()); // nBytes
+        assert_eq!(int(52), 2); // header + EOF
+                                // 40 mm at 96 dpi is 151 px.
+        assert_eq!(int(16), 150);
+        assert_eq!(&emf[emf.len() - 20..emf.len() - 16], &14u32.to_le_bytes());
     }
 
     #[test]

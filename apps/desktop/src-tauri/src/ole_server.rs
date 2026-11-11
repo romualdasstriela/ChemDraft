@@ -159,14 +159,31 @@ fn unpark(cookie: u32) {
         .and_then(|table| unsafe { table.RevokeInterfaceFromGlobal(cookie) });
 }
 
-/// Run `work` on a fresh thread of the multithreaded apartment (where interfaces fetched from the
-/// table are valid, and which is never inside a webview callback).
+type WorkerJob = Box<dyn FnOnce() + Send>;
+
+/// Run `work` on the worker thread, in the multithreaded apartment (where interfaces fetched from
+/// the table are valid, and which is never inside a webview callback). One thread runs the jobs
+/// in order, so a save reaches the container before the close that follows it.
 fn on_worker_thread(work: impl FnOnce() + Send + 'static) {
-    std::thread::spawn(move || {
-        // SAFETY: joins this new thread to the multithreaded apartment.
-        let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
-        work();
+    static WORKER: OnceLock<Mutex<std::sync::mpsc::Sender<WorkerJob>>> = OnceLock::new();
+    let sender = WORKER.get_or_init(|| {
+        let (sender, receiver) = std::sync::mpsc::channel::<WorkerJob>();
+        std::thread::spawn(move || {
+            // SAFETY: joins this worker thread to the multithreaded apartment.
+            let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+            for job in receiver {
+                job();
+            }
+        });
+        Mutex::new(sender)
     });
+    let sent = sender
+        .lock()
+        .map(|sender| sender.send(Box::new(work)).is_ok())
+        .unwrap_or(false);
+    if !sent {
+        log("the worker thread is gone; a call to the container was dropped");
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -653,10 +670,9 @@ impl Drawing_Impl {
     fn open_for_editing(&self) -> Result<()> {
         let server = server()?;
         let (document, path) = {
+            // An empty document (a new object from Insert > Object) opens as an empty page: the
+            // app fills in a new drawing for an Office drawing that arrives empty.
             let mut state = lock(&self.state);
-            if state.document.trim().is_empty() {
-                return Err(E_FAIL.into());
-            }
             let path = match &state.temp_path {
                 Some(path) => path.clone(),
                 None => {
@@ -1131,6 +1147,14 @@ impl IPersistStorage_Impl for Drawing_Impl {
     }
 
     fn InitNew(&self, _pstg: Ref<'_, IStorage>) -> Result<()> {
+        // Insert > Object: a new drawing. ChemDraft opens it as an empty page; until its first save
+        // the container shows a blank 40 x 20 mm placeholder.
+        log("InitNew");
+        let mut state = lock(&self.state);
+        state.document.clear();
+        state.picture = ole_registration::blank_emf(4000, 2000);
+        state.extent = SIZE { cx: 4000, cy: 2000 };
+        state.dirty = true;
         Ok(())
     }
 

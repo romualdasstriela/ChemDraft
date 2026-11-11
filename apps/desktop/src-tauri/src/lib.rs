@@ -592,6 +592,7 @@ const MENU_COMMAND_IDS: &[&str] = &[
     "document.open",
     "document.save",
     "document.saveAs",
+    "document.closeAndReturn",
     "export.open",
     "page.setSize.letter",
     "page.setSize.legal",
@@ -6463,6 +6464,14 @@ fn create_app_menu_for_toolsets<R: Runtime>(
                         "Save As...",
                         true,
                         Some("CmdOrCtrl+Shift+S"),
+                    )?,
+                    // A drawing opened from Word (or PowerPoint, Excel): save it back and close it.
+                    &MenuItem::with_id(
+                        app,
+                        "document.closeAndReturn",
+                        "Close and Return to Office Document",
+                        true,
+                        None::<&str>,
                     )?,
                     &PredefinedMenuItem::separator(app)?,
                     &page_setup_menu,
