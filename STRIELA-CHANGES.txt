@@ -210,7 +210,19 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      the plain digit: "CH₂" counts as CH2, "R²" is an R-group like R2. Ordinary digits are drawn
      as before (lowered after a symbol, raised before one).
 
-13. Build checks
+13. Office colour palette for bonds, atoms and text
+   - The Main toolbar's colour swatches end with a palette button (a small grid over a bar in
+     the current colour). It opens the colours of Word's colour menu: Theme Colors (ten columns,
+     each a base colour with five lighter/darker shades under it) and the ten Standard Colors.
+     A pick colours the selected text, bonds and atoms. Hovering a swatch shows Office's name
+     for it and its hex value, e.g. "Accent 1, Lighter 40% (44B3E1)".
+   - The values are Office's own (default Office theme), read from Office, so a drawing pasted
+     into Word, Excel or PowerPoint uses exactly the document's colours.
+   - The gray quick swatch made room for the button; Office's grays are in the palette.
+   - The full colour picker (text toolbar, Art toolbar) lists the Office colours first under
+     its Palettes tab.
+
+14. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
    - Every dev build also runs cargo clippy (-D warnings) and cargo test, as the main
      project's Windows CI does.
@@ -252,3 +264,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Bond-axis handle: find the hanging piece for any selection of it
 (next)  Copy a vector picture (EMF) to the Windows clipboard with Ctrl+C
 (next)  Embed copied drawings in Office as ChemDraft objects that open here for editing
+(next)  Office colour palette for bonds, atoms and text

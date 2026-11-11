@@ -766,6 +766,13 @@ export function PaletteWindow({
     void requestToolsetTextStyle().catch(() => undefined);
   };
 
+  // The bond, atom and text colour picker: the same window, opened on the Office palette, applying
+  // the text-colour commands (which colour the selected bonds and atoms too).
+  const openTextColorPopover = (anchor: ToolbarPopoverAnchor) => {
+    openPopover(anchor, "artColor", { kind: "artColor", target: "text" });
+    void requestToolsetTextStyle().catch(() => undefined);
+  };
+
   const openFlyoutPopover = (request: ToolbarFlyoutRequest) => {
     openPopover(request.anchor, "flyout", { kind: "flyout", flyout: request.flyout });
   };
@@ -969,6 +976,7 @@ export function PaletteWindow({
           currentTextScript,
           onColorPickerOpenChange: setColorPickerOpen,
           onRequestColorPopover: openArtColorPopover,
+          onRequestTextColorPopover: openTextColorPopover,
           onArtStylePreview: previewCommand,
           onArtStyleCommit: commitPreviewCommand,
           onArtStyleCancel: cancelPreviewCommand,

@@ -16,6 +16,7 @@ import { SortableContext, rectSortingStrategy, useSortable } from "@dnd-kit/sort
 import { CSS } from "@dnd-kit/utilities";
 import type { ToolsetGridLayout } from "@chemdraft/toolset-registry";
 import type { CommandSpec } from "./commands";
+import { OfficeColorPalette } from "./toolbars/OfficeColorPalette";
 import {
   ToolbarWidgetStateContext,
   TOOLBAR_WIDGET_IDS,
@@ -2848,7 +2849,7 @@ function hexToRgbaCss(color: string, opacity: number): string {
   return `rgb(${red} ${green} ${blue} / ${Math.max(0, Math.min(1, opacity))})`;
 }
 
-type ColorPickerTab = "color" | "palettes";
+export type ColorPickerTab = "color" | "palettes";
 type IroColorPickerInstance = ReturnType<typeof iro.ColorPicker>;
 type IroColorLike = {
   hexString: string;
@@ -3048,17 +3049,20 @@ function ColorPickerControl({
 export function ColorPickerPopoverBody({
   activeColor,
   value,
+  initialTab = "color",
   onCommitColor,
   onPreviewColor
 }: {
   activeColor?: string;
   value: string;
+  /** The tab shown when the picker opens; "palettes" opens on the Office colours. */
+  initialTab?: ColorPickerTab;
   onCommitColor: (color: string) => void;
   onPreviewColor: (color: string) => void;
 }) {
   const normalizedValue = normalizeHexColor(value) ?? "#111111";
   const normalizedActiveColor = normalizeHexColor(activeColor ?? value) ?? normalizedValue;
-  const [tab, setTab] = useState<ColorPickerTab>("color");
+  const [tab, setTab] = useState<ColorPickerTab>(initialTab);
   const [hexInput, setHexInput] = useState(normalizedValue.toUpperCase());
   const draftRgb = useMemo(() => hexToRgbColor(normalizedValue) ?? { r: 17, g: 17, b: 17 }, [normalizedValue]);
   const draftCmyk = useMemo(() => rgbToCmykColor(draftRgb), [draftRgb]);
@@ -3247,6 +3251,7 @@ export function ColorPickerPopoverBody({
         </div>
       ) : (
         <div className="color-palette-panel" role="tabpanel" aria-label="Color palettes">
+          <OfficeColorPalette activeColor={normalizedActiveColor} onApply={applyAndCommitColor} />
           {palettes.map((palette) => (
             <section className="color-palette-section" data-color-palette={palette.id} key={palette.id}>
               <h3>{palette.title}</h3>

@@ -59,6 +59,7 @@ export function moleculeVariantRows(state: ToolbarWidgetState): MainStyleRows {
         commands: mainToolbarSwatchCommands,
         activeColor: currentColor
       },
+      { kind: "officeColors", ariaLabel: "Bond and atom color", activeColor: currentColor },
       {
         kind: "select",
         cells: 3,

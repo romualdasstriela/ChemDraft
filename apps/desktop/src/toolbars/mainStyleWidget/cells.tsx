@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { textAlignmentCommands, textColorCommands } from "../../commands";
+import { textAlignmentCommands, textColorCommands, textCustomColorCommandId } from "../../commands";
+import { OfficeColorPalette } from "../OfficeColorPalette";
+import { useToolbarWidgetState } from "../toolbarWidgets";
 import type { NativeTextStyle } from "@chemdraft/chem-core";
 import { loadSystemFonts, type SystemFontFamily } from "../../systemFonts";
 import {
@@ -40,6 +42,8 @@ export type StyleToggleSpec = {
 
 export type StyleCell =
   | { kind: "swatches"; ariaLabel: string; commands: readonly ColorCommand[]; activeColor?: string }
+  /** One cell that opens the Office colour palette for text, bonds and atoms. */
+  | { kind: "officeColors"; ariaLabel: string; activeColor?: string }
   | { kind: "aligns"; activeAlign: NativeTextStyle["textAlign"] }
   | { kind: "toggle"; toggle: StyleToggleSpec }
   | { kind: "toggleGroup"; ariaLabel: string; toggles: readonly StyleToggleSpec[] }
@@ -80,6 +84,7 @@ export function cellCost(cell: StyleCell): number {
       return cell.commands.length;
     case "aligns":
       return textAlignmentCommands.length;
+    case "officeColors":
     case "toggle":
       return 1;
     case "toggleGroup":
@@ -99,15 +104,104 @@ export function rowCellCost(row: readonly StyleCell[]): number {
   return row.reduce((total, cell) => total + cellCost(cell), 0);
 }
 
-/** The six-swatch palette every variant's row 1 leads with (the same colors the widget always had). */
+/** The quick swatches the text and molecule layouts lead row 1 with, followed by the Office palette
+ *  button in the sixth cell (where gray used to be; Office's grays are in its palette). */
 export const mainToolbarSwatchCommands = textColorCommands.filter((command) => (
   command.id === "text.color.black"
   || command.id === "text.color.white"
   || command.id === "text.color.blue"
   || command.id === "text.color.red"
   || command.id === "text.color.green"
-  || command.id === "text.color.gray"
 ));
+
+/**
+ * Opens the Office colour palette (the colours of Word's colour menu) for the selection's text,
+ * bonds and atoms. In a floating palette it opens in the palette's own popover window; elsewhere
+ * (in-window palettes, tests) it opens inline under the button. A chosen colour applies through the
+ * text-colour command, which also colours selected bonds and atoms.
+ */
+function OfficeColorsCell({
+  cell,
+  onInvoke
+}: {
+  cell: Extract<StyleCell, { kind: "officeColors" }>;
+  onInvoke: (commandId: string) => void;
+}) {
+  const { onRequestTextColorPopover } = useToolbarWidgetState();
+  const [open, setOpen] = useState(false);
+  const shellRef = useRef<HTMLSpanElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (!(event.target instanceof Node) || !shellRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", closeOnOutsidePress, { capture: true });
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeOnOutsidePress, { capture: true });
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <span className="office-color-cell" ref={shellRef}>
+      <button
+        type="button"
+        className="toolbar-text-button office-color-button"
+        aria-label={`${cell.ariaLabel}: Office colors`}
+        aria-haspopup="dialog"
+        aria-expanded={onRequestTextColorPopover ? undefined : open}
+        data-palette-control="true"
+        style={{ "--picker-color": cell.activeColor ?? "#000000" } as CSSProperties}
+        onPointerDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => {
+          event.stopPropagation();
+          // Keep an atom label being typed in edit, as the other style buttons do.
+          const focused = event.currentTarget.ownerDocument.activeElement;
+          if (focused instanceof HTMLElement && focused.dataset.atomLabelEditor === "true") {
+            event.preventDefault();
+          }
+        }}
+        onClick={(event) => {
+          if (onRequestTextColorPopover) {
+            const rect = event.currentTarget.getBoundingClientRect();
+            onRequestTextColorPopover({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+            return;
+          }
+          setOpen((current) => !current);
+        }}
+      >
+        <svg className="office-color-glyph" viewBox="0 0 16 16" aria-hidden="true">
+          {[0, 1, 2].flatMap((row) => [0, 1, 2].map((column) => (
+            <rect key={`${row}-${column}`} x={1 + column * 5} y={1 + row * 4} width="4" height="3" rx="0.5" />
+          )))}
+        </svg>
+        <span className="office-color-bar" aria-hidden="true" />
+      </button>
+      {open && !onRequestTextColorPopover ? (
+        <div className="toolbar-color-popover office-color-popover" role="dialog" aria-label={`${cell.ariaLabel}: Office colors`}>
+          <OfficeColorPalette
+            activeColor={cell.activeColor}
+            onApply={(color) => {
+              setOpen(false);
+              onInvoke(textCustomColorCommandId(color));
+            }}
+          />
+        </div>
+      ) : null}
+    </span>
+  );
+}
 
 export function closestPreset(value: number, presets: readonly number[]): number {
   return presets.reduce((best, preset) => (
@@ -372,6 +466,12 @@ export function StyleCellView({
             </CellShell>
           ))}
         </div>
+      );
+    case "officeColors":
+      return (
+        <CellShell tooltipId={`${tooltipScope}-office-colors`} title={`${cell.ariaLabel}: Office colors`}>
+          <OfficeColorsCell cell={cell} onInvoke={onInvoke} />
+        </CellShell>
       );
     case "aligns":
       return (

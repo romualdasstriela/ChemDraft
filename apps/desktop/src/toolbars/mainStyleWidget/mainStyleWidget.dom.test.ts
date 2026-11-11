@@ -152,6 +152,44 @@ describe("MainStyleWidget variants", () => {
     expect(onInvoke).toHaveBeenCalledWith("text.color.blue");
   });
 
+  it("offers Office's colours for bonds and atoms, applied as a text colour", () => {
+    const { document: moleculeDocument, selection } = moleculeSelection();
+    const inspector = createMoleculeInspectorModel(moleculeDocument, {
+      selectedObjectIds: moleculeDocument.selection.objectIds
+    });
+    const { onInvoke } = renderWidget({ currentSelection: selection, currentMoleculeInspector: inspector });
+
+    const button = widgetRoot().querySelector<HTMLButtonElement>("[aria-label=\"Bond and atom color: Office colors\"]");
+    if (!button) {
+      throw new Error("Expected the Office colours button.");
+    }
+    act(() => {
+      button.click();
+    });
+    const popover = widgetRoot().querySelector<HTMLElement>(".office-color-popover");
+    expect(popover).not.toBeNull();
+    expect(popover?.querySelectorAll("[data-color-palette=\"office\"] [data-color-palette-swatch]")).toHaveLength(60);
+    expect(popover?.querySelectorAll("[data-color-palette=\"office-standard\"] [data-color-palette-swatch]")).toHaveLength(10);
+
+    const accent = popover?.querySelector<HTMLButtonElement>("[aria-label=\"Accent 1, Lighter 40%\"]");
+    act(() => {
+      accent?.click();
+    });
+    expect(onInvoke).toHaveBeenCalledWith("text.color.custom.44b3e1");
+    expect(widgetRoot().querySelector(".office-color-popover")).toBeNull();
+  });
+
+  it("opens the Office colours in the palette's own window when it floats", () => {
+    const onRequestTextColorPopover = vi.fn();
+    renderWidget({ onRequestTextColorPopover });
+    const button = widgetRoot().querySelector<HTMLButtonElement>("[aria-label=\"Text color: Office colors\"]");
+    act(() => {
+      button?.click();
+    });
+    expect(onRequestTextColorPopover).toHaveBeenCalledTimes(1);
+    expect(widgetRoot().querySelector(".office-color-popover")).toBeNull();
+  });
+
   it("keeps both atom-label toggles on show polarity — lit always means visible", () => {
     const { document: moleculeDocument, selection } = moleculeSelection();
     const inspector = createMoleculeInspectorModel(moleculeDocument, {

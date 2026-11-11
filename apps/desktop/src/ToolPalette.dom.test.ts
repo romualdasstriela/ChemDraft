@@ -323,6 +323,9 @@ describe("ToolPalette art color popover", () => {
       palettesTab.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
+    // Office's colour menu leads the palettes.
+    expect(popover.querySelector(".color-palette-section")?.getAttribute("data-color-palette")).toBe("office");
+    expect(popover.querySelector('[data-color-palette="office-standard"]')).not.toBeNull();
     expect(popover.querySelector('[data-color-palette="crayola"]')).not.toBeNull();
     expect(popover.querySelector('[data-color-palette="colorblind"]')).not.toBeNull();
     expect(popover.querySelector('[data-color-palette="seasonal"]')).not.toBeNull();

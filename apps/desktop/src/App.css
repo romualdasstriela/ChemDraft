@@ -1847,6 +1847,41 @@ textarea:focus-visible,
   cursor: pointer;
 }
 
+/* The main toolbar's Office colours button: a small swatch grid over a bar in the current colour. */
+.office-color-cell {
+  position: relative;
+  display: inline-flex;
+}
+
+.toolbar-text-button.office-color-button {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  place-items: center;
+  padding: 2px 3px 3px;
+  gap: 1px;
+}
+
+.office-color-glyph {
+  width: 14px;
+  height: 13px;
+  fill: currentColor;
+  opacity: 0.75;
+}
+
+.office-color-bar {
+  width: 14px;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--picker-color);
+  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 35%);
+}
+
+.office-color-popover {
+  width: max-content;
+  display: grid;
+  gap: 8px;
+}
+
 .toolbar-color-picker {
   position: relative;
   display: flex;
@@ -2461,6 +2496,30 @@ textarea:focus-visible,
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 4px;
+}
+
+/* Office's colour menu: ten columns of small square swatches, the base row set apart from its
+   lighter/darker variants the way Office draws it. */
+.office-color-grid {
+  grid-template-columns: repeat(10, 16px);
+  gap: 3px;
+}
+
+.office-color-variants {
+  margin-top: 2px;
+}
+
+.office-color-grid .color-palette-swatch {
+  min-height: 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+.office-color-grid .color-palette-swatch:hover,
+.office-color-grid .color-palette-swatch.active {
+  box-shadow: 0 0 0 1px var(--cd-accent-strong);
 }
 
 .color-palette-swatch {

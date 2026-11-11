@@ -43,6 +43,9 @@ export interface ToolbarWidgetState {
   onInvoke: (commandId: string) => void;
   onColorPickerOpenChange?: (open: boolean) => void;
   onRequestColorPopover?: (anchor: ToolbarPopoverAnchor) => void;
+  /** Opens the bond, atom and text colour picker (Office palette) in its own floating window.
+   *  Absent (in-window palettes, tests), the picker opens inline under its button. */
+  onRequestTextColorPopover?: (anchor: ToolbarPopoverAnchor) => void;
   onArtStylePreview?: (commandId: string) => void;
   onArtStyleCommit?: (commandId: string) => void;
   onArtStyleCancel?: () => void;

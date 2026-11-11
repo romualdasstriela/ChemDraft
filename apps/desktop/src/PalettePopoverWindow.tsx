@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ColorPickerPopoverBody, symbolToolGlyph, toolbarCommandFlyoutGridStyle } from "./ToolPalette";
 import { Icon, type IconName } from "./icons";
 import { toolbarAsset, type ToolbarAssetName } from "./toolbarAssets";
-import { normalizeHexColor, objectCustomColorCommandId } from "./commands";
+import { normalizeHexColor, objectCustomColorCommandId, textCustomColorCommandId } from "./commands";
 import {
   listenForToolsetPopoverContent,
   listenForToolsetPopoverDismiss,
@@ -73,11 +73,14 @@ export function PalettePopoverWindow({
   const [artStyleTarget, setArtStyleTarget] = useState<ToolsetArtPaintTarget>("fill");
   const [fallbackColor, setFallbackColor] = useState<string | undefined>();
   const [draft, setDraft] = useState<string | undefined>();
+  const textTarget = content.kind === "artColor" && content.target === "text";
 
   const effectiveTarget: ToolsetArtPaintTarget = artStyle?.activePaintTarget ?? artStyleTarget ?? "fill";
-  const activeColor = effectiveTarget === "fill"
-    ? artStyle?.values.fillColor.value
-    : artStyle?.values.strokeColor.value;
+  const activeColor = textTarget
+    ? undefined
+    : effectiveTarget === "fill"
+      ? artStyle?.values.fillColor.value
+      : artStyle?.values.strokeColor.value;
   const currentColor = normalizeHexColor(activeColor ?? fallbackColor) ?? "#111111";
   const value = draft ?? currentColor;
 
@@ -108,7 +111,13 @@ export function PalettePopoverWindow({
       if (payload.anchor && typeof payload.anchor.x === "number" && typeof payload.anchor.y === "number") {
         anchorRef.current = payload.anchor;
       }
-      setContent(payload.kind === "flyout" ? { kind: "flyout", flyout: payload.flyout } : { kind: "artColor" });
+      setContent(
+        payload.kind === "flyout"
+          ? { kind: "flyout", flyout: payload.flyout }
+          : payload.target === "text"
+            ? { kind: "artColor", target: "text" }
+            : { kind: "artColor" }
+      );
     })
       .then((cleanup) => {
         unlisten = cleanup;
@@ -294,7 +303,10 @@ export function PalettePopoverWindow({
       return;
     }
     setDraft(normalized);
-    void sendPaletteCommandPreview(objectCustomColorCommandId(normalized)).catch(() => undefined);
+    // Text colours have no live preview path: they apply on commit, as one undo step each.
+    if (!textTarget) {
+      void sendPaletteCommandPreview(objectCustomColorCommandId(normalized)).catch(() => undefined);
+    }
   };
 
   const commitColor = (color: string) => {
@@ -303,6 +315,10 @@ export function PalettePopoverWindow({
       return;
     }
     setDraft(normalized);
+    if (textTarget) {
+      void sendPaletteCommand(textCustomColorCommandId(normalized)).catch(() => undefined);
+      return;
+    }
     void sendPaletteCommandCommit(objectCustomColorCommandId(normalized)).catch(() => undefined);
   };
 
@@ -384,8 +400,15 @@ export function PalettePopoverWindow({
           ))}
         </div>
       ) : (
-        <div className="art-color-popover" role="dialog" aria-label="Art color picker">
+        <div
+          className="art-color-popover"
+          role="dialog"
+          aria-label={textTarget ? "Bond, atom and text color picker" : "Art color picker"}
+        >
           <ColorPickerPopoverBody
+            // A fresh body per target, so the text picker always opens on the Office palette.
+            key={textTarget ? "text" : "art"}
+            initialTab={textTarget ? "palettes" : "color"}
             activeColor={currentColor}
             value={value}
             onPreviewColor={previewColor}

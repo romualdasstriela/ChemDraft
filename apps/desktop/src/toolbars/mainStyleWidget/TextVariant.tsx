@@ -28,6 +28,7 @@ export function textVariantRows(state: ToolbarWidgetState): MainStyleRows {
         commands: mainToolbarSwatchCommands,
         activeColor: normalizeHexColor(currentColor) ?? currentColor
       },
+      { kind: "officeColors", ariaLabel: "Text color", activeColor: normalizeHexColor(currentColor) ?? currentColor },
       { kind: "aligns", activeAlign: currentTextStyle?.textAlign ?? "left" },
       ...(superscriptCommand
         ? [{

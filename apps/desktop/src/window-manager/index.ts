@@ -343,7 +343,9 @@ export interface ToolsetFlyoutSnapshot {
  * no per-kind windows to keep in sync, and no way for a stale kind to coexist.
  */
 export type ToolsetPopoverContent =
-  | { kind: "artColor" }
+  /** The colour picker. `target` "text" colours text, bonds and atoms (the text-colour commands,
+   *  opened on the Office palette); absent, it colours art objects as it always has. */
+  | { kind: "artColor"; target?: "text" }
   | { kind: "flyout"; flyout: ToolsetFlyoutSnapshot };
 
 /** Where the popover's top-left belongs, in global logical coordinates. Rides the content
