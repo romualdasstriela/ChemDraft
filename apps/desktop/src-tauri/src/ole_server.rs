@@ -725,20 +725,26 @@ impl Drawing_Impl {
         Ok(())
     }
 
-    /// The picture for the container, described against this computer's screen (see
-    /// `emf_with_reference_device`), so Word keeps it at its real size.
+    /// The picture for the container, described for this computer's screen (see
+    /// `ole_registration::emf_for_screen`), so Word keeps it at its real size.
     fn picture_handle(&self) -> Option<HENHMETAFILE> {
         let picture = lock(&self.state).picture.clone();
         if picture.is_empty() {
             return None;
         }
-        let bytes = screen_metrics()
-            .and_then(|(px, mm)| ole_registration::emf_with_reference_device(&picture, px, mm))
-            .unwrap_or(picture);
+        let bytes = emf_for_this_screen(&picture);
         // SAFETY: the bytes are copied into a new metafile handle the caller owns.
         let handle = unsafe { SetEnhMetaFileBits(&bytes) };
         (!handle.is_invalid()).then_some(handle)
     }
+}
+
+/// `emf` described for this computer's screen (see `ole_registration::emf_for_screen`); unchanged
+/// when the screen cannot be measured or the bytes are not a metafile.
+pub(crate) fn emf_for_this_screen(emf: &[u8]) -> Vec<u8> {
+    screen_metrics()
+        .and_then(|(px, mm)| ole_registration::emf_for_screen(emf, px, mm))
+        .unwrap_or_else(|| emf.to_vec())
 }
 
 /// The screen's size in pixels and millimetres, as GDI reports it.

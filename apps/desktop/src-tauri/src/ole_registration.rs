@@ -200,66 +200,56 @@ pub(crate) fn emf_frame_himetric(emf: &[u8]) -> Option<(i32, i32)> {
     Some((right - left + 1, bottom - top + 1))
 }
 
-/// The same Enhanced Metafile described against another reference screen: `device_px` pixels
-/// over `device_mm` millimetres. The picture's frame (its size in 0.01 mm) stays; its device
-/// bounds and the viewport the drawing maps onto become that screen's pixels.
+/// The same Enhanced Metafile described for the screen it is used on: `device_px` pixels over
+/// `device_mm` millimetres (GDI's HORZRES/VERTRES and HORZSIZE/VERTSIZE). The drawing keeps its
+/// 96 dpi pixel geometry (device bounds, viewport); the header names that screen as its reference
+/// device and states the frame (the physical size) those pixels have on it.
 ///
-/// The clipboard's picture keeps the 96 dpi reference it is written with, which is what a plain
-/// picture paste sizes correctly. An embedded object's picture is measured against the real screen
-/// instead: Word scaled a 96 dpi picture by (508 mm / the screen's 345 mm) = 1.47 at the paste, and
-/// again at every update, until it was told the picture's own reference is that screen.
-pub(crate) fn emf_with_reference_device(
+/// Word measures pictures both ways: by the frame against the screen's physical resolution, and
+/// by the device pixels at 96 dpi. On a screen whose physical resolution is not 96 dpi (here 1920
+/// px over 345 mm, 141 dpi) a plain 96 dpi metafile disagrees with itself by 1.47: an embedded
+/// object pasted 1.47x too big and grew by 1.47 at every update. Described this way the two
+/// measures agree, and the picture keeps its 96 dpi size in Word whichever one Word uses.
+/// Applying it twice gives the same bytes.
+pub(crate) fn emf_for_screen(
     emf: &[u8],
     device_px: (i32, i32),
     device_mm: (i32, i32),
 ) -> Option<Vec<u8>> {
-    let int = |bytes: &[u8], offset: usize| -> Option<i32> {
+    let int = |offset: usize| -> Option<i32> {
         Some(i32::from_le_bytes(
-            bytes.get(offset..offset + 4)?.try_into().ok()?,
+            emf.get(offset..offset + 4)?.try_into().ok()?,
         ))
     };
-    let (frame_width, frame_height) = emf_frame_himetric(emf)?;
+    emf_frame_himetric(emf)?;
     if device_px.0 <= 0 || device_px.1 <= 0 || device_mm.0 <= 0 || device_mm.1 <= 0 {
         return None;
     }
-    let header_size = usize::try_from(int(emf, 4)?).ok()?;
-    if header_size < 108 || header_size > emf.len() {
+    let bounds_width = int(16)? - int(8)? + 1;
+    let bounds_height = int(20)? - int(12)? + 1;
+    if bounds_width <= 0 || bounds_height <= 0 {
         return None;
     }
-    let pixels = |hmm: i32, px: i32, mm: i32| {
-        ((f64::from(hmm) / 100.0 * f64::from(px) / f64::from(mm)).round() as i32).max(1)
+    let himetric = |px: i32, device: i32, mm: i32| {
+        ((f64::from(px) * f64::from(mm) * 100.0 / f64::from(device)).round() as i32).max(1)
     };
-    let width_px = pixels(frame_width, device_px.0, device_mm.0);
-    let height_px = pixels(frame_height, device_px.1, device_mm.1);
+    let frame_width = himetric(bounds_width, device_px.0, device_mm.0);
+    let frame_height = himetric(bounds_height, device_px.1, device_mm.1);
     let mut out = emf.to_vec();
     let mut put =
         |offset: usize, value: i32| out[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-    put(16, width_px - 1); // rclBounds right
-    put(20, height_px - 1); // rclBounds bottom
+    put(24, 0); // rclFrame, 0.01 mm
+    put(28, 0);
+    put(32, frame_width - 1);
+    put(36, frame_height - 1);
     put(72, device_px.0); // szlDevice
     put(76, device_px.1);
     put(80, device_mm.0); // szlMillimeters
     put(84, device_mm.1);
     put(100, device_mm.0 * 1000); // szlMicrometers
     put(104, device_mm.1 * 1000);
-    // The viewport (EMR_SETVIEWPORTEXTEX, record 11) the 0.01 mm drawing maps onto: device pixels.
-    let mut offset = header_size;
-    while offset + 8 <= emf.len() {
-        let kind = int(emf, offset)?;
-        let size = usize::try_from(int(emf, offset + 4)?).ok()?;
-        if size < 8 {
-            return None;
-        }
-        if kind == 11 && size >= 16 {
-            put(offset + 8, width_px);
-            put(offset + 12, height_px);
-            return Some(out);
-        }
-        offset += size;
-    }
-    None
+    Some(out)
 }
-
 #[cfg(windows)]
 pub(crate) mod native {
     use super::RegistryEntry;
@@ -369,8 +359,8 @@ mod tests {
     }
 
     #[test]
-    fn emf_reference_device_moves_bounds_and_viewport_to_the_screen() {
-        // A header (108 bytes) with a 2540 x 1270 (0.01 mm) frame at 96 dpi, then a viewport record.
+    fn emf_for_screen_states_the_physical_size_of_its_96_dpi_pixels() {
+        // A header (108 bytes) with 96 x 48 px bounds and a 2540 x 1270 (0.01 mm) frame at 96 dpi.
         let mut emf = vec![0u8; 108];
         emf[0..4].copy_from_slice(&1u32.to_le_bytes());
         emf[4..8].copy_from_slice(&108u32.to_le_bytes());
@@ -379,20 +369,19 @@ mod tests {
         emf[32..36].copy_from_slice(&2539i32.to_le_bytes());
         emf[36..40].copy_from_slice(&1269i32.to_le_bytes());
         emf[40..44].copy_from_slice(b" EMF");
-        for value in [11i32, 16, 96, 48] {
-            emf.extend_from_slice(&value.to_le_bytes());
-        }
-        let moved = emf_with_reference_device(&emf, (1920, 1200), (345, 215)).unwrap();
+        let moved = emf_for_screen(&emf, (1920, 1200), (345, 215)).unwrap();
         let int = |offset: usize| i32::from_le_bytes(moved[offset..offset + 4].try_into().unwrap());
-        // 25.4 mm on a 1920 px / 345 mm screen is 141 px; 12.7 mm on 1200 px / 215 mm is 71 px.
-        assert_eq!((int(16), int(20)), (140, 70));
+        // 96 px on a 1920 px / 345 mm screen is 17.25 mm; 48 px on 1200 px / 215 mm is 8.6 mm.
+        assert_eq!(emf_frame_himetric(&moved), Some((1725, 860)));
+        assert_eq!((int(16), int(20)), (95, 47));
         assert_eq!((int(72), int(76), int(80), int(84)), (1920, 1200, 345, 215));
-        assert_eq!((int(116), int(120)), (141, 71));
-        // The frame, the picture's real size, is untouched.
-        assert_eq!(emf_frame_himetric(&moved), Some((2540, 1270)));
-        assert!(emf_with_reference_device(&emf, (0, 0), (345, 215)).is_none());
+        // Idempotent, and refused without a screen.
+        assert_eq!(
+            emf_for_screen(&moved, (1920, 1200), (345, 215)).unwrap(),
+            moved
+        );
+        assert!(emf_for_screen(&emf, (0, 0), (345, 215)).is_none());
     }
-
     #[test]
     fn emf_frame_reads_the_header_size() {
         let mut emf = vec![0u8; 108];

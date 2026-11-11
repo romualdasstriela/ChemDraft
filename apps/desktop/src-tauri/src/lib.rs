@@ -5086,16 +5086,18 @@ fn write_clipboard_text_items_impl(
     items: Vec<ClipboardWriteTextItem>,
     pictures: ClipboardPictures<'_>,
 ) -> Result<(), String> {
-    // The drawing as an embeddable object, with the vector picture as what Office shows.
-    let embedding = pictures
-        .emf
+    // The vector picture, described for this screen so Word keeps it at its real size, and the
+    // drawing as an embeddable object showing that picture.
+    let emf = pictures.emf.map(ole_server::emf_for_this_screen);
+    let embedding = emf
+        .as_deref()
         .zip(pictures.embed_document)
         .and_then(|(emf, document)| ole_server::clipboard_embedding(document, emf));
     windows_clipboard::native::write_text_items(
         clipboard_owner_window(app),
         &items,
         pictures.jpeg,
-        pictures.emf,
+        emf.as_deref(),
         embedding
             .as_ref()
             .map(|(storage, descriptor)| (storage.as_slice(), descriptor.as_slice())),
