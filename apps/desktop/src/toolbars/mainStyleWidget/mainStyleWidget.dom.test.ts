@@ -152,6 +152,42 @@ describe("MainStyleWidget variants", () => {
     expect(onInvoke).toHaveBeenCalledWith("text.color.blue");
   });
 
+  it("offers bold and italic atom labels, both off meaning regular", () => {
+    const { document: moleculeDocument, selection, molecule } = moleculeSelection();
+    const inspector = createMoleculeInspectorModel(moleculeDocument, {
+      selectedObjectIds: moleculeDocument.selection.objectIds
+    });
+    const { onInvoke } = renderWidget({ currentSelection: selection, currentMoleculeInspector: inspector });
+    const bold = widgetRoot().querySelector<HTMLButtonElement>("[aria-label=\"Bold Atom Labels\"]");
+    const italic = widgetRoot().querySelector<HTMLButtonElement>("[aria-label=\"Italic Atom Labels\"]");
+    expect(bold?.getAttribute("aria-pressed")).toBe("false");
+    expect(italic?.getAttribute("aria-pressed")).toBe("false");
+    expect(bold?.dataset.commandId).toBe("molecule.atomLabel.fontFace:700:normal");
+    expect(italic?.dataset.commandId).toBe("molecule.atomLabel.fontFace:400:italic");
+    act(() => {
+      bold?.click();
+    });
+    expect(onInvoke).toHaveBeenCalledWith("molecule.atomLabel.fontFace:700:normal");
+
+    // Bold labels: B is lit and turns them back to regular; I keeps them bold.
+    const boldDocument = {
+      ...moleculeDocument,
+      pages: [{
+        ...moleculeDocument.pages[0],
+        objects: [{ ...molecule, style: { ...molecule.style, atomLabelFontWeight: 700 } }]
+      }]
+    };
+    const boldInspector = createMoleculeInspectorModel(boldDocument, {
+      selectedObjectIds: boldDocument.selection.objectIds
+    });
+    renderWidget({ currentSelection: selection, currentMoleculeInspector: boldInspector });
+    const boldAgain = widgetRoot().querySelector<HTMLButtonElement>("[aria-label=\"Bold Atom Labels\"]");
+    const italicAgain = widgetRoot().querySelector<HTMLButtonElement>("[aria-label=\"Italic Atom Labels\"]");
+    expect(boldAgain?.getAttribute("aria-pressed")).toBe("true");
+    expect(boldAgain?.dataset.commandId).toBe("molecule.atomLabel.fontFace:400:normal");
+    expect(italicAgain?.dataset.commandId).toBe("molecule.atomLabel.fontFace:700:italic");
+  });
+
   it("offers Office's colours for bonds and atoms, applied as a text colour", () => {
     const { document: moleculeDocument, selection } = moleculeSelection();
     const inspector = createMoleculeInspectorModel(moleculeDocument, {

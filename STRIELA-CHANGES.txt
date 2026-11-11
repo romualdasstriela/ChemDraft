@@ -222,7 +222,14 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - The full colour picker (text toolbar, Art toolbar) lists the Office colours first under
      its Palettes tab.
 
-14. Build checks
+14. Bold and italic atom labels from the Main toolbar
+   - With a structure or atoms selected, the Main toolbar's second row has B and I buttons for
+     the atom labels; both off is Regular. B lights when every selected label is bold (I the
+     same for italic) and a click turns that on or off, keeping the other.
+   - To make room, the atom-label font list is one cell narrower and the size list shows the
+     number only (its tooltip says px).
+
+15. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
    - Every dev build also runs cargo clippy (-D warnings) and cargo test, as the main
      project's Windows CI does.
@@ -265,3 +272,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Copy a vector picture (EMF) to the Windows clipboard with Ctrl+C
 (next)  Embed copied drawings in Office as ChemDraft objects that open here for editing
 (next)  Office colour palette for bonds, atoms and text
+(next)  Bold and italic atom labels from the Main toolbar

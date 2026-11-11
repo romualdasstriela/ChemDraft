@@ -1,4 +1,5 @@
 import {
+  moleculeAtomLabelFontFaceCommandId,
   moleculeAtomLabelFontFamilyCommandId,
   moleculeAtomLabelFontSizeCommandId,
   moleculeAtomLabelHideImplicitHydrogensCommandId,
@@ -29,7 +30,8 @@ const ATOM_LABEL_SIZE_PRESETS = [10, 12, 15, 18, 21, 24] as const;
  * Molecule layout: the properties a chemist reaches for without opening the inspector.
  * Row 1: bond/atom color swatches (the text-color commands — their selection-color path already
  * routes to molecule parts), bond line width, hide-implicit-H and show-terminal-C toggles.
- * Row 2: atom-label font + size, double-bond spacing, More… (opens the Molecule Inspector).
+ * Row 2: atom-label font + size + bold/italic (both off = regular), double-bond spacing, More…
+ * (opens the Molecule Inspector).
  */
 export function moleculeVariantRows(state: ToolbarWidgetState): MainStyleRows {
   const inspector = state.currentMoleculeInspector;
@@ -50,6 +52,11 @@ export function moleculeVariantRows(state: ToolbarWidgetState): MainStyleRows {
   const implicitHydrogensApply = atomLabels?.implicitHydrogensAffectLabels === true;
   const showImplicitHydrogens = implicitHydrogensApply
     && atomLabels?.values.hideImplicitHydrogens.value === false;
+  // Lit only when every selected label is bold (italic); a mixed selection reads as off, so a
+  // click makes them all bold (italic).
+  const fontFace = atomLabels?.values.fontFace;
+  const labelBold = !fontFace?.mixed && (fontFace?.value?.weight ?? 400) >= 600;
+  const labelItalic = !fontFace?.mixed && fontFace?.value?.style === "italic";
 
   return {
     primary: [
@@ -106,7 +113,7 @@ export function moleculeVariantRows(state: ToolbarWidgetState): MainStyleRows {
     secondary: [
       {
         kind: "fontFamilySelect",
-        cells: 4,
+        cells: 3,
         ariaLabel: "Atom label font",
         family: atomLabels?.values.fontFamily.value ?? null,
         mixed: atomLabels?.values.fontFamily.mixed ?? false,
@@ -119,8 +126,8 @@ export function moleculeVariantRows(state: ToolbarWidgetState): MainStyleRows {
       },
       {
         kind: "select",
-        cells: 3,
-        ariaLabel: "Atom label size",
+        cells: 2,
+        ariaLabel: "Atom label size (px)",
         disabled: atomLabelsDisabled,
         value: numericSelectValue(
           atomLabels?.values.fontSizePx.value ?? null,
@@ -129,11 +136,33 @@ export function moleculeVariantRows(state: ToolbarWidgetState): MainStyleRows {
           ATOM_LABEL_SIZE_PRESETS,
           moleculeAtomLabelFontSizeCommandId
         ),
+        // Two cells hold the number only; the tooltip says it is in px.
         options: numericSelectOptions(
           ATOM_LABEL_SIZE_PRESETS,
           moleculeAtomLabelFontSizeCommandId,
-          (value) => `${value} px`
+          (value) => `${value}`
         )
+      },
+      {
+        kind: "toggleGroup",
+        ariaLabel: "Atom label style",
+        toggles: [
+          {
+            // Both off is Regular. Each button keeps the other half of the face as it is.
+            commandId: moleculeAtomLabelFontFaceCommandId(labelBold ? 400 : 700, labelItalic ? "italic" : "normal"),
+            label: "Bold Atom Labels",
+            active: labelBold,
+            disabled: atomLabelsDisabled,
+            content: "B"
+          },
+          {
+            commandId: moleculeAtomLabelFontFaceCommandId(labelBold ? 700 : 400, labelItalic ? "normal" : "italic"),
+            label: "Italic Atom Labels",
+            active: labelItalic,
+            disabled: atomLabelsDisabled,
+            content: "I"
+          }
+        ]
       },
       {
         kind: "select",
