@@ -229,7 +229,18 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - To make room, the atom-label font list is one cell narrower and the size list shows the
      number only (its tooltip says px).
 
-15. Build checks
+15. Stretching shapes by one side
+   - A selected shape from the Art toolbox (rectangle, ellipse, polygon, ...) has a handle in
+     the middle of each side as well as the four corners. Dragging a side handle moves only
+     that side: drag the right side of a rectangle and the left side stays where it is while
+     the shape gets wider; its height does not change. A rotated shape stretches along its own
+     sides.
+   - The corners work as before: they scale keeping the proportions, or freely with Shift.
+   - Arrows keep only the corner handles.
+   - (Dashed and dotted outlines were already there: the Dash pattern list in the Main toolbar
+     for a selected shape, or in the Art toolbar after switching Fill to Stroke.)
+
+16. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
    - Every dev build also runs cargo clippy (-D warnings) and cargo test, as the main
      project's Windows CI does.
@@ -273,3 +284,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Embed copied drawings in Office as ChemDraft objects that open here for editing
 (next)  Office colour palette for bonds, atoms and text
 (next)  Bold and italic atom labels from the Main toolbar
+(next)  Stretch a shape by dragging one side; the opposite side stays

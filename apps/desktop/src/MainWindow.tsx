@@ -612,6 +612,9 @@ import {
   rotateDocumentObjectsAroundPoint,
   rotateSelectedDocumentObjects90,
   scaleDocumentObjectsAroundPoint,
+  objectEdgeStretch,
+  stretchDocumentObjectFromEdge,
+  type ObjectResizeEdge,
   ungroupSelectedDocumentObjects,
   moveNativeMoleculeParts,
   findForeignNativeMoleculeBondTarget,
@@ -1259,7 +1262,13 @@ type ObjectResizeInputState = {
   homeXPercent: string;
   homeYPercent: string;
 };
-type ObjectResizeCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+/** A resize handle: a corner (scales about the centre, Shift to stretch) or, on shapes, a side
+ *  (stretches that one axis with the opposite side held still). */
+type ObjectResizeCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right" | ObjectResizeEdge;
+const OBJECT_RESIZE_EDGES: readonly ObjectResizeEdge[] = ["top", "right", "bottom", "left"];
+function isObjectResizeEdge(handle: ObjectResizeCorner): handle is ObjectResizeEdge {
+  return (OBJECT_RESIZE_EDGES as readonly string[]).includes(handle);
+}
 type ObjectResizeDragState = {
   pointerId: number;
   objectId: string;
@@ -1656,7 +1665,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.11.11.12-opus";
+const CURRENT_BUILD_STAMP = "11.11.11.13-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -15365,8 +15374,11 @@ export function MainWindow({
     point: ClientPoint,
     stretching: boolean
   ): ChemDraftDocument => {
-    const scale = objectResizeScaleFromDrag(drag.centerPoint, drag.startPoint, point, stretching);
     const object = findDocumentObject(drag.startDocument, drag.objectId);
+    if (isObjectResizeEdge(drag.corner) && !drag.target && object && object.type !== "molecule") {
+      return stretchDocumentObjectFromEdge(drag.startDocument, drag.objectId, drag.corner, point);
+    }
+    const scale = objectResizeScaleFromDrag(drag.centerPoint, drag.startPoint, point, stretching);
     if (!drag.target && object?.type !== "molecule") {
       return scaleDocumentObjectsAroundPoint(drag.startDocument, [drag.objectId], drag.centerPoint, scale.x, scale.y);
     }
@@ -15380,7 +15392,7 @@ export function MainWindow({
     markFrame("previewObjectResize", () => {
       drag.latestPoint = point;
       drag.stretching = stretching;
-      drag.latestScale = objectResizeScaleFromDrag(drag.centerPoint, drag.startPoint, point, stretching);
+      drag.latestScale = objectResizeDragScale(drag, point, stretching);
       drag.latestCumulativeScale = cumulativeObjectResizeScale(drag.startCumulativeScale, drag.latestScale);
       showObjectResizeReadout(drag.objectId, drag.latestCumulativeScale);
       clearObjectTransformPreview(drag.pointerId);
@@ -15389,7 +15401,7 @@ export function MainWindow({
   }, [clearObjectTransformPreview, objectResizeDocumentFromDrag, replacePresentDocument, showObjectResizeReadout]);
 
   const commitObjectResize = useCallback((drag: ObjectResizeDragState, point: ClientPoint): boolean => {
-    drag.latestScale = objectResizeScaleFromDrag(drag.centerPoint, drag.startPoint, point, drag.stretching);
+    drag.latestScale = objectResizeDragScale(drag, point, drag.stretching);
     drag.latestCumulativeScale = cumulativeObjectResizeScale(drag.startCumulativeScale, drag.latestScale);
     const resized = objectResizeDocumentFromDrag(drag, point, drag.stretching);
     showObjectResizeReadout(drag.objectId, drag.latestCumulativeScale, true);
@@ -16351,7 +16363,7 @@ export function MainWindow({
       }
 
       if (objectResizeDrag.dragging) {
-        previewObjectResize(objectResizeDrag, point, event.shiftKey);
+        previewObjectResize(objectResizeDrag, point, event.shiftKey || isObjectResizeEdge(objectResizeDrag.corner));
       }
       return;
     }
@@ -16739,12 +16751,7 @@ export function MainWindow({
       event.stopPropagation();
       const point = pagePointFromPointerEvent(event) ?? objectResizeDrag.latestPoint;
       if (objectResizeDrag.dragging) {
-        objectResizeDrag.latestScale = objectResizeScaleFromDrag(
-          objectResizeDrag.centerPoint,
-          objectResizeDrag.startPoint,
-          point,
-          objectResizeDrag.stretching
-        );
+        objectResizeDrag.latestScale = objectResizeDragScale(objectResizeDrag, point, objectResizeDrag.stretching);
         const changed = commitObjectResize(objectResizeDrag, point);
         const object = findDocumentObject(documentRef.current, objectResizeDrag.objectId);
         const targetLabel = objectResizeDrag.target ? "selected molecule fragment" : documentObjectTransformLabel(object);
@@ -19000,7 +19007,8 @@ export function MainWindow({
       latestPoint: point,
       latestScale: { x: 1, y: 1 },
       latestCumulativeScale: startCumulativeScale,
-      stretching: event.shiftKey,
+      // A side handle always stretches; a corner stretches with Shift.
+      stretching: event.shiftKey || isObjectResizeEdge(corner),
       dragging: false
     };
     captureGesturePointer((pageRef.current ?? event.currentTarget), event.pointerId);
@@ -19351,7 +19359,7 @@ export function MainWindow({
       }
 
       if (objectResizeDrag.dragging) {
-        previewObjectResize(objectResizeDrag, point, event.shiftKey);
+        previewObjectResize(objectResizeDrag, point, event.shiftKey || isObjectResizeEdge(objectResizeDrag.corner));
       }
       return;
     }
@@ -19606,12 +19614,7 @@ export function MainWindow({
       event.stopPropagation();
       const point = pagePointFromPointerEvent(event) ?? objectResizeDrag.latestPoint;
       if (objectResizeDrag.dragging) {
-        objectResizeDrag.latestScale = objectResizeScaleFromDrag(
-          objectResizeDrag.centerPoint,
-          objectResizeDrag.startPoint,
-          point,
-          objectResizeDrag.stretching
-        );
+        objectResizeDrag.latestScale = objectResizeDragScale(objectResizeDrag, point, objectResizeDrag.stretching);
         const changed = commitObjectResize(objectResizeDrag, point);
         const object = findDocumentObject(documentRef.current, objectResizeDrag.objectId);
         const label = documentObjectTransformLabel(object);
@@ -22685,6 +22688,19 @@ export function objectResizeScaleFromDrag(
     x: clampObjectResizeScale(Math.abs(startVector.x) <= 0.001 ? 1 : latestVector.x / startVector.x),
     y: clampObjectResizeScale(Math.abs(startVector.y) <= 0.001 ? 1 : latestVector.y / startVector.y)
   };
+}
+
+/** The scale a resize drag has reached: a side handle stretches one axis from the opposite side,
+ *  a corner scales about the centre (freely while stretching). */
+function objectResizeDragScale(drag: ObjectResizeDragState, point: ClientPoint, stretching: boolean): ObjectResizeScale {
+  if (isObjectResizeEdge(drag.corner) && !drag.target) {
+    const object = findDocumentObject(drag.startDocument, drag.objectId);
+    const stretch = object && object.type !== "molecule" ? objectEdgeStretch(object, drag.corner, point) : undefined;
+    if (stretch) {
+      return { x: Number(stretch.scaleX.toFixed(4)), y: Number(stretch.scaleY.toFixed(4)) };
+    }
+  }
+  return objectResizeScaleFromDrag(drag.centerPoint, drag.startPoint, point, stretching);
 }
 
 export function objectResizeReadoutPercent(scale: number): number {
@@ -27577,6 +27593,8 @@ function DocumentObjectViewContent({
     <ArtObjectTransformFrame
       frameStyle={artObjectTransformFrameStyle}
       targetLabel="selected art object"
+      // Shapes stretch side by side; arrows keep corner scaling (their sides are not edges).
+      sideHandles={object.type === "graphic" && !isNativeArrowGraphic(object)}
       canProjectedPlaneTilt={object.type !== "graphic" || !graphicObjectIsFreehandPath(object)}
       rotationHandlesVisible={rotationHandlesVisible}
       rotateReadout={rotateReadout}
@@ -28598,6 +28616,7 @@ function artPreviewRasterPixelSize(proxy: ArtTransformDragPreviewProxy): { width
 function ArtObjectTransformFrame({
   frameStyle,
   targetLabel,
+  sideHandles = false,
   canProjectedPlaneTilt,
   rotationHandlesVisible,
   rotateReadout,
@@ -28622,6 +28641,7 @@ function ArtObjectTransformFrame({
 }: {
   frameStyle?: CSSProperties;
   targetLabel: string;
+  sideHandles?: boolean;
   canProjectedPlaneTilt: boolean;
   rotationHandlesVisible: boolean;
   rotateReadout?: ObjectRotateReadoutState;
@@ -28655,6 +28675,7 @@ function ArtObjectTransformFrame({
     >
       <ObjectResizeHandles
         targetLabel={targetLabel}
+        sideHandles={sideHandles}
         onResizeDoubleClick={onResizeDoubleClick}
         onResizeStart={onResizePointerDown}
       />
@@ -31154,10 +31175,13 @@ function nativeMoleculeSelectionColor(
 
 function ObjectResizeHandles({
   targetLabel,
+  sideHandles = false,
   onResizeDoubleClick,
   onResizeStart
 }: {
   targetLabel: string;
+  /** Also a handle mid-way along each side, stretching that side alone. */
+  sideHandles?: boolean;
   onResizeDoubleClick(corner: ObjectResizeCorner): (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onResizeStart(corner: ObjectResizeCorner): (event: PointerEvent<HTMLButtonElement>) => void;
 }) {
@@ -31165,6 +31189,18 @@ function ObjectResizeHandles({
 
   return (
     <>
+      {sideHandles ? OBJECT_RESIZE_EDGES.map((edge) => (
+        <button
+          aria-label={`Stretch ${targetLabel} ${edge} side`}
+          className={`object-resize-handle object-resize-side object-resize-${edge}`}
+          data-object-resize-corner={edge}
+          key={edge}
+          title={`Stretch ${targetLabel}: drag the ${edge} side`}
+          type="button"
+          onPointerDown={onResizeStart(edge)}
+          onDoubleClick={onResizeDoubleClick(edge)}
+        />
+      )) : null}
       {corners.map((corner) => (
         <button
           aria-label={`Resize ${targetLabel} ${corner.replace("-", " ")}`}

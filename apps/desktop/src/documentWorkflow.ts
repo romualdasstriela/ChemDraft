@@ -14728,6 +14728,72 @@ export function scaleDocumentObjectsAroundPoint(
   return patches.length > 0 ? applyPatches(document, patches, { now: phase4Timestamp }) : document;
 }
 
+export type ObjectResizeEdge = "left" | "right" | "top" | "bottom";
+
+/** The smallest width or height a side drag leaves a shape, in page units. */
+const EDGE_STRETCH_MIN_SIZE = 2;
+
+/**
+ * Stretching an object by one of its sides: the opposite side stays where it is and only the
+ * dragged side follows the pointer, along the object's own axis (a rotated shape stretches along
+ * its rotated width or height). Returns the scale on the two local axes and how far the centre
+ * moves, or undefined for an object that has no frame to stretch.
+ */
+export function objectEdgeStretch(
+  object: Pick<DocumentObject, "x" | "y" | "width" | "height" | "rotation">,
+  edge: ObjectResizeEdge,
+  point: PagePoint
+): { scaleX: number; scaleY: number; dx: number; dy: number } | undefined {
+  const horizontal = edge === "left" || edge === "right";
+  const size = horizontal ? object.width : object.height;
+  if (!(size > 0)) {
+    return undefined;
+  }
+  const radians = (object.rotation ?? 0) * Math.PI / 180;
+  const axis = horizontal
+    ? { x: Math.cos(radians), y: Math.sin(radians) }
+    : { x: -Math.sin(radians), y: Math.cos(radians) };
+  const sign = edge === "right" || edge === "bottom" ? 1 : -1;
+  const center = objectCenter(object);
+  // The fixed side's midpoint, then the pointer's distance from it along the stretch direction.
+  const anchor = { x: center.x - axis.x * sign * size / 2, y: center.y - axis.y * sign * size / 2 };
+  const reach = sign * ((point.x - anchor.x) * axis.x + (point.y - anchor.y) * axis.y);
+  const nextSize = Math.max(EDGE_STRETCH_MIN_SIZE, reach);
+  const scale = nextSize / size;
+  const nextCenter = { x: anchor.x + axis.x * sign * nextSize / 2, y: anchor.y + axis.y * sign * nextSize / 2 };
+  return {
+    scaleX: horizontal ? scale : 1,
+    scaleY: horizontal ? 1 : scale,
+    dx: nextCenter.x - center.x,
+    dy: nextCenter.y - center.y
+  };
+}
+
+/** {@link objectEdgeStretch} applied: the object scaled on one axis, opposite side fixed. */
+export function stretchDocumentObjectFromEdge(
+  document: ChemDraftDocument,
+  objectId: string,
+  edge: ObjectResizeEdge,
+  point: PagePoint
+): ChemDraftDocument {
+  const object = objectOnPage(pageContainingObject(document, objectId), objectId);
+  const stretch = object && object.type !== "molecule" ? objectEdgeStretch(object, edge, point) : undefined;
+  if (!object || !stretch) {
+    return document;
+  }
+  const scaled = scaleDocumentObjectsAroundPoint(document, [objectId], objectCenter(object), stretch.scaleX, stretch.scaleY);
+  const scaledObject = objectOnPage(pageContainingObject(scaled, objectId), objectId);
+  if (scaled === document || !scaledObject || (Math.abs(stretch.dx) < 0.0001 && Math.abs(stretch.dy) < 0.0001)) {
+    return scaled;
+  }
+  // Not moveDocumentObjects: it keeps a moved selection on the page, which here would let the
+  // fixed side slip when the shape sits at the page edge.
+  const patches = translateDocumentObjectByPatches(scaled, objectId, stretch.dx, stretch.dy, {
+    translateAnchoredGeometry: groupMoveTranslatesArrowGeometry(scaledObject, new Set([objectId]))
+  });
+  return patches.length > 0 ? applyPatches(scaled, patches, { now: phase4Timestamp }) : scaled;
+}
+
 export type DocumentFlipAxis = "horizontal" | "vertical";
 
 export function flipSelectedDocumentObjects(
