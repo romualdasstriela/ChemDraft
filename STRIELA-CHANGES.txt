@@ -76,6 +76,13 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      no admin rights); the dev build ("ChemDraft (dev) Drawing") and the stable app have
      separate types and never open each other's objects. Not offered under Insert > Object
      (a new, empty object has nothing to open). Office for Mac cannot edit such objects.
+   - The drawing opens as the whole page with the copied objects where they were drawn; Word
+     shows it hatched while it is open in ChemDraft, and closing the ChemDraft tab ends the
+     editing (the hatching goes). The pasted object has the drawing's size at 100% zoom and
+     keeps it through edits: every picture states its size for the screen it is used on, as
+     Word measures pictures both against the screen's physical resolution and at 96 dpi.
+   - Each step of the round trip is logged to %TEMP%\ChemDraft Office drawings\ole-log.txt
+     (C:\Users\<you>\AppData\Local\Temp\...); the temporary copies are kept in that folder.
 
 6. ACS Document 1996 as the default drawing style
    - Every new structure (drawn, placed from a template, or pasted as SMILES or molfile)
