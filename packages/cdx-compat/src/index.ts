@@ -9,6 +9,7 @@ import {
   elementSymbolForAtomicNumber,
   isDativeBond,
   isEngineDocument,
+  nativeTextStyleFromObjectStyle,
   parseDocument,
   type Anchor,
   type ArrowObject,
@@ -801,7 +802,13 @@ function cdxmlCrossingZForRef(
 
 function exportTextObject(text: TextObject, ids: Map<string, string>, allocator: IdAllocator): string {
   const textId = idFor(ids, text.id, allocator);
-  return `<t id="${textId}" p="${formatPoint({ x: text.x, y: text.y })}">${escapeXmlText(text.text)}</t>`;
+  return `<t id="${textId}" p="${formatPoint({ x: text.x, y: text.y + textBaselineOffsetPx(text.style) })}">${escapeXmlText(text.text)}</t>`;
+}
+
+/** How far a text object's first baseline sits below its top: the renderer draws it one font size
+ *  down (`planTextObjectSvg`), and CDXML `p` names that baseline. */
+function textBaselineOffsetPx(style: TextObject["style"]): number {
+  return nativeTextStyleFromObjectStyle(style).fontSizePx;
 }
 
 function exportReactionArrowObject(
@@ -2550,8 +2557,11 @@ function cdxmlAtomLabelPoint(atomElement: XmlElementView): Point | undefined {
     return undefined;
   }
 
-  if (labelElement.attributes.BoundingBox) {
-    const box = parseBoundingBox(labelElement.attributes.BoundingBox);
+  // Some writers put an empty BoundingBox="0 0 0 0" on every label: that says nothing about where the
+  // label is, and taking it would pull each label to the page corner.
+  const rawBox = labelElement.attributes.BoundingBox?.trim().split(/\s+/).map(Number) ?? [];
+  const box = rawBox.every((value) => value === 0) ? undefined : parseCdxmlXyBoundingBox(labelElement.attributes.BoundingBox);
+  if (box) {
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   }
 
@@ -2772,15 +2782,20 @@ function frontBondRefFromCdxmlDepth(left: BondRef, right: BondRef, context: Impo
 function importText(textElement: XmlElementView, pageIndex: number, objectIndex: number): TextObject {
   const point = parseCdxmlPoint(textElement.attributes.p);
   const text = textContent(textElement.children);
+  // The first style run's size (points) is the text's size; without it the text took the native default,
+  // which is larger than the 10 pt most drawings use, so captions overran the boxes drawn around them.
+  const sizePt = Number(childElements(textElement, "s")[0]?.attributes.size);
+  const style: TextObject["style"] = Number.isFinite(sizePt) && sizePt > 0 ? { fontSizePx: cdxmlToCssPx(sizePt) } : {};
   return {
     id: `cdxml_text_${pageIndex + 1}_${objectIndex}`,
     type: "text",
     x: point.x,
-    y: point.y,
+    // CDXML `p` is the baseline of the first line; a text object's y is its top, one font size above.
+    y: point.y - textBaselineOffsetPx(style),
     width: Math.max(36, text.length * 8),
     height: 24,
     rotation: 0,
-    style: {},
+    style,
     text,
     spans: [],
     compatibility: {
@@ -3084,8 +3099,9 @@ function cdxmlArrowMarkers(element: XmlElementView): Pick<GraphicObject["data"],
 function cdxmlArrowMarker(arrowhead: string | undefined, arrowheadType: string): GraphicMarker | undefined {
   const head = normalizedCdxmlToken(arrowhead);
   // An absent attribute and "Unspecified" both mean the end is unheaded — which is why ChemDraw
-  // writes a plain line arrow as `ArrowheadType="Solid"` with no `ArrowheadHead` at all.
-  if (head === "" || head === "none" || head === "unspecified") {
+  // writes a plain line arrow as `ArrowheadType="Solid"` with no `ArrowheadHead` at all. Other writers
+  // spell an unheaded end out as "NoHead".
+  if (head === "" || head === "none" || head === "nohead" || head === "unspecified") {
     return undefined;
   }
   if (head === "halfleft" || head === "halfright") {

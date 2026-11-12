@@ -105,6 +105,32 @@ describe("CDXML from other programs", () => {
     expect(curve.style.strokeColor?.toLowerCase()).toBe("#ffff00");
   });
 
+  it("keeps an atom label at its atom when the writer gave the label an empty box at 0,0", () => {
+    const { molecules } = open(`<fragment id="2">
+      <n id="3" p="100 50" Element="6"/>
+      <n id="4" p="114 50" Element="53"><t id="6" BoundingBox="0 0 0 0"><s font="1" size="10">I</s></t></n>
+      <b id="5" B="3" E="4" Order="1"/>
+    </fragment>`);
+    expect(molecules[0]!.atoms[1]!.labelOffset).toBeUndefined();
+  });
+
+  it("reads ArrowheadTail=\"NoHead\" as an unheaded end, not a second head", () => {
+    const { graphics } = open(`<arrow id="2" ArrowheadType="Solid" ArrowheadHead="Full" ArrowheadTail="NoHead"
+      Head3D="289 141 0" Tail3D="203 141 0" BoundingBox="203 141 289 141"/>`);
+    expect(graphics[0]!.data.markerEnd?.kind).toBe("filled-arrow");
+    expect(graphics[0]!.data.markerStart).toBeUndefined();
+  });
+
+  it("places a text by its baseline, so it reads back where it was written", () => {
+    const opened = openChemDraftPayload(cdxml(`<t id="2" p="100 50"><s font="1" size="10">THF, reflux</s></t>`));
+    const text = opened.document!.pages[0]!.objects.find((object) => object.type === "text")!;
+    const at50 = openChemDraftPayload(cdxml(`<t id="2" p="100 60"><s font="1" size="10">x</s></t>`)).document!.pages[0]!.objects[0]!;
+    // Ten points further down is the same distance in document units, whatever the baseline offset.
+    expect(at50.y - text.y).toBeCloseTo((10 * text.x) / 100);
+    // The top sits above the baseline point, not on it.
+    expect(text.y).toBeLessThan((50 * text.x) / 100);
+  });
+
   it("imports a curve whose control points sit on its nodes as a polyline, with its arrowhead", () => {
     const { graphics } = open(`<curve id="2" CurveType="8" CurvePoints="10 20 10 20 10 20 50 60 50 60 50 60"/>`);
     expect(graphics[0]!.data.artPathKind).toBe("polyline");
