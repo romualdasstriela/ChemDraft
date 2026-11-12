@@ -6062,7 +6062,14 @@ fn open_document_payload_from_url(
 /// anything that was not valid UTF-8, and that failure was only logged — so double-clicking a UTF-16
 /// CDXML file (or a .cdx renamed .cdxml) did nothing at all. Now it reaches the opener, which can say
 /// what the file is.
+///
+/// A ChemDraw binary (.cdx) file is not text: decoding it would lose bytes. It is handed over whole,
+/// base64-encoded ("VjCD0100" becomes "VmpDRDAx"), and the opener reads it.
 fn decode_document_text(bytes: &[u8]) -> String {
+    if bytes.starts_with(b"VjCD0100") {
+        use base64::Engine as _;
+        return base64::engine::general_purpose::STANDARD.encode(bytes);
+    }
     let utf16 = |body: &[u8], little_endian: bool| {
         let units = body
             .chunks_exact(2)
@@ -9600,11 +9607,18 @@ mod tests {
         be.extend(units.iter().flat_map(|unit| unit.to_be_bytes()));
         assert_eq!(decode_document_text(&be), xml);
 
-        // A binary ChemDraw file must still reach the opener, signature intact, so it can say what
-        // the file is rather than the open silently doing nothing.
+        // A binary ChemDraw file reaches the opener whole, base64-encoded, so it can be read.
         let mut cdx = b"VjCD0100".to_vec();
         cdx.extend_from_slice(&[0x04, 0x03, 0x02, 0x01, 0xFF, 0x00, 0x80]);
-        assert!(decode_document_text(&cdx).starts_with("VjCD0100"));
+        let handed_over = decode_document_text(&cdx);
+        assert!(handed_over.starts_with("VmpDRDAx"));
+        use base64::Engine as _;
+        assert_eq!(
+            base64::engine::general_purpose::STANDARD
+                .decode(handed_over)
+                .expect("valid base64"),
+            cdx
+        );
     }
 
     /// NSIS ignores `rank`, so a Windows `.cdxml` association is never "Alternate": a per-user install

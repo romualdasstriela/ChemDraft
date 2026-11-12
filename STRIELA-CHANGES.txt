@@ -240,7 +240,27 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - (Dashed and dotted outlines were already there: the Dash pattern list in the Main toolbar
      for a selected shape, or in the Art toolbar after switching Fill to Stroke.)
 
-16. Build checks
+16. Opening ChemDraw .cdx files, and better CDXML import
+   - File > Open, double-click and drag-and-drop now open ChemDraw binary (.cdx) files. The
+     drawing is read as the CDXML it is the binary form of, so .cdx and .cdxml open the same
+     way. Saving never writes into the .cdx: the first Save asks for a new CDXML or ChemDraft
+     file. ChemDraft does not write .cdx.
+   - Fixed for every CDXML file (ChemDraw's, or one re-saved by another program):
+     - Atoms that have only a 3D position (rings turned in perspective) are drawn where they
+       are, instead of piling up in the page's top-left corner.
+     - Abbreviations (OMe, iPr, CF3, nBu, ...) stay one labelled atom as drawn, when the atoms
+       stored inside them are exactly that group; otherwise they are written out as before.
+       ChemDraw's hyphenated spellings (i-Pr, n-Bu, t-Bu, n-Pr) are recognised and shown
+       as iPr, nBu, tBu, nPr (drawn as written, the hyphen would look like a minus charge).
+     - R1, R2, X and other placeholder labels stay labels; they used to become carbons.
+     - Freely drawn curves come in as path shapes, and square/round/curly brackets as
+       bracket shapes; both used to be dropped.
+     - No more "bond display Solid is not supported" warnings for every ordinary bond.
+   - Still kept as placeholders (shown as "unknown-compatibility-object" at the page corner,
+     and written back on save): ChemDraw's reaction-scheme bookkeeping and bracket-group
+     records. The drawing itself does not depend on them.
+
+17. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
    - Every dev build also runs cargo clippy (-D warnings) and cargo test, as the main
      project's Windows CI does.
@@ -285,3 +305,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Office colour palette for bonds, atoms and text
 (next)  Bold and italic atom labels from the Main toolbar
 (next)  Stretch a shape by dragging one side; the opposite side stays
+(next)  Open ChemDraw .cdx files; CDXML import keeps 3D-positioned atoms, labels, curves, brackets

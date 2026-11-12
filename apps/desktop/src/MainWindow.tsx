@@ -1665,7 +1665,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.11.11.13-opus";
+const CURRENT_BUILD_STAMP = "11.12.11.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -8927,7 +8927,9 @@ export function MainWindow({
     setDocumentTabs(tabs);
     nonPristineTabsRef.current.add(id);
     if (browserKey) browserFileKeysRef.current.set(id, browserKey);
-    resetDocumentHistory(resolvedOpen.document, { path, dirty });
+    // A drawing read from a ChemDraw binary (.cdx) file is never saved back into it: ChemDraft writes
+    // CDXML, which in a .cdx file ChemDraw could not open. Without the path, Save asks where to save.
+    resetDocumentHistory(resolvedOpen.document, { path: path && /\.cdx$/i.test(path) ? undefined : path, dirty });
     clearDocumentInteractionState({ clearSpin3dModelCache: true });
     tabPageFitRef.current = fitRecommendation ? { ...fitRecommendation, displayName } : undefined;
     setPageFitPrompt(tabPageFitRef.current);
@@ -13711,10 +13713,11 @@ export function MainWindow({
       return;
     }
 
+    // Bytes, not `file.text()`: a ChemDraw binary (.cdx) file is not text and would lose bytes.
     void file
-      .text()
-      .then((contents) => {
-        return openDocumentContents(contents, file.name);
+      .arrayBuffer()
+      .then((buffer) => {
+        return openDocumentContents(decodeDocumentBytes(new Uint8Array(buffer)), file.name);
       })
       .catch((error: unknown) => {
         setStatus(`Open failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -20354,7 +20357,7 @@ export function MainWindow({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".chemdraft,.cdxml,.xml,.json,chemical/x-cdxml,application/xml,text/xml,application/json,application/vnd.chemdraft+json"
+        accept=".chemdraft,.cdxml,.xml,.json,chemical/x-cdxml,application/xml,text/xml,application/json,application/vnd.chemdraft+json,.cdx,chemical/x-cdx"
         className="native-file-input"
         aria-label="Open native ChemDraft document"
         onChange={handleOpenFile}
@@ -20643,7 +20646,7 @@ export function MainWindow({
             const files = Array.from(event.dataTransfer.files);
             void (async () => {
               for (const file of files) {
-                try { await openDocumentContents(await file.text(), file.name); }
+                try { await openDocumentContents(decodeDocumentBytes(new Uint8Array(await file.arrayBuffer())), file.name); }
                 catch (error) { setStatus(`Open failed: ${error instanceof Error ? error.message : String(error)}`); }
               }
             })();
@@ -32055,7 +32058,7 @@ function formatOpenFailure(warnings: readonly { code: string; message: string }[
 async function pickNativeOpenPath(): Promise<string | undefined> {
   const { open } = await loadTauriDialogModule();
   const selected = await open({
-    title: "Open ChemDraft or CDXML Document",
+    title: "Open ChemDraft, CDXML or ChemDraw (.cdx) Document",
     multiple: false,
     fileAccessMode: "scoped"
   });

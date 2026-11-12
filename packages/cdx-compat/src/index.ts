@@ -27,7 +27,14 @@ import {
   type Point,
   type TextObject
 } from "@chemdraft/chem-core";
-import { bondedElementLabelMeaning } from "@chemdraft/template-library";
+import { cdxToCdxml } from "./cdx";
+export { cdxToCdxml, isCdxBytes, CdxSignature, type CdxConversionResult } from "./cdx";
+import {
+  abbreviationElementCounts,
+  abbreviationForLabel,
+  bondedElementLabelMeaning,
+  isGenericAtomLabel
+} from "@chemdraft/template-library";
 import { sha256Hex, utf8Bytes, utf8String } from "./sha256";
 
 export interface CompatibilityConversionWarning {
@@ -222,16 +229,24 @@ export function openChemDraftPayload(contents: string): ChemDraftOpenResult {
     return openLegacyJsonDocument(normalized);
   }
 
-  // "VjCD0100" opens every ChemDraw binary file. Say what it is and what to do — the generic
-  // "neither JSON nor XML" left a ChemDraw user with no way forward.
-  // "VmpDRDAx" is the same signature base64-encoded, the form CDX takes in some interchange files.
-  if (normalized.startsWith("VjCD") || normalized.startsWith("VmpDRDAx")) {
+  // "VmpDRDAx" is the ChemDraw binary signature "VjCD0100" base64-encoded: the form a .cdx file
+  // reaches this opener in (the app encodes a file that starts with the signature, since its bytes
+  // are not text), and the form CDX takes in some interchange files.
+  if (normalized.startsWith("VmpDRDAx")) {
+    const bytes = decodeBase64Bytes(normalized);
+    return bytes ? openChemDraftBytes(bytes) : {
+      source: "external-cdxml",
+      warnings: [warning("cdx.base64_invalid", "This ChemDraw binary (.cdx) data is not valid base64, so it could not be read.")]
+    };
+  }
+  // A ChemDraw binary file that was read as text has lost bytes on the way and cannot be read.
+  if (normalized.startsWith("VjCD")) {
     return {
       source: "external-cdxml",
       warnings: [
         warning(
-          "cdx.binary_not_supported",
-          "This is a ChemDraw binary (.cdx) file, which ChemDraft cannot read yet. In ChemDraw, use File ▸ Save As and choose CDXML, then open that file."
+          "cdx.binary_read_as_text",
+          "This is a ChemDraw binary (.cdx) file, but it arrived as text and part of it was lost. Open the file itself with File ▸ Open, or in ChemDraw use File ▸ Save As and choose CDXML."
         )
       ]
     };
@@ -384,6 +399,44 @@ export function openChemDraftPayload(contents: string): ChemDraftOpenResult {
     source: "native-payload",
     warnings: []
   };
+}
+
+/**
+ * Open a ChemDraw binary (.cdx) file: its object tree is read as the CDXML it stands for
+ * ({@link cdxToCdxml}) and imported like any external CDXML, with the reader's own warnings first.
+ */
+export function openChemDraftBytes(bytes: Uint8Array): ChemDraftOpenResult {
+  const converted = cdxToCdxml(bytes);
+  const conversionWarnings = converted.warnings.map((item) => warning(item.code, item.message));
+  if (!converted.contents) {
+    return { source: "external-cdxml", warnings: conversionWarnings };
+  }
+  const opened = openChemDraftPayload(converted.contents);
+  return {
+    ...opened,
+    warnings: [
+      ...conversionWarnings,
+      // The CDXML import names itself; a ChemDraw binary file should say what it was.
+      ...opened.warnings.map((item) => item.code === "cdxml.external_subset_imported"
+        ? warning("cdx.imported", "Opened a ChemDraw binary (.cdx) file; unsupported objects or chemistry may have been omitted. Saving writes a new CDXML or ChemDraft file; the .cdx file is not changed.")
+        : item)
+    ]
+  };
+}
+
+function decodeBase64Bytes(value: string): Uint8Array | undefined {
+  const compact = value.replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(compact)) {
+    return undefined;
+  }
+  try {
+    const binary = atob(compact);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
+  } catch {
+    return undefined;
+  }
 }
 
 export function canonicalVisibleCdxml(contents: string): string {
@@ -1548,6 +1601,12 @@ function importPageObjects(
     if (element.name === "group") {
       return importGroup(element);
     }
+    if (element.name === "curve") {
+      const curve = importCurveGraphic(element, pageIndex, objectIndex, context);
+      if (curve) {
+        return single(curve);
+      }
+    }
     if (element.name === "objecttag") {
       return { objects: [], rootIds: [] };
     }
@@ -1731,6 +1790,79 @@ interface ExpandedCdxmlNodes {
   attachmentByCdxmlId: Map<string, string>;
   /** Abbreviation node id -> the label to keep when the nested fragment could not be expanded. */
   literalLabelByCdxmlId: Map<string, string>;
+  /**
+   * Abbreviation node id -> the group label it keeps ("OMe", "i-Pr"): a group ChemDraft knows,
+   * whose nested atoms are exactly that group, stays one labelled atom as it was drawn instead of
+   * being written out. Its label means the same atoms, so nothing about the chemistry changes.
+   */
+  groupLabelByCdxmlId: Map<string, string>;
+}
+
+/** The usual valence of the elements an abbreviation's atoms are made of, for hydrogens a file leaves implicit. */
+const cdxmlAbbreviationValences: Readonly<Record<string, number>> = {
+  B: 3, C: 4, N: 3, O: 2, Si: 4, P: 3, S: 2, F: 1, Cl: 1, Br: 1, I: 1
+};
+
+/**
+ * The label to keep for an abbreviation node, when its label names a known one-bond group and the
+ * atoms nested in the node are exactly that group (same elements, same hydrogens). Undefined when
+ * anything differs or cannot be read, and the node is then written out atom by atom as before.
+ */
+function cdxmlAbbreviationGroupLabel(
+  label: string | undefined,
+  bodyAtoms: readonly XmlElementView[],
+  bodyBonds: readonly XmlElementView[],
+  attachmentId: string | undefined,
+  outerBondCount: number
+): string | undefined {
+  const definition = label ? abbreviationForLabel(label) : undefined;
+  if (!label || !definition || definition.attachmentCount !== 1 || outerBondCount !== 1 || attachmentId === undefined) {
+    return undefined;
+  }
+  const bondOrderSum = new Map<string, number>();
+  for (const bond of bodyBonds) {
+    const order = Number(bond.attributes.Order ?? "1");
+    if (!Number.isInteger(order) || order < 1 || order > 3) {
+      return undefined;
+    }
+    for (const end of [bond.attributes.B, bond.attributes.E]) {
+      if (end !== undefined) bondOrderSum.set(end, (bondOrderSum.get(end) ?? 0) + order);
+    }
+  }
+  const counts = new Map<string, number>();
+  const add = (element: string, count: number) => {
+    if (count > 0) counts.set(element, (counts.get(element) ?? 0) + count);
+  };
+  for (const atom of bodyAtoms) {
+    const nodeType = atom.attributes.NodeType;
+    const element = elementFromCdxmlAtom(atom.attributes.Element);
+    if ((nodeType !== undefined && nodeType !== "Element") || !element || childElements(atom, "fragment").length > 0 ||
+      (parseInteger(atom.attributes.Charge) ?? 0) !== 0) {
+      return undefined;
+    }
+    const id = atom.attributes.id ?? "";
+    let hydrogens = parseInteger(atom.attributes.NumHydrogens);
+    if (hydrogens === undefined) {
+      const valence = cdxmlAbbreviationValences[element];
+      if (valence === undefined) {
+        return undefined;
+      }
+      hydrogens = valence - (bondOrderSum.get(id) ?? 0) - (id === attachmentId ? 1 : 0);
+    }
+    if (hydrogens < 0) {
+      return undefined;
+    }
+    add(element, 1);
+    add("H", hydrogens);
+  }
+  const expected = abbreviationElementCounts(definition);
+  if (expected.size !== counts.size || ![...expected].every(([element, count]) => counts.get(element) === count)) {
+    return undefined;
+  }
+  // A hyphenated spelling ("i-Pr", "n-Bu") is kept as the group's own label ("iPr"): drawn as written,
+  // its hyphen would read as a minus charge on the label.
+  const spelled = label.trim();
+  return spelled.includes("-") ? definition.label : spelled;
 }
 
 function expandCdxmlAbbreviationNodes(
@@ -1743,6 +1875,7 @@ function expandCdxmlAbbreviationNodes(
   const expandedBonds: XmlElementView[] = [...bondElements];
   const attachmentByCdxmlId = new Map<string, string>();
   const literalLabelByCdxmlId = new Map<string, string>();
+  const groupLabelByCdxmlId = new Map<string, string>();
 
   for (const atomElement of atomElements) {
     const nested = childElements(atomElement, "fragment")[0];
@@ -1802,6 +1935,14 @@ function expandCdxmlAbbreviationNodes(
       continue;
     }
 
+    const bodyBonds = nestedBonds.filter((bondElement) => !touchesConnectionPoint(bondElement));
+    const groupLabel = cdxmlAbbreviationGroupLabel(label, bodyAtoms, bodyBonds, attachment, outerBondCount);
+    if (groupLabel !== undefined) {
+      expandedAtoms.push(atomElement);
+      groupLabelByCdxmlId.set(nodeId, groupLabel);
+      continue;
+    }
+
     // The nested fragment may itself hold an abbreviation.
     const inner = expandCdxmlAbbreviationNodes(
       bodyAtoms,
@@ -1813,6 +1954,7 @@ function expandCdxmlAbbreviationNodes(
     expandedBonds.push(...inner.bondElements);
     inner.attachmentByCdxmlId.forEach((value, key) => attachmentByCdxmlId.set(key, value));
     inner.literalLabelByCdxmlId.forEach((value, key) => literalLabelByCdxmlId.set(key, value));
+    inner.groupLabelByCdxmlId.forEach((value, key) => groupLabelByCdxmlId.set(key, value));
     if (attachment !== undefined) {
       attachmentByCdxmlId.set(nodeId, inner.attachmentByCdxmlId.get(attachment) ?? attachment);
     }
@@ -1822,7 +1964,8 @@ function expandCdxmlAbbreviationNodes(
     atomElements: expandedAtoms,
     bondElements: expandedBonds,
     attachmentByCdxmlId,
-    literalLabelByCdxmlId
+    literalLabelByCdxmlId,
+    groupLabelByCdxmlId
   };
 }
 
@@ -1897,7 +2040,7 @@ export function readCdxmlNickname(contents: string): CdxmlNicknameReadResult {
   const atoms: CdxmlNicknameAtom[] = [];
   for (const node of nodes) {
     const id = node.attributes.id ?? "";
-    const point = parseCdxmlPoint(node.attributes.p);
+    const point = cdxmlNodePoint(node);
     if (node.attributes.NodeType === "ExternalConnectionPoint") {
       connectionPointById.set(id, point);
       continue;
@@ -2001,10 +2144,20 @@ function importFragment(
     if (statedHydrogens !== undefined && statedHydrogens >= 0) {
       statedHydrogensByAtomId.set(atomId, statedHydrogens);
     }
-    const point = parseCdxmlPoint(atomElement.attributes.p);
+    const point = cdxmlNodePoint(atomElement);
     const labelPoint = cdxmlAtomLabelPoint(atomElement);
     const literalLabel = expansion.literalLabelByCdxmlId.get(cdxmlId);
-    let element = elementFromCdxmlAtom(atomElement.attributes.Element);
+    const groupLabel = expansion.groupLabelByCdxmlId.get(cdxmlId);
+    // A node that is not an element ("Unspecified", "GenericNickname") and names none is the label
+    // drawn on it: R1, R2, X. The format's carbon default is for element nodes only; it turned these
+    // into carbons and dropped their labels.
+    const nodeType = atomElement.attributes.NodeType;
+    const placeholderLabel = groupLabel === undefined && literalLabel === undefined &&
+      atomElement.attributes.Element === undefined && nodeType !== undefined && nodeType !== "Element"
+      ? cdxmlAtomLabelText(atomElement)
+      : undefined;
+    const placeholderLiteral = placeholderLabel !== undefined && !isGenericAtomLabel(placeholderLabel);
+    let element = groupLabel ?? placeholderLabel ?? elementFromCdxmlAtom(atomElement.attributes.Element);
     if (element === undefined) {
       // Kept as an unknown atom with its bonds, never carbon: the file names no element here, and
       // a guess would change the chemistry without a trace (AGENTS.md §7). A kept abbreviation
@@ -2042,7 +2195,7 @@ function importFragment(
       formalCharge: parseInteger(atomElement.attributes.Charge) ?? 0,
       // An abbreviation that could not be expanded keeps its drawn text and means exactly that:
       // no implicit hydrogens are invented for a label like "SO3".
-      ...(literalLabel || textLabel ? { labelLiteral: true } : {}),
+      ...(literalLabel || textLabel || placeholderLiteral ? { labelLiteral: true } : {}),
       ...(labelPoint ? { labelOffset: { x: labelPoint.x - point.x, y: labelPoint.y - point.y } } : {})
     };
   });
@@ -2116,7 +2269,8 @@ function importFragment(
         bond.toAtomId = bond.fromAtomId;
         bond.fromAtomId = narrowAtomId;
       }
-    } else if (bondElement.attributes.Display) {
+    } else if (bondElement.attributes.Display && bondElement.attributes.Display !== "Solid") {
+      // "Solid" is the ordinary bond, the format's default; only a style ChemDraft lacks is reported.
       warnings.push({
         code: "cdxml.bond_display_unsupported",
         message: `CDXML bond display "${bondElement.attributes.Display}" is not represented in the current ChemDraft molecule schema.`,
@@ -2688,7 +2842,85 @@ function importGraphic(
     };
   }
 
+  if (element.attributes.GraphicType === "Bracket") {
+    const bracket = importBracketGraphic(element, pageIndex, objectIndex, context);
+    if (bracket) {
+      return bracket;
+    }
+  }
+
   return importShapeGraphic(element, pageIndex, objectIndex, context, "graphic");
+}
+
+/**
+ * One bracket of a pair (`BracketType` "Square", "Round" or "Curly") as a path shape. Its
+ * `BoundingBox` is not a box: it runs from one end of the bracket to the other, and the bracket's
+ * lips turn to the right of that direction (toward what it encloses). A square bracket is a line with
+ * a lip at each end; a round or curly one is drawn as a bow bulging away from the enclosed side.
+ * Paired brackets (one graphic enclosing a region) are left to the general shape import.
+ */
+function importBracketGraphic(
+  element: XmlElementView,
+  pageIndex: number,
+  objectIndex: number,
+  context: ImportPageContext
+): GraphicObject | undefined {
+  const bracketType = normalizedCdxmlToken(element.attributes.BracketType);
+  if (bracketType !== "square" && bracketType !== "round" && bracketType !== "curly") {
+    return undefined;
+  }
+  const values = (element.attributes.BoundingBox ?? "").trim().split(/\s+/).map(Number);
+  if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) {
+    return undefined;
+  }
+  const start = { x: cdxmlToCssPx(values[0]!), y: cdxmlToCssPx(values[1]!) };
+  const end = { x: cdxmlToCssPx(values[2]!), y: cdxmlToCssPx(values[3]!) };
+  const length = Math.hypot(end.x - start.x, end.y - start.y);
+  if (length < 0.5) {
+    return undefined;
+  }
+  const direction = { x: (end.x - start.x) / length, y: (end.y - start.y) / length };
+  // Right of the direction, on a page whose y runs down: a closing bracket runs top to bottom and
+  // turns its lips left, toward what it encloses; an opening one runs bottom to top.
+  const inward = { x: -direction.y, y: direction.x };
+  const lipFraction = (parseNumber(element.attributes.LipSize) ?? 60) / 1000;
+  const lip = Math.min(Math.max(length * lipFraction, 3), 12);
+  const offset = (point: Point, distance: number) => ({ x: point.x + inward.x * distance, y: point.y + inward.y * distance });
+  const pathNodes = bracketType === "square"
+    ? [{ point: offset(start, lip) }, { point: start }, { point: end }, { point: offset(end, lip) }]
+    : [
+        { point: start, outControl: offset({ x: start.x + (end.x - start.x) * 0.3, y: start.y + (end.y - start.y) * 0.3 }, -lip * 1.3) },
+        { point: end, inControl: offset({ x: start.x + (end.x - start.x) * 0.7, y: start.y + (end.y - start.y) * 0.7 }, -lip * 1.3) }
+      ];
+  const points = pathNodes.flatMap((node): Point[] => [
+    node.point,
+    ...("outControl" in node && node.outControl ? [node.outControl] : []),
+    ...("inControl" in node && node.inControl ? [node.inControl] : [])
+  ]);
+  const box = boundsForPoints(points);
+  return {
+    id: `cdxml_graphic_${pageIndex + 1}_${objectIndex}`,
+    type: "graphic",
+    x: box.x,
+    y: box.y,
+    width: Math.max(1, box.width),
+    height: Math.max(1, box.height),
+    rotation: 0,
+    style: graphicStyleFromCdxmlShape(element, context.colorTable),
+    graphicKind: "path",
+    data: { artPathKind: bracketType === "square" ? "polyline" : "bezier", pathNodes },
+    compatibility: {
+      sourceFormat: "cdxml",
+      originalId: element.attributes.id,
+      warnings: [],
+      unknown: {
+        cdxmlElementName: "graphic",
+        cdxmlGraphicType: "Bracket",
+        ...(element.attributes.BracketType ? { cdxmlBracketType: element.attributes.BracketType } : {}),
+        cdxmlCoordinateSpace: "xy"
+      }
+    }
+  };
 }
 
 /** Import a CDXML reaction/resonance arrow as an editable art-arrow graphic (the reverse of
@@ -2915,6 +3147,109 @@ function importShapeGraphic(
         ...(element.attributes.color ? { cdxmlColor: element.attributes.color } : {}),
         cdxmlCoordinateSpace: "xy"
       }
+    }
+  };
+}
+
+/** `CurveType` flags of a CDXML `<curve>` (the CDX format's curve type bits). */
+const CdxmlCurveFlags = {
+  closed: 1,
+  dashed: 2,
+  bold: 4,
+  arrowAtEnd: 8,
+  arrowAtStart: 16,
+  halfArrowAtEnd: 32,
+  halfArrowAtStart: 64,
+  filled: 128
+} as const;
+
+/**
+ * A `<curve>` (a freely drawn Bézier: a curved arrow, a hand-drawn outline) as a path shape. Its
+ * `CurvePoints` come in threes, the control point before each node, the node, the control point
+ * after it; the form with one node more (node, control, control, node, …) is read too. A curve whose
+ * control points sit on its nodes is a polyline and comes in as one.
+ */
+function importCurveGraphic(
+  element: XmlElementView,
+  pageIndex: number,
+  objectIndex: number,
+  context: ImportPageContext
+): GraphicObject | undefined {
+  const numbers = (element.attributes.CurvePoints ?? "").trim().split(/\s+/).map(Number);
+  if (numbers.length < 4 || numbers.length % 2 !== 0 || numbers.some((value) => !Number.isFinite(value))) {
+    return undefined;
+  }
+  const points: Point[] = [];
+  for (let index = 0; index < numbers.length; index += 2) {
+    points.push({ x: cdxmlToCssPx(numbers[index]!), y: cdxmlToCssPx(numbers[index + 1]!) });
+  }
+  const nodes: Array<{ point: Point; inControl?: Point; outControl?: Point }> = [];
+  if (points.length % 3 === 0) {
+    for (let index = 0; index < points.length; index += 3) {
+      nodes.push({ inControl: points[index]!, point: points[index + 1]!, outControl: points[index + 2]! });
+    }
+  } else if ((points.length - 1) % 3 === 0) {
+    for (let index = 0; index < points.length; index += 3) {
+      nodes.push({
+        point: points[index]!,
+        ...(index > 0 ? { inControl: points[index - 1]! } : {}),
+        ...(index + 1 < points.length ? { outControl: points[index + 1]! } : {})
+      });
+    }
+  } else {
+    nodes.push(...points.map((point) => ({ point })));
+  }
+  const samePoint = (left: Point | undefined, right: Point) =>
+    left === undefined || (Math.abs(left.x - right.x) < 0.001 && Math.abs(left.y - right.y) < 0.001);
+  const polyline = nodes.every((node) => samePoint(node.inControl, node.point) && samePoint(node.outControl, node.point));
+  const pathNodes = polyline ? nodes.map((node) => ({ point: node.point })) : nodes;
+
+  const flags = parseInteger(element.attributes.CurveType) ?? 0;
+  const has = (flag: number) => (flags & flag) !== 0;
+  const style = graphicStyleFromCdxmlShape(element, context.colorTable);
+  if (has(CdxmlCurveFlags.dashed)) {
+    style.strokeDasharray = "3 4";
+  }
+  if (has(CdxmlCurveFlags.bold)) {
+    style.strokeWidth = defaultCdxmlBoldWidthPx;
+  }
+  const closed = has(CdxmlCurveFlags.closed);
+  if (closed && has(CdxmlCurveFlags.filled)) {
+    style.fillColor = style.strokeColor;
+    style.fillMode = "solid";
+  }
+  const headFor = (full: boolean, half: boolean, attribute: string | undefined) => {
+    const token = normalizedCdxmlToken(attribute);
+    if (half || token.startsWith("half")) return { kind: "half-arrow" as const, sizePx: defaultCdxmlHalfArrowheadSizePx };
+    if (full || token === "full") return { kind: "filled-arrow" as const, sizePx: defaultCdxmlArrowheadSizePx };
+    return undefined;
+  };
+  const markerEnd = closed ? undefined : headFor(has(CdxmlCurveFlags.arrowAtEnd), has(CdxmlCurveFlags.halfArrowAtEnd), element.attributes.ArrowheadHead);
+  const markerStart = closed ? undefined : headFor(has(CdxmlCurveFlags.arrowAtStart), has(CdxmlCurveFlags.halfArrowAtStart), element.attributes.ArrowheadTail);
+  const box = boundsForPoints(points);
+
+  return {
+    id: `cdxml_graphic_${pageIndex + 1}_${objectIndex}`,
+    type: "graphic",
+    x: box.x,
+    y: box.y,
+    width: Math.max(1, box.width),
+    height: Math.max(1, box.height),
+    rotation: 0,
+    style,
+    graphicKind: "path",
+    data: {
+      artPathKind: polyline ? "polyline" : "bezier",
+      pathNodes,
+      ...(closed ? { pathClosed: true } : {}),
+      ...(markerEnd ? { markerEnd } : {}),
+      ...(markerStart ? { markerStart } : {})
+    },
+    compatibility: {
+      sourceFormat: "cdxml",
+      originalId: element.attributes.id,
+      warnings: [],
+      unknown: { cdxmlElementName: "curve", cdxmlCoordinateSpace: "xy" }
     }
   };
 }
@@ -3738,6 +4073,17 @@ function parseCdxmlXyPoint(point: string | undefined): Point | undefined {
 /** Spec-order 2D position: "x y", falling back to the origin when absent or malformed. */
 function parseCdxmlPoint(point: string | undefined): Point {
   return parseCdxmlXyPoint(point) ?? { x: 0, y: 0 };
+}
+
+/**
+ * Where a node is drawn. A node in a structure turned in 3D (a ring tilted in perspective) can carry
+ * only its 3D position, `xyz` ("x y z"), and no flat `p`; it is drawn at that x and y. Reading only
+ * `p` put every such atom at the page origin, its bonds reaching across the page to the corner.
+ */
+function cdxmlNodePoint(nodeElement: XmlElementView): Point {
+  return parseCdxmlXyPoint(nodeElement.attributes.p)
+    ?? parseCdxmlXyPoint(nodeElement.attributes.xyz)
+    ?? { x: 0, y: 0 };
 }
 
 

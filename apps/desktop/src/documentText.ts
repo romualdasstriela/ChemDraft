@@ -7,8 +7,18 @@
  * Windows tools is UTF-16). Without one the bytes are UTF-8, decoded leniently: a binary file must
  * still reach the opener — which says what it is (a ChemDraw .cdx, say) — instead of failing inside
  * the read with a bare "invalid UTF-8".
+ *
+ * A ChemDraw binary (.cdx) file is not text at all: decoding it would lose bytes. It is handed over
+ * whole, base64-encoded (its signature "VjCD0100" becomes "VmpDRDAx"), and the opener reads it.
  */
 export function decodeDocumentBytes(bytes: Uint8Array): string {
+  if (isCdxSignature(bytes)) {
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    }
+    return btoa(binary);
+  }
   // A dangling odd byte after UTF-16 is dropped, as Rust's `chunks_exact(2)` drops it: decoded, it
   // becomes a trailing U+FFFD that the XML validator refuses, so the same truncated file opened
   // from Explorer and failed from File ▸ Open.
@@ -23,4 +33,10 @@ export function decodeDocumentBytes(bytes: Uint8Array): string {
     return new TextDecoder("utf-8").decode(bytes.subarray(3));
   }
   return new TextDecoder("utf-8").decode(bytes);
+}
+
+const cdxSignature = [0x56, 0x6a, 0x43, 0x44, 0x30, 0x31, 0x30, 0x30]; // "VjCD0100"
+
+function isCdxSignature(bytes: Uint8Array): boolean {
+  return bytes.length >= cdxSignature.length && cdxSignature.every((byte, index) => bytes[index] === byte);
 }

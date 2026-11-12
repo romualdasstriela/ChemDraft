@@ -995,7 +995,11 @@ describe("documents in one window", () => {
     native.desktop = false;
     async function drop(name: string) {
       const event = new Event("drop", { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "dataTransfer", { value: { files: [{ name, text: async () => fileContents(name) }] } });
+      Object.defineProperty(event, "dataTransfer", { value: { files: [{
+        name,
+        text: async () => fileContents(name),
+        arrayBuffer: async () => new TextEncoder().encode(fileContents(name)).buffer
+      }] } });
       await act(async () => container.querySelector('[aria-label="Document workspace"]')!.dispatchEvent(event));
     }
     await drop("First.chemdraft");

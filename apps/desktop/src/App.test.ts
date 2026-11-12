@@ -6065,7 +6065,12 @@ describe("ChemDraft desktop shell", () => {
     // with the graphic arrowhead marker. Its chemical identity is preserved for CDXML re-export.
     expect(markup).toContain("graphic-marker-end-");
     expect(markup).toContain("graphic-object");
-    expect(markup).toContain('data-graphic-kind="unknown"');
+    // Its round bracket is drawn as a bracket (a path), no longer an undrawable "unknown" graphic;
+    // the bracketed-group record it belongs to stays a preserved compatibility object.
+    expect(markup).not.toContain('data-graphic-kind="unknown"');
+    expect(opened.document.pages[0].objects.some((object) =>
+      object.type === "graphic" && object.compatibility?.unknown.cdxmlGraphicType === "Bracket" && object.graphicKind === "path"
+    )).toBe(true);
     expect(markup).toContain("generic-object");
     expect(markup).toContain('data-atom-count="5"');
   });

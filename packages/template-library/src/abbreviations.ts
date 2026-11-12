@@ -100,7 +100,7 @@ export const abbreviationDefinitions: readonly AbbreviationDefinition[] = [
   },
   {
     // "Pr" is also praseodymium, so it names n-propyl only on an atom with bonds.
-    label: "nPr", aliases: [], bondedSpellings: ["Pr"], name: "n-propyl", smiles: "*CCC", formula: "C3H7", attachmentCount: 1,
+    label: "nPr", aliases: ["n-Pr"], bondedSpellings: ["Pr"], name: "n-propyl", smiles: "*CCC", formula: "C3H7", attachmentCount: 1,
     atoms: [
       { element: "C", hydrogens: 2, x: 0, y: 0 },
       { element: "C", hydrogens: 2, x: 0.5, y: -0.866 },
@@ -109,7 +109,7 @@ export const abbreviationDefinitions: readonly AbbreviationDefinition[] = [
     bonds: [[0, 1, 1], [1, 2, 1]]
   },
   {
-    label: "iPr", aliases: [], name: "isopropyl", smiles: "*C(C)C", formula: "C3H7", attachmentCount: 1,
+    label: "iPr", aliases: ["i-Pr"], name: "isopropyl", smiles: "*C(C)C", formula: "C3H7", attachmentCount: 1,
     atoms: [
       { element: "C", hydrogens: 1, x: 0, y: 0 },
       { element: "C", hydrogens: 3, x: 0.5, y: -0.866 },
@@ -119,7 +119,7 @@ export const abbreviationDefinitions: readonly AbbreviationDefinition[] = [
   },
   {
     // Bare "Bu" means n-butyl by convention (SnBu3, Bu3Sn); it is no element symbol.
-    label: "nBu", aliases: ["Bu"], name: "n-butyl", smiles: "*CCCC", formula: "C4H9", attachmentCount: 1,
+    label: "nBu", aliases: ["Bu", "n-Bu"], name: "n-butyl", smiles: "*CCCC", formula: "C4H9", attachmentCount: 1,
     atoms: [
       { element: "C", hydrogens: 2, x: 0, y: 0 },
       { element: "C", hydrogens: 2, x: 0.5, y: -0.866 },
@@ -129,7 +129,7 @@ export const abbreviationDefinitions: readonly AbbreviationDefinition[] = [
     bonds: [[0, 1, 1], [1, 2, 1], [2, 3, 1]]
   },
   {
-    label: "tBu", aliases: [], name: "tert-butyl", smiles: "*C(C)(C)C", formula: "C4H9", attachmentCount: 1,
+    label: "tBu", aliases: ["t-Bu"], name: "tert-butyl", smiles: "*C(C)(C)C", formula: "C4H9", attachmentCount: 1,
     atoms: [
       { element: "C", hydrogens: 0, x: 0, y: 0 },
       { element: "C", hydrogens: 3, x: 1, y: 0 },

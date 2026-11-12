@@ -35,9 +35,14 @@ describe("decodeDocumentBytes", () => {
     expect(decodeDocumentBytes(truncated)).toBe(xml);
   });
 
-  it("never throws on binary input, and keeps an ASCII signature readable", () => {
+  it("hands a ChemDraw binary (.cdx) file over whole, base64-encoded, as the Rust decoder does", () => {
     const cdx = new Uint8Array([...new TextEncoder().encode("VjCD0100"), 0x04, 0x03, 0x02, 0x01, 0xff, 0x00, 0x80]);
     const text = decodeDocumentBytes(cdx);
-    expect(text.startsWith("VjCD0100")).toBe(true);
+    expect(text.startsWith("VmpDRDAx")).toBe(true);
+    expect(Uint8Array.from(atob(text), (char) => char.charCodeAt(0))).toEqual(cdx);
+  });
+
+  it("never throws on other binary input", () => {
+    expect(() => decodeDocumentBytes(new Uint8Array([0x00, 0xff, 0x80, 0x41]))).not.toThrow();
   });
 });

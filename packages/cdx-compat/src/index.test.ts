@@ -33,13 +33,15 @@ import {
 import { sha256Hex, utf8Bytes } from "./sha256";
 
 describe("files that are not CDXML", () => {
-  it("names a ChemDraw binary .cdx file and says what to do", () => {
+  it("names a ChemDraw binary .cdx file that arrived as text, and says what to do", () => {
+    // Read as text, a binary file has lost bytes; it can only be named, not read.
     const opened = openChemDraftPayload("VjCD0100\u0004\u0003\u0002\u0001�\u0000");
     expect(opened.document).toBeUndefined();
-    expect(opened.warnings?.[0]).toMatchObject({ code: "cdx.binary_not_supported" });
+    expect(opened.warnings?.[0]).toMatchObject({ code: "cdx.binary_read_as_text" });
     expect(opened.warnings?.[0].message).toContain("Save As");
-    // The same file base64-encoded, as some interchange files carry it.
-    expect(openChemDraftPayload("VmpDRDAxMDAEAwIBAAAAAAAA").warnings?.[0]).toMatchObject({ code: "cdx.binary_not_supported" });
+    // Base64-encoded (how the app hands a .cdx file over), the bytes are intact and are read: this
+    // one stops part-way through its header, and the reader says so.
+    expect(openChemDraftPayload("VmpDRDAxMDAEAwIBAAAAAAAA").warnings?.[0]).toMatchObject({ code: "cdx.truncated" });
   });
 
   it("names the root element of XML that is not CDXML", () => {
