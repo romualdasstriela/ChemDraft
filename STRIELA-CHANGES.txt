@@ -260,6 +260,8 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
        was read as its top (every caption sat a line too low), and the size was ignored
        (captions came in larger than drawn and overran their boxes). Export writes the
        baseline too.
+     - Atom labels are drawn at the size the file gives them (the most common label size in
+       each structure), not ChemDraft's larger default, so they match the text beside them.
      - An atom label with an empty box (BoundingBox "0 0 0 0", as ACD/ChemSketch writes) stays
        at its atom; every such label used to land in the page's top-left corner.
      - An arrow end marked "NoHead" has no head; such arrows used to get a head at both ends.
@@ -316,3 +318,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Stretch a shape by dragging one side; the opposite side stays
 (next)  Open ChemDraw .cdx files; CDXML import keeps 3D-positioned atoms, labels, curves, brackets
 (next)  CDXML text by its baseline and size; empty label boxes; NoHead arrow ends
+(next)  CDXML atom labels at the size the file gives them

@@ -2379,7 +2379,7 @@ function importFragment(
     width: bounds.width,
     height: bounds.height,
     rotation: 0,
-    style: {},
+    style: cdxmlFragmentLabelStyle(atomElements),
     structureFormat: "unknown",
     structure: "",
     ...(chemistry ? { chemistry } : {}),
@@ -2549,6 +2549,26 @@ function centroidOfImportedAtoms(atoms: readonly MoleculeAtom[]): Point {
     (sum, atom) => ({ x: sum.x + atom.x / atoms.length, y: sum.y + atom.y / atoms.length }),
     { x: 0, y: 0 }
   );
+}
+
+/** The size the fragment's atom labels were drawn at (the most common first-run size, in points), as
+ *  the molecule's label size; without it labels took the native default, larger than the 10 pt most
+ *  drawings use, and crowded the bonds. A fragment with no sized label keeps the default. */
+function cdxmlFragmentLabelStyle(atomElements: readonly XmlElementView[]): MoleculeObject["style"] {
+  const counts = new Map<number, number>();
+  for (const atomElement of atomElements) {
+    const size = Number(childElements(childElements(atomElement, "t")[0] ?? atomElement, "s")[0]?.attributes.size);
+    if (Number.isFinite(size) && size > 0) {
+      counts.set(size, (counts.get(size) ?? 0) + 1);
+    }
+  }
+  let best: number | undefined;
+  for (const [size, count] of counts) {
+    if (best === undefined || count > counts.get(best)!) {
+      best = size;
+    }
+  }
+  return best === undefined ? {} : { atomLabelFontSizePx: cdxmlToCssPx(best) };
 }
 
 function cdxmlAtomLabelPoint(atomElement: XmlElementView): Point | undefined {

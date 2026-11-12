@@ -114,6 +114,21 @@ describe("CDXML from other programs", () => {
     expect(molecules[0]!.atoms[1]!.labelOffset).toBeUndefined();
   });
 
+  it("draws atom labels at the size they were written in, like the text around them", () => {
+    const body = (size: string) => `<fragment id="2">
+      <n id="3" p="100 50" Element="6"/>
+      <n id="4" p="114 50" Element="8"><t id="6" p="111 53"><s font="1" size="${size}">O</s></t></n>
+      <n id="7" p="128 50" Element="7"><t id="8" p="125 53"><s font="1" size="${size}">N</s></t></n>
+      <b id="5" B="3" E="4" Order="1"/><b id="9" B="4" E="7" Order="1"/>
+    </fragment>`;
+    const ten = open(body("10")).molecules[0]!;
+    const twenty = open(body("20")).molecules[0]!;
+    expect(ten.style.atomLabelFontSizePx).toBeGreaterThan(0);
+    expect(twenty.style.atomLabelFontSizePx).toBeCloseTo(2 * (ten.style.atomLabelFontSizePx as number));
+    // Unlabelled carbon skeletons keep the default label size.
+    expect(open(`<fragment id="2"><n id="3" p="100 50"/><n id="4" p="114 50"/><b id="5" B="3" E="4"/></fragment>`).molecules[0]!.style.atomLabelFontSizePx).toBeUndefined();
+  });
+
   it("reads ArrowheadTail=\"NoHead\" as an unheaded end, not a second head", () => {
     const { graphics } = open(`<arrow id="2" ArrowheadType="Solid" ArrowheadHead="Full" ArrowheadTail="NoHead"
       Head3D="289 141 0" Tail3D="203 141 0" BoundingBox="203 141 289 141"/>`);
