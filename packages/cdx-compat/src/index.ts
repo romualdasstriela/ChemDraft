@@ -169,6 +169,8 @@ interface ImportPageContext {
   displayByRefKey: Map<string, string>;
   crossingHints: CdxmlCrossingImportHint[];
   colorTable: CdxmlColorTable;
+  /** The document's own attributes: its drawing settings (LineWidth, BoldWidth, BondLength, …). */
+  documentAttributes: Readonly<Record<string, string>>;
 }
 
 type DoubleBondSide = NonNullable<MoleculeBond["display"]>["doubleBondSide"];
@@ -1517,7 +1519,7 @@ function importVisibleCdxmlFromTree(tree: OrderedXmlTree): { document?: ChemDraf
   const importedPages = pageElements.map((pageElement, pageIndex) => {
     const pageTemplate = base.pages[0];
     const importedPage = applyImportTransformToPageObjects(
-      importPageObjects(pageElement, pageIndex, warnings, colorTable),
+      importPageObjects(pageElement, pageIndex, warnings, colorTable, findElements(tree, "CDXML")[0]?.attributes ?? {}),
       importTransform
     );
     return {
@@ -1568,7 +1570,8 @@ function importPageObjects(
   pageElement: XmlElementView,
   pageIndex: number,
   warnings: CompatibilityConversionWarning[],
-  colorTable: CdxmlColorTable
+  colorTable: CdxmlColorTable,
+  documentAttributes: Readonly<Record<string, string>>
 ): { objects: DocumentObject[]; crossings: CrossingOverride[] } {
   const objects: DocumentObject[] = [];
   const context: ImportPageContext = {
@@ -1577,7 +1580,8 @@ function importPageObjects(
     zByRefKey: new Map(),
     displayByRefKey: new Map(),
     crossingHints: [],
-    colorTable
+    colorTable,
+    documentAttributes
   };
   let objectIndex = 1;
 
@@ -2152,7 +2156,6 @@ function importFragment(
       statedHydrogensByAtomId.set(atomId, statedHydrogens);
     }
     const point = cdxmlNodePoint(atomElement);
-    const labelPoint = cdxmlAtomLabelPoint(atomElement);
     const literalLabel = expansion.literalLabelByCdxmlId.get(cdxmlId);
     const groupLabel = expansion.groupLabelByCdxmlId.get(cdxmlId);
     // A node that is not an element ("Unspecified", "GenericNickname") and names none is the label
@@ -2202,8 +2205,11 @@ function importFragment(
       formalCharge: parseInteger(atomElement.attributes.Charge) ?? 0,
       // An abbreviation that could not be expanded keeps its drawn text and means exactly that:
       // no implicit hydrogens are invented for a label like "SO3".
-      ...(literalLabel || textLabel || placeholderLiteral ? { labelLiteral: true } : {}),
-      ...(labelPoint ? { labelOffset: { x: labelPoint.x - point.x, y: labelPoint.y - point.y } } : {})
+      ...(literalLabel || textLabel || placeholderLiteral ? { labelLiteral: true } : {})
+      // No labelOffset: the label's <t> box is where the writer's own layout put the text (a
+      // left-side "iPr" ends at its atom, so the box centre sits a half-width to the left), while
+      // labelOffset moves ChemDraft's label anchor, which its own layout already sets beside the
+      // atom. Taking one for the other shifted every multi-letter label away from its bond.
     };
   });
   // A bond drawn to an abbreviation now lands on the atom its connection point marked — the sulfur
@@ -2379,7 +2385,10 @@ function importFragment(
     width: bounds.width,
     height: bounds.height,
     rotation: 0,
-    style: cdxmlFragmentLabelStyle(atomElements),
+    style: {
+      ...cdxmlFragmentDrawingStyle(fragment, bondElements, context.documentAttributes),
+      ...cdxmlFragmentLabelStyle(atomElements)
+    },
     structureFormat: "unknown",
     structure: "",
     ...(chemistry ? { chemistry } : {}),
@@ -2551,6 +2560,49 @@ function centroidOfImportedAtoms(atoms: readonly MoleculeAtom[]): Point {
   );
 }
 
+/** The drawing settings the structure was drawn with: line and bold widths, margins, hash spacing,
+ *  double-bond spacing and bond length, from the fragment, else the document (ChemDraw writes them
+ *  there), else the value most of its bonds carry (ACD/ChemSketch writes them per bond). Without them
+ *  bonds took the native defaults, and bold bonds came out about twice as thick as drawn. */
+function cdxmlFragmentDrawingStyle(
+  fragment: XmlElementView,
+  bondElements: readonly XmlElementView[],
+  documentAttributes: Readonly<Record<string, string>>
+): MoleculeObject["style"] {
+  const mostCommonOnBonds = (name: string): number | undefined => {
+    const counts = new Map<number, number>();
+    for (const bond of bondElements) {
+      const value = parseNumber(bond.attributes[name]);
+      if (value !== undefined && value > 0) counts.set(value, (counts.get(value) ?? 0) + 1);
+    }
+    let best: number | undefined;
+    for (const [value, count] of counts) if (best === undefined || count > counts.get(best)!) best = value;
+    return best;
+  };
+  const setting = (name: string, fromBonds = false): number | undefined => {
+    const stated = parseNumber(fragment.attributes[name]) ?? parseNumber(documentAttributes[name]);
+    const value = stated ?? (fromBonds ? mostCommonOnBonds(name) : undefined);
+    return value !== undefined && Number.isFinite(value) && value > 0 ? value : undefined;
+  };
+  const style: Record<string, unknown> = {};
+  const lineWidth = setting("LineWidth", true);
+  const boldWidth = setting("BoldWidth", true);
+  const marginWidth = setting("MarginWidth");
+  const hashSpacing = setting("HashSpacing");
+  const bondSpacing = setting("BondSpacing");
+  const bondLength = setting("BondLength");
+  if (lineWidth !== undefined) style.bondStrokeWidthPx = cdxmlToCssPx(lineWidth);
+  if (boldWidth !== undefined) style.bondBoldWidthPx = cdxmlToCssPx(boldWidth);
+  if (marginWidth !== undefined) style.bondMarginWidthPx = cdxmlToCssPx(marginWidth);
+  if (hashSpacing !== undefined) style.bondHashSpacingPx = cdxmlToCssPx(hashSpacing);
+  if (bondSpacing !== undefined) {
+    style.bondSpacingMode = "percent";
+    style.bondSpacingPercent = bondSpacing;
+  }
+  if (bondLength !== undefined) style.bondLengthPx = cdxmlToCssPx(bondLength);
+  return style;
+}
+
 /** The size the fragment's atom labels were drawn at (the most common first-run size, in points), as
  *  the molecule's label size; without it labels took the native default, larger than the 10 pt most
  *  drawings use, and crowded the bonds. A fragment with no sized label keeps the default. */
@@ -2569,23 +2621,6 @@ function cdxmlFragmentLabelStyle(atomElements: readonly XmlElementView[]): Molec
     }
   }
   return best === undefined ? {} : { atomLabelFontSizePx: cdxmlToCssPx(best) };
-}
-
-function cdxmlAtomLabelPoint(atomElement: XmlElementView): Point | undefined {
-  const labelElement = childElements(atomElement, "t")[0];
-  if (!labelElement) {
-    return undefined;
-  }
-
-  // Some writers put an empty BoundingBox="0 0 0 0" on every label: that says nothing about where the
-  // label is, and taking it would pull each label to the page corner.
-  const rawBox = labelElement.attributes.BoundingBox?.trim().split(/\s+/).map(Number) ?? [];
-  const box = rawBox.every((value) => value === 0) ? undefined : parseCdxmlXyBoundingBox(labelElement.attributes.BoundingBox);
-  if (box) {
-    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  }
-
-  return labelElement.attributes.p ? parseCdxmlPoint(labelElement.attributes.p) : undefined;
 }
 
 function doubleBondSideFromCdxmlDoublePosition(value: string | undefined): DoubleBondSide | undefined {

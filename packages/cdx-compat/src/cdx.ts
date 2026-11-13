@@ -185,6 +185,9 @@ const tenthsOfDegree: Decoder = (data, length) => {
   return value === undefined ? undefined : formatCdxNumber(value / 10);
 };
 
+/** One fixed-point number (a length in points, or an angle in degrees). */
+const fixedPoint: Decoder = (data, length) => (length === 4 ? fixed(data.getInt32(0, true)) : undefined);
+
 const arrowheadEnd = enumeration({ 0: "Unspecified", 1: "None", 2: "Full", 3: "HalfLeft", 4: "HalfRight" });
 
 /** Property tag -> CDXML attribute and how its data reads. */
@@ -205,6 +208,14 @@ const properties: Readonly<Record<number, readonly [string, Decoder]>> = {
   0x020f: ["MinorAxisEnd3D", point3D],
   0x0301: ["color", id],
   0x0302: ["bgcolor", id],
+  // Drawing settings (on the document, or a fragment that overrides them): lengths in points.
+  0x0803: ["ChainAngle", fixedPoint],
+  0x0804: ["BondSpacing", tenthsOfDegree],
+  0x0805: ["BondLength", fixedPoint],
+  0x0806: ["BoldWidth", fixedPoint],
+  0x0807: ["LineWidth", fixedPoint],
+  0x0808: ["MarginWidth", fixedPoint],
+  0x0809: ["HashSpacing", fixedPoint],
   // Node
   0x0400: ["NodeType", enumeration({
     0: "Unspecified", 1: "Element", 2: "ElementList", 3: "ElementListNickname", 4: "Nickname", 5: "Fragment",

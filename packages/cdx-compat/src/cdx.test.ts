@@ -110,4 +110,35 @@ describe("ChemDraw binary (.cdx) files", () => {
     expect(result.warnings.map((warning) => warning.code)).toContain("cdx.truncated");
     expect(result.contents).toContain('Element="8"');
   });
+
+  it("carries the document's drawing settings, and the structures are drawn with them", () => {
+    const writer = new CdxWriter();
+    writer.object(0x8000, 1)
+      .property(0x0804, W.int16(180)) // double-bond spacing, tenths of a percent
+      .property(0x0805, W.fixed(14.4)) // bond length
+      .property(0x0806, W.fixed(2)) // bold width
+      .property(0x0807, W.fixed(0.6)) // line width
+      .property(0x0808, W.fixed(1.6)) // margin
+      .property(0x0809, W.fixed(2.5)) // hash spacing
+      .object(0x8001, 2)
+      .object(0x8003, 3)
+      .object(0x8004, 4).property(0x0200, W.point2D(100, 50)).end()
+      .object(0x8004, 5).property(0x0200, W.point2D(114.4, 50)).end()
+      .object(0x8005, 6).property(0x0604, W.int32(4)).property(0x0605, W.int32(5)).end()
+      .end()
+      .end()
+      .end();
+    const { contents } = cdxToCdxml(writer.toBytes());
+    expect(contents).toMatch(/<CDXML[^>]*BondSpacing="18"[^>]*BondLength="14.4"[^>]*BoldWidth="2"[^>]*LineWidth="0.6"/);
+    const molecule = openChemDraftBytes(writer.toBytes()).document!.pages[0]!.objects
+      .find((object): object is MoleculeObject => object.type === "molecule")!;
+    // Points to document units at 96/72.
+    expect(molecule.style.bondStrokeWidthPx).toBeCloseTo(0.8);
+    expect(molecule.style.bondBoldWidthPx).toBeCloseTo(2.6667, 3);
+    expect(molecule.style.bondLengthPx).toBeCloseTo(19.2);
+    expect(molecule.style.bondMarginWidthPx).toBeCloseTo(2.1333, 3);
+    expect(molecule.style.bondHashSpacingPx).toBeCloseTo(3.3333, 3);
+    expect(molecule.style.bondSpacingMode).toBe("percent");
+    expect(molecule.style.bondSpacingPercent).toBe(18);
+  });
 });

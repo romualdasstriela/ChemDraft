@@ -262,8 +262,13 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
        baseline too.
      - Atom labels are drawn at the size the file gives them (the most common label size in
        each structure), not ChemDraft's larger default, so they match the text beside them.
-     - An atom label with an empty box (BoundingBox "0 0 0 0", as ACD/ChemSketch writes) stays
-       at its atom; every such label used to land in the page's top-left corner.
+     - Atom labels are laid out beside their atoms by ChemDraft, as for any drawn label. The
+       file's text box for a label (where its own program put the text) was taken as a shift
+       of the label, so a multi-letter label such as iPr moved off its bond end - by its own
+       half-width, or to the page corner when the box was empty (as ACD/ChemSketch writes it).
+     - Structures keep the file's drawing settings: line and bold widths, margins, hash and
+       double-bond spacing, bond length (from the document, or from the bonds, where
+       ACD/ChemSketch writes them). Bold bonds used to come out about twice as thick.
      - An arrow end marked "NoHead" has no head; such arrows used to get a head at both ends.
    - ACD/ChemSketch's CDXML can itself lose text: in the test file it wrote "Slow addition;"
      and the "t" of "in situ" as line breaks. Opening the .cdx gives the original text.
@@ -328,3 +333,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  CDXML text by its baseline and size; empty label boxes; NoHead arrow ends
 (next)  CDXML atom labels at the size the file gives them
 (next)  Edit grouped structures and structures inside unfilled boxes with the drawing tools
+(next)  CDX/CDXML structures keep the file's line widths; labels sit at their atoms

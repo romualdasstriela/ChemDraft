@@ -129,6 +129,32 @@ describe("CDXML from other programs", () => {
     expect(open(`<fragment id="2"><n id="3" p="100 50"/><n id="4" p="114 50"/><b id="5" B="3" E="4"/></fragment>`).molecules[0]!.style.atomLabelFontSizePx).toBeUndefined();
   });
 
+  it("lays a multi-letter label out beside its atom, not shifted by the writer's text box", () => {
+    // ChemDraw ends a left-side "iPr" at its atom, so the label's box centre sits half a width left.
+    const { molecules } = open(`<fragment id="2">
+      <n id="3" p="100 50" Element="6"/>
+      <n id="4" p="86 42" NodeType="Nickname"><fragment id="10">
+        <n id="11" p="100 50" NodeType="ExternalConnectionPoint"/>
+        <n id="12" p="86 42" Element="6" NumHydrogens="1"/>
+        <n id="13" p="72 34" Element="6" NumHydrogens="3"/><n id="16" p="72 50" Element="6" NumHydrogens="3"/>
+        <b id="14" B="11" E="12" Order="1"/><b id="15" B="12" E="13" Order="1"/><b id="17" B="12" E="16" Order="1"/>
+      </fragment><t id="6" p="76 46" BoundingBox="76 38 90 46"><s font="1" size="10">iPr</s></t></n>
+      <b id="5" B="3" E="4" Order="1"/>
+    </fragment>`);
+    const label = molecules[0]!.atoms.find((atom) => atom.element === "iPr")!;
+    expect(label.labelOffset).toBeUndefined();
+  });
+
+  it("takes line and bold widths written on each bond when the document states none", () => {
+    const { molecules } = open(`<fragment id="2">
+      <n id="3" p="100 50"/><n id="4" p="114 50"/><n id="6" p="128 50"/>
+      <b id="5" B="3" E="4" Order="1" LineWidth="1.2" BoldWidth="2.88"/>
+      <b id="7" B="4" E="6" Order="1" LineWidth="1.2" BoldWidth="2.88" Display="Bold"/>
+    </fragment>`);
+    expect(molecules[0]!.style.bondStrokeWidthPx).toBeCloseTo(1.6);
+    expect(molecules[0]!.style.bondBoldWidthPx).toBeCloseTo(3.84);
+  });
+
   it("reads ArrowheadTail=\"NoHead\" as an unheaded end, not a second head", () => {
     const { graphics } = open(`<arrow id="2" ArrowheadType="Solid" ArrowheadHead="Full" ArrowheadTail="NoHead"
       Head3D="289 141 0" Tail3D="203 141 0" BoundingBox="203 141 289 141"/>`);

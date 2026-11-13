@@ -1475,10 +1475,9 @@ describe("CDXML-compatible ChemDraft envelope", () => {
     expect(molecule?.atoms[0]?.y).toBeCloseTo(160);
     expect(molecule?.atoms[1]?.x).toBeCloseTo(133.33333333333334);
     expect(molecule?.atoms[1]?.y).toBeCloseTo(208);
-    // The Cl label box "94 112 102 124" centres at (98, 118), up-and-LEFT of its atom at (100, 120).
-    // The old CCW-90 compensation turned that into +x — the mirror, baked into the expectation.
-    expect(molecule?.atoms[0]?.labelOffset?.x).toBeCloseTo(-2.666666666666657);
-    expect(molecule?.atoms[0]?.labelOffset?.y).toBeCloseTo(-2.666666666666657);
+    // The label's text box is ChemDraw's own layout of the text, not an anchor shift: ChemDraft lays
+    // the label out beside its atom itself, so no offset is taken from it.
+    expect(molecule?.atoms[0]?.labelOffset).toBeUndefined();
     expect((molecule?.height ?? 0)).toBeGreaterThan(molecule?.width ?? 0);
   });
 
