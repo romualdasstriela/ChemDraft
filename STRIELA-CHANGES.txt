@@ -270,6 +270,14 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - Still kept as placeholders (shown as "unknown-compatibility-object" at the page corner,
      and written back on save): ChemDraw's reaction-scheme bookkeeping and bracket-group
      records. The drawing itself does not depend on them.
+   - Imported structures can be edited (true of any grouped or boxed structure):
+     - The bond tool grows a structure that sits in a group from the clicked atom. It used to
+       select the whole group, find no structure selected, and draw a separate bond instead.
+     - An atom or bond seen through an unfilled box (one drawn around a scheme) takes the
+       hover and the click; the box used to catch them and nothing happened. A click inside
+       the box away from any atom still picks up the box.
+     - The Select tool still picks the whole group, as before; double-click picks the
+       structure inside it, and Ungroup separates them for good.
 
 17. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
@@ -319,3 +327,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Open ChemDraw .cdx files; CDXML import keeps 3D-positioned atoms, labels, curves, brackets
 (next)  CDXML text by its baseline and size; empty label boxes; NoHead arrow ends
 (next)  CDXML atom labels at the size the file gives them
+(next)  Edit grouped structures and structures inside unfilled boxes with the drawing tools

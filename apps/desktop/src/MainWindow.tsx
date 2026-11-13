@@ -1665,7 +1665,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.12.19.30-opus";
+const CURRENT_BUILD_STAMP = "11.13.10.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -14090,7 +14090,9 @@ export function MainWindow({
       ? eventTarget.closest("[data-page-svg-object-visual], [data-object-id]") : null;
     const ownerId = ownerElement?.getAttribute("data-page-svg-object-visual") ?? ownerElement?.getAttribute("data-object-id");
     const owner = ownerId ? findDocumentObject(sourceDocument, ownerId) : undefined;
-    const overNonMolecule = owner !== undefined && (owner.type !== "molecule" || !isNativeMoleculeGraph(owner));
+    // An unfilled shape (a box drawn around a scheme) hides nothing, so atoms seen through it stay live.
+    const overNonMolecule = owner !== undefined && (owner.type !== "molecule" || !isNativeMoleculeGraph(owner)) &&
+      !(owner.type === "graphic" && graphicIsUnfilled(owner));
 
     // Ring/template tools resolve the hover with the bond-preferring template resolver (purely
     // geometric) so the highlight matches what a click will fuse/attach. Every other tool keeps
@@ -17225,9 +17227,11 @@ export function MainWindow({
     // press the DOM delivered to a non-molecule object (text, charge mark) is never hijacked —
     // and we move pointer capture to the resolved molecule's wrapper so every drag/up handler
     // (all keyed by objectId) stays consistent with the re-targeted object.
+    // The same goes for an unfilled shape drawn over structures (a box around a scheme): its inside
+    // takes presses so an empty box can be picked up, but an atom or bond seen through it wins.
     let captureElement: Element = event.currentTarget;
     const pressedObject = findDocumentObject(document, objectId);
-    if (point && pressedObject?.type === "molecule" && isNativeMoleculeGraph(pressedObject)) {
+    if (point && ((pressedObject?.type === "molecule" && isNativeMoleculeGraph(pressedObject)) || (pressedObject?.type === "graphic" && graphicIsUnfilled(pressedObject)))) {
       const resolved = nativeMoleculeCanvasHoverTarget(
         document,
         point,
@@ -18059,7 +18063,9 @@ export function MainWindow({
         growsTripleBond: activeBondToolOrderRef.current === "triple"
       });
       if (!preview) {
-        applySingleBondDocumentAtPoint(selectDocumentObject(document, objectId), point, activeNativeBondDisplayStyle);
+        // The molecule itself, not the group it sits in: the bond tool grows the selected molecule,
+        // and selecting a grouped molecule's group made it draw a separate bond instead.
+        applySingleBondDocumentAtPoint(selectDocumentObjectWithinGroup(document, objectId), point, activeNativeBondDisplayStyle);
         return;
       }
 
@@ -19712,7 +19718,8 @@ export function MainWindow({
 
     event.stopPropagation();
     const point = pagePointFromPointerEvent(event) ?? drag.latestPoint;
-    const selectedDocument = selectDocumentObject(document, objectId);
+    // The molecule itself, even inside a group (see the press handler).
+    const selectedDocument = selectDocumentObjectWithinGroup(document, objectId);
     if (drag.dragging) {
       applyFreeformBondDocumentAtPoint(selectedDocument, objectId, drag.atomId, drag.latestPoint, drag.freeformUnlocked || drag.connectsForeignAtom, drag.bondStyle, drag.altKey);
     } else {
@@ -32530,6 +32537,15 @@ function moleculeAriaLabel(object: MoleculeObject): string {
 
 function isNativeMoleculeGraph(object: MoleculeObject): boolean {
   return object.atoms.length > 0;
+}
+
+/** A shape that paints nothing inside its outline, so whatever lies under its inside shows through. */
+export function graphicIsUnfilled(object: GraphicObject): boolean {
+  if (object.style.fillPaint !== undefined || object.style.fillMode === "gloss") {
+    return false;
+  }
+  const fill = typeof object.style.fillColor === "string" ? object.style.fillColor.trim().toLowerCase() : "";
+  return fill === "" || fill === "none" || fill === "transparent" || object.style.fillOpacity === 0;
 }
 
 function formatValidationFailure(analysis: StructureAnalysisResult): string {
