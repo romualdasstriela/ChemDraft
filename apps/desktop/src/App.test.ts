@@ -533,7 +533,9 @@ describe("ChemDraft desktop shell", () => {
     expect(markup).toContain("document-rulers-overlay");
     expect(markup).toContain("ruler-top");
     expect(markup).toContain("crosshair-axis-vertical");
-    expect(markup).toContain("crosshair-tick-quarter");
+    // A new drawing is an A4 page with centimetre rulers: tenths with a half-way tick, no quarters.
+    expect(markup).toContain("crosshair-tick-half");
+    expect(markup).not.toContain("crosshair-tick-quarter");
     expect(markup).toContain("document-board without-rulers");
     // The browser build recreates the native menu in-viewport (no OS menu on the web).
     expect(markup).toContain("menu-bar");

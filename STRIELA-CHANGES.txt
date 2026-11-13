@@ -294,7 +294,12 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      - The Double and Triple Bond tools make the clicked bond double or triple, as their hint
        says (any structure, imported or drawn). They used to draw a separate bond at the click.
 
-17. Build checks
+17. A4 pages for new drawings
+   - A new tab, the drawing ChemDraft opens with, and a new drawing inserted from Office start
+     on an A4 portrait page, so the rulers and tape measure read in centimetres. Page Size can
+     still set any other size. Files keep the page they were saved with.
+
+18. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
    - Every dev build also runs cargo clippy (-D warnings) and cargo test, as the main
      project's Windows CI does.
@@ -346,3 +351,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  CDX/CDXML structures keep the file's line widths; labels sit at their atoms
 (next)  Double and Triple Bond tools set the order of a clicked bond
 (next)  Export ChemDraw binary (.cdx) files; CDXML text keeps its size and line starts
+(next)  New drawings open on an A4 page (rulers in centimetres)

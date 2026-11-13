@@ -513,6 +513,7 @@ import {
   clearMoleculeRingStyles,
   deactivateMoleculeRingEffect,
   createNativeSavePayload,
+  createNewDrawingDocument,
   createPhase4Document,
   createSelectionClipboardPayload,
   formatElementList,
@@ -1666,7 +1667,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.13.14.00-opus";
+const CURRENT_BUILD_STAMP = "11.13.15.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -2343,7 +2344,7 @@ export function MainWindow({
   // is; a caller-supplied one may still be held by the caller, so it is admitted as a copy.
   const [documentHistory, setDocumentHistory] = useState(() =>
     createDocumentHistory(normalizeCommittedDocument(
-      initialDocument ? toEngineDocument(initialDocument) : admitParsedDocument(createPhase4Document())
+      initialDocument ? toEngineDocument(initialDocument) : admitParsedDocument(createNewDrawingDocument())
     ))
   );
   const document = documentHistory.present;
@@ -8806,7 +8807,7 @@ export function MainWindow({
 
   const newDocumentTab = useCallback(() => {
     addDocumentTab("Untitled");
-    resetDocumentHistory(createPhase4Document());
+    resetDocumentHistory(createNewDrawingDocument());
     clearDocumentInteractionState({ clearSpin3dModelCache: true });
     tabPageFitRef.current = undefined;
     setPageFitPrompt(undefined);
@@ -9202,7 +9203,7 @@ export function MainWindow({
       lastNativeOpenPayloadKeyRef.current = { key: payloadKey, at: now };
       // A new drawing from Insert > Object in an Office document arrives empty: open an empty page.
       const contents = payload.contents.trim().length === 0 && isOfficeDrawingPath(payload.path)
-        ? createNativeSavePayload(createPhase4Document()).contents
+        ? createNativeSavePayload(createNewDrawingDocument()).contents
         : payload.contents;
       try {
         await openDocumentContents(contents, payload.displayName, payload.path);

@@ -878,6 +878,12 @@ export function createPhase4Document(title = "Untitled.chemdraft"): ChemDraftDoc
   });
 }
 
+/** A blank drawing as the app opens one (startup, a new tab, a new drawing from Office): an A4
+ *  page, so its rulers read in centimetres. The document model's own default page stays US Letter. */
+export function createNewDrawingDocument(title?: string): ChemDraftDocument {
+  return setDocumentPageSize(createPhase4Document(title), "a4");
+}
+
 export function createAdapterFallbackMolecule(
   document: ChemDraftDocument,
   analysis?: StructureAnalysisResult
