@@ -535,6 +535,7 @@ import {
   doubleBondSideForPoint,
   deleteSelectedDocumentObjects,
   splitNativeGraphicPathSegmentAtPoint,
+  exportPhase4Cdx,
   exportPhase4Cdxml,
   exportPhase4Pdf,
   exportPhase4Svg,
@@ -1665,7 +1666,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.13.12.00-opus";
+const CURRENT_BUILD_STAMP = "11.13.14.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -31970,6 +31971,12 @@ export async function createDialogExportResult(
 
   if (state.format === "cdxml") {
     return exportPhase4Cdxml(document, {
+      creationProgram: state.cdxml.creationProgram.trim() || "ChemDraft"
+    });
+  }
+
+  if (state.format === "cdx") {
+    return exportPhase4Cdx(document, {
       creationProgram: state.cdxml.creationProgram.trim() || "ChemDraft"
     });
   }

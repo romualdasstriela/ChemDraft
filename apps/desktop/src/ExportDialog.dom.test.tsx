@@ -462,3 +462,17 @@ it("discards a superseded native render before encoding or transporting its prev
   expect(encode).not.toHaveBeenCalled();
   encode.mockRestore();
 });
+
+it("exports CDX as a ChemDraw binary file that reads back as the same drawing", async () => {
+  const { insertNativeSingleBondMolecule } = await import("./documentWorkflow");
+  const { openChemDraftBytes } = await import("@chemdraft/cdx-compat");
+  const document = insertNativeSingleBondMolecule(createPhase4Document("CDX"), { x: 240, y: 240 });
+  const result = await createDialogExportResult(document, { ...createDefaultExportDialogState(document), format: "cdx" });
+  expect(result.kind).toBe("binary");
+  if (result.kind !== "binary") return;
+  expect(result.extension).toBe("cdx");
+  expect(String.fromCharCode(...result.bytes.subarray(0, 8))).toBe("VjCD0100");
+  const reopened = openChemDraftBytes(result.bytes).document!;
+  const molecule = reopened.pages[0]!.objects.find((object) => object.type === "molecule");
+  expect(molecule?.type === "molecule" ? molecule.bonds.length : 0).toBe(1);
+});

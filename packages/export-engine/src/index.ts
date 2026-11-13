@@ -1,6 +1,7 @@
 import type { ExportFormatId } from "./formats";
 
 export { exportDocumentToCdxml, type CdxmlTextExportOptions } from "./cdxml";
+export { exportDocumentToCdx } from "./cdx";
 export {
   exportFormatDescriptors,
   getExportFormatDescriptor,

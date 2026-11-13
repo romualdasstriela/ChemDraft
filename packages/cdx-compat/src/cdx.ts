@@ -158,16 +158,51 @@ const curvePoints3D: Decoder = (data, length) => {
   return values.join(" ");
 };
 
+// Value names, shared by the reader and the writer so the two directions cannot disagree.
+type Names = Readonly<Record<number, string>>;
+type FlagNames = ReadonlyArray<readonly [number, string]>;
+const bondOrderFlags: FlagNames = [
+  [0x0001, "1"], [0x0002, "2"], [0x0004, "3"], [0x0008, "4"], [0x0010, "5"], [0x0020, "6"],
+  [0x0040, "0.5"], [0x0080, "1.5"], [0x0100, "2.5"], [0x0200, "3.5"], [0x0400, "4.5"], [0x0800, "5.5"],
+  [0x1000, "dative"], [0x2000, "ionic"], [0x4000, "hydrogen"], [0x8000, "threecenter"]
+];
+const nodeTypeNames: Names = {
+  0: "Unspecified", 1: "Element", 2: "ElementList", 3: "ElementListNickname", 4: "Nickname", 5: "Fragment",
+  6: "Formula", 7: "GenericNickname", 8: "AnonymousAlternativeGroup", 9: "NamedAlternativeGroup",
+  10: "MultiAttachment", 11: "VariableAttachment", 12: "ExternalConnectionPoint", 13: "LinkNode"
+};
+const radicalNames: Names = { 1: "Singlet", 2: "Doublet", 3: "Triplet" };
+const stereoNames: Names = { 2: "R", 3: "S", 4: "r", 5: "s" };
+const bondDisplayNames: Names = {
+  0: "Solid", 1: "Dash", 2: "Hash", 3: "WedgedHashBegin", 4: "WedgedHashEnd", 5: "Bold", 6: "WedgeBegin",
+  7: "WedgeEnd", 8: "Wavy", 9: "HollowWedgeBegin", 10: "HollowWedgeEnd", 11: "WavyWedgeBegin",
+  12: "WavyWedgeEnd", 13: "Dot", 14: "DashDot"
+};
+const doublePositionNames: Names = { 0: "Center", 1: "Right", 2: "Left" };
+const justificationNames: Names = { [-1]: "Right", 0: "Left", 1: "Center", 2: "Full", 3: "Above", 4: "Below", 5: "Auto" };
+const graphicTypeNames: Names = { 1: "Line", 2: "Arc", 3: "Rectangle", 4: "Oval", 5: "Orbital", 6: "Bracket", 7: "Symbol" };
+const lineTypeFlags: FlagNames = [[1, "Dashed"], [2, "Bold"], [4, "Wavy"]];
+const arrowTypeFlags: FlagNames = [
+  [1, "HalfHead"], [2, "FullHead"], [4, "Resonance"], [8, "Equilibrium"], [16, "Hollow"], [32, "RetroSynthetic"]
+];
+const rectangleTypeFlags: FlagNames = [[1, "RoundEdge"], [2, "Shadow"], [4, "Shaded"], [8, "Filled"], [16, "Dashed"], [32, "Bold"]];
+const ovalTypeFlags: FlagNames = [[1, "Circle"], [2, "Shaded"], [4, "Filled"], [8, "Dashed"], [16, "Bold"], [32, "Shadowed"]];
+const bracketTypeNames: Names = { 0: "RoundPair", 1: "SquarePair", 2: "CurlyPair", 3: "Square", 4: "Curly", 5: "Round" };
+const arrowheadTypeNames: Names = { 1: "Solid", 2: "Hollow", 3: "Angle" };
+const arrowheadEndNames: Names = { 0: "Unspecified", 1: "None", 2: "Full", 3: "HalfLeft", 4: "HalfRight" };
+
+/** The tag and value tables, for the writer (`cdxWriter.ts`). */
+export const cdxTables = {
+  objectElementNames, bondOrderFlags, nodeTypeNames, radicalNames, stereoNames, bondDisplayNames, doublePositionNames,
+  justificationNames, graphicTypeNames, lineTypeFlags, arrowTypeFlags, rectangleTypeFlags, ovalTypeFlags,
+  bracketTypeNames, arrowheadTypeNames, arrowheadEndNames
+} as const;
+
 /** Bond order: a flag set (single 1, double 2, triple 4, …); several flags mean "any of these". */
 const bondOrder: Decoder = (data, length) => {
   const value = unsignedInteger(data, length);
   if (value === undefined) return undefined;
-  const names: ReadonlyArray<readonly [number, string]> = [
-    [0x0001, "1"], [0x0002, "2"], [0x0004, "3"], [0x0008, "4"], [0x0010, "5"], [0x0020, "6"],
-    [0x0040, "0.5"], [0x0080, "1.5"], [0x0100, "2.5"], [0x0200, "3.5"], [0x0400, "4.5"], [0x0800, "5.5"],
-    [0x1000, "dative"], [0x2000, "ionic"], [0x4000, "hydrogen"], [0x8000, "threecenter"]
-  ];
-  const set = names.filter(([bit]) => (value & bit) !== 0).map(([, name]) => name);
+  const set = bondOrderFlags.filter(([bit]) => (value & bit) !== 0).map(([, name]) => name);
   return set.length > 0 ? set.join(" ") : undefined;
 };
 
@@ -188,7 +223,7 @@ const tenthsOfDegree: Decoder = (data, length) => {
 /** One fixed-point number (a length in points, or an angle in degrees). */
 const fixedPoint: Decoder = (data, length) => (length === 4 ? fixed(data.getInt32(0, true)) : undefined);
 
-const arrowheadEnd = enumeration({ 0: "Unspecified", 1: "None", 2: "Full", 3: "HalfLeft", 4: "HalfRight" });
+const arrowheadEnd = enumeration(arrowheadEndNames);
 
 /** Property tag -> CDXML attribute and how its data reads. */
 const properties: Readonly<Record<number, readonly [string, Decoder]>> = {
@@ -217,42 +252,32 @@ const properties: Readonly<Record<number, readonly [string, Decoder]>> = {
   0x0808: ["MarginWidth", fixedPoint],
   0x0809: ["HashSpacing", fixedPoint],
   // Node
-  0x0400: ["NodeType", enumeration({
-    0: "Unspecified", 1: "Element", 2: "ElementList", 3: "ElementListNickname", 4: "Nickname", 5: "Fragment",
-    6: "Formula", 7: "GenericNickname", 8: "AnonymousAlternativeGroup", 9: "NamedAlternativeGroup",
-    10: "MultiAttachment", 11: "VariableAttachment", 12: "ExternalConnectionPoint", 13: "LinkNode"
-  })],
+  0x0400: ["NodeType", enumeration(nodeTypeNames)],
   0x0402: ["Element", integer],
   0x0420: ["Isotope", integer],
   0x0421: ["Charge", charge],
-  0x0422: ["Radical", enumeration({ 1: "Singlet", 2: "Doublet", 3: "Triplet" })],
+  0x0422: ["Radical", enumeration(radicalNames)],
   0x042b: ["NumHydrogens", integer],
-  0x0437: ["AS", enumeration({ 2: "R", 3: "S", 4: "r", 5: "s" })],
+  0x0437: ["AS", enumeration(stereoNames)],
   // Bond
   0x0600: ["Order", bondOrder],
-  0x0601: ["Display", enumeration({
-    0: "Solid", 1: "Dash", 2: "Hash", 3: "WedgedHashBegin", 4: "WedgedHashEnd", 5: "Bold", 6: "WedgeBegin",
-    7: "WedgeEnd", 8: "Wavy", 9: "HollowWedgeBegin", 10: "HollowWedgeEnd", 11: "WavyWedgeBegin",
-    12: "WavyWedgeEnd", 13: "Dot", 14: "DashDot"
-  })],
+  0x0601: ["Display", enumeration(bondDisplayNames)],
   0x0603: ["DoublePosition", (data, length) => {
     const value = unsignedInteger(data, length);
-    return value === undefined ? undefined : ({ 0: "Center", 1: "Right", 2: "Left" } as Record<number, string>)[value & 0xff];
+    return value === undefined ? undefined : doublePositionNames[value & 0xff];
   }],
   0x0604: ["B", id],
   0x0605: ["E", id],
   0x060b: ["BondCircularOrdering", idList],
   // Text
-  0x0701: ["Justification", enumeration({ [-1]: "Right", 0: "Left", 1: "Center", 2: "Full", 3: "Above", 4: "Below", 5: "Auto" })],
+  0x0701: ["Justification", enumeration(justificationNames)],
   // Graphic
-  0x0a00: ["GraphicType", enumeration({ 1: "Line", 2: "Arc", 3: "Rectangle", 4: "Oval", 5: "Orbital", 6: "Bracket", 7: "Symbol" })],
-  0x0a01: ["LineType", flags([[1, "Dashed"], [2, "Bold"], [4, "Wavy"]], "Solid")],
-  0x0a02: ["ArrowType", flags([
-    [1, "HalfHead"], [2, "FullHead"], [4, "Resonance"], [8, "Equilibrium"], [16, "Hollow"], [32, "RetroSynthetic"]
-  ], "NoHead")],
-  0x0a03: ["RectangleType", flags([[1, "RoundEdge"], [2, "Shadow"], [4, "Shaded"], [8, "Filled"], [16, "Dashed"], [32, "Bold"]], "Plain")],
-  0x0a04: ["OvalType", flags([[1, "Circle"], [2, "Shaded"], [4, "Filled"], [8, "Dashed"], [16, "Bold"], [32, "Shadowed"]], "Plain")],
-  0x0a06: ["BracketType", enumeration({ 0: "RoundPair", 1: "SquarePair", 2: "CurlyPair", 3: "Square", 4: "Curly", 5: "Round" })],
+  0x0a00: ["GraphicType", enumeration(graphicTypeNames)],
+  0x0a01: ["LineType", flags(lineTypeFlags, "Solid")],
+  0x0a02: ["ArrowType", flags(arrowTypeFlags, "NoHead")],
+  0x0a03: ["RectangleType", flags(rectangleTypeFlags, "Plain")],
+  0x0a04: ["OvalType", flags(ovalTypeFlags, "Plain")],
+  0x0a06: ["BracketType", enumeration(bracketTypeNames)],
   0x0a08: ["CurveType", integer],
   0x0a20: ["HeadSize", integer],
   0x0a21: ["AngularSize", tenthsOfDegree],
@@ -261,7 +286,7 @@ const properties: Readonly<Record<number, readonly [string, Decoder]>> = {
   0x0a27: ["BracketedObjectIDs", idList],
   0x0a2b: ["GraphicID", id],
   0x0a2e: ["CurvePoints3D", curvePoints3D],
-  0x0a2f: ["ArrowheadType", enumeration({ 1: "Solid", 2: "Hollow", 3: "Angle" })],
+  0x0a2f: ["ArrowheadType", enumeration(arrowheadTypeNames)],
   0x0a30: ["ArrowheadCenterSize", integer],
   0x0a31: ["ArrowheadWidth", integer],
   0x0a35: ["ArrowheadHead", arrowheadEnd],

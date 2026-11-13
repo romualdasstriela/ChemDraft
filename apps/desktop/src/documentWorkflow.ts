@@ -119,6 +119,7 @@ import type { StructureAnalysisResult } from "@chemdraft/chemistry-adapter";
 import type { EditorSaveResult } from "@chemdraft/editor-adapter";
 import type { ScreenPlacement } from "./interaction/spinOverlay";
 import {
+  exportDocumentToCdx,
   exportDocumentToCdxml as exportDocumentToCdxmlText,
   exportDocumentToSvg,
   type BinaryExportResult,
@@ -18499,6 +18500,14 @@ export function exportPhase4Cdxml(
   options: CdxmlTextExportOptions = {}
 ): TextExportResult {
   return exportDocumentToCdxmlText(document, options);
+}
+
+/** ChemDraw binary (.cdx): the CDXML export in binary form. */
+export function exportPhase4Cdx(
+  document: ChemDraftDocument,
+  options: CdxmlTextExportOptions = {}
+): BinaryExportResult {
+  return exportDocumentToCdx(document, options);
 }
 
 /**

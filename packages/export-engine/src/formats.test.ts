@@ -94,7 +94,8 @@ describe("export format registry", () => {
       "tiff",
       "sdf",
       "smiles",
-      "cdxml"
+      "cdxml",
+      "cdx"
     ]);
     expect(isExportFormatImplemented("svg")).toBe(true);
     expect(isExportFormatImplemented("pdf")).toBe(true);
@@ -106,14 +107,14 @@ describe("export format registry", () => {
     expect(isExportFormatImplemented("sdf")).toBe(true);
     expect(isExportFormatImplemented("smiles")).toBe(true);
     expect(isExportFormatImplemented("cdxml")).toBe(true);
+    expect(isExportFormatImplemented("cdx")).toBe(true);
     expect(exportFormatDescriptors.filter((descriptor) => descriptor.status !== "implemented").length).toBe(
-      wishlistFormatIds.length - 10
+      wishlistFormatIds.length - 11
     );
   });
 
   it("keeps legal-risk and semantic-risk formats disabled", () => {
     const disabledFormatIds = [
-      "cdx",
       "chemdraw-stationery",
       "chemdraw-3x",
       "tgf",

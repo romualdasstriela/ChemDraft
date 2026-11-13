@@ -318,11 +318,11 @@ export const exportFormatDescriptors = [
     group: "compatibility",
     extensions: ["cdx"],
     mimeType: "chemical/x-cdx",
-    status: "deferred",
+    status: "implemented",
     targetScope: "page",
     textOrBinary: "binary",
     chemicallyMeaningful: true,
-    warningSummary: "Best-effort CDX read/paste should precede CDX writing."
+    warningSummary: "CDX export writes the CDXML export in ChemDraw's binary form; it carries the visible drawing only, not ChemDraft's embedded document."
   },
   {
     id: "chemdraw-stationery",

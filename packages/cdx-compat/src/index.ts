@@ -30,6 +30,7 @@ import {
 } from "@chemdraft/chem-core";
 import { cdxToCdxml } from "./cdx";
 export { cdxToCdxml, isCdxBytes, CdxSignature, type CdxConversionResult } from "./cdx";
+export { cdxmlToCdx, type CdxWriteResult } from "./cdxWriter";
 import {
   abbreviationElementCounts,
   abbreviationForLabel,
@@ -804,7 +805,12 @@ function cdxmlCrossingZForRef(
 
 function exportTextObject(text: TextObject, ids: Map<string, string>, allocator: IdAllocator): string {
   const textId = idFor(ids, text.id, allocator);
-  return `<t id="${textId}" p="${formatPoint({ x: text.x, y: text.y + textBaselineOffsetPx(text.style) })}">${escapeXmlText(text.text)}</t>`;
+  // A text with its own size says so in a style run, so it reopens at that size and on its baseline.
+  const sizePx = text.style.fontSizePx;
+  const body = typeof sizePx === "number" && Number.isFinite(sizePx) && sizePx > 0
+    ? `<s size="${formatNumber(cssPxToCdxml(sizePx))}">${escapeXmlText(text.text)}</s>`
+    : escapeXmlText(text.text);
+  return `<t id="${textId}" p="${formatPoint({ x: text.x, y: text.y + textBaselineOffsetPx(text.style) })}">${body}</t>`;
 }
 
 /** How far a text object's first baseline sits below its top: the renderer draws it one font size
@@ -2166,7 +2172,10 @@ function importFragment(
       atomElement.attributes.Element === undefined && nodeType !== undefined && nodeType !== "Element"
       ? cdxmlAtomLabelText(atomElement)
       : undefined;
-    const placeholderLiteral = placeholderLabel !== undefined && !isGenericAtomLabel(placeholderLabel);
+    // A known abbreviation ("OMe", as a CDX file written by ChemDraft carries it) keeps its group
+    // meaning; any other label is the literal text drawn.
+    const placeholderLiteral = placeholderLabel !== undefined && !isGenericAtomLabel(placeholderLabel) &&
+      abbreviationForLabel(placeholderLabel) === undefined;
     let element = groupLabel ?? placeholderLabel ?? elementFromCdxmlAtom(atomElement.attributes.Element);
     if (element === undefined) {
       // Kept as an unknown atom with its bonds, never carbon: the file names no element here, and
@@ -4369,9 +4378,12 @@ function escapeXmlAttribute(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
+/** Indents markup lines only. A line that does not start with a tag continues a multi-line text
+ *  (escaped text never starts with "<"); indenting it put spaces into the text itself, so every
+ *  export and reopen grew a caption's later lines by four more spaces. */
 function indent(value: string, spaces: number): string {
   const prefix = " ".repeat(spaces);
-  return value.split("\n").map((line) => `${prefix}${line}`).join("\n");
+  return value.split("\n").map((line) => (line.startsWith("<") ? `${prefix}${line}` : line)).join("\n");
 }
 
 function warning(code: string, message: string): CompatibilityConversionWarning {

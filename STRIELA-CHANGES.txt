@@ -244,7 +244,14 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - File > Open, double-click and drag-and-drop now open ChemDraw binary (.cdx) files. The
      drawing is read as the CDXML it is the binary form of, so .cdx and .cdxml open the same
      way. Saving never writes into the .cdx: the first Save asks for a new CDXML or ChemDraft
-     file. ChemDraft does not write .cdx.
+     file.
+   - File > Export can now write ChemDraw binary (.cdx) files. It writes what the CDXML export
+     writes, in binary form: structures, labels, text (with its size), boxes, arrows, colours
+     and the drawing settings. Like CDXML export, groups and some shapes (brackets, freely
+     drawn paths) are not written; ChemDraft's own extras stay in .chemdraft files only. The
+     export lists what was left out. Not yet checked by opening the file in ChemDraw.
+   - CDXML export no longer puts spaces into the later lines of a multi-line text (each
+     export and reopen used to add four more), and writes a text's size.
    - Fixed for every CDXML file (ChemDraw's, or one re-saved by another program):
      - Atoms that have only a 3D position (rings turned in perspective) are drawn where they
        are, instead of piling up in the page's top-left corner.
@@ -338,3 +345,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Edit grouped structures and structures inside unfilled boxes with the drawing tools
 (next)  CDX/CDXML structures keep the file's line widths; labels sit at their atoms
 (next)  Double and Triple Bond tools set the order of a clicked bond
+(next)  Export ChemDraw binary (.cdx) files; CDXML text keeps its size and line starts
