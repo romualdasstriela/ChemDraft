@@ -282,7 +282,10 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
        hover and the click; the box used to catch them and nothing happened. A click inside
        the box away from any atom still picks up the box.
      - The Select tool still picks the whole group, as before; double-click picks the
-       structure inside it, and Ungroup separates them for good.
+       structure inside it, and Ungroup separates them for good. Ungroup undoes one level at a
+       time, so a scheme nested four deep needs Select All + Ungroup four times.
+     - The Double and Triple Bond tools make the clicked bond double or triple, as their hint
+       says (any structure, imported or drawn). They used to draw a separate bond at the click.
 
 17. Build checks
    - The bond geometry for straight triple bonds lives in the layout engine.
@@ -334,3 +337,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  CDXML atom labels at the size the file gives them
 (next)  Edit grouped structures and structures inside unfilled boxes with the drawing tools
 (next)  CDX/CDXML structures keep the file's line widths; labels sit at their atoms
+(next)  Double and Triple Bond tools set the order of a clicked bond

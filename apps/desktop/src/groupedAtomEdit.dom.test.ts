@@ -69,9 +69,9 @@ describe("drawing tools on grouped and boxed structures", () => {
     delete window.__CHEMDRAFT_AGENT__;
   });
   const current = () => window.__CHEMDRAFT_AGENT__!.snapshot().document;
-  async function mount(document: ChemDraftDocument) {
+  async function mount(document: ChemDraftDocument, tool = "tool.bond") {
     await act(async () => root.render(createElement(MainWindow, {
-      initialDocument: document, initialActiveToolCommandId: "tool.bond", initialCrosshairsVisible: false,
+      initialDocument: document, initialActiveToolCommandId: tool, initialCrosshairsVisible: false,
       initialRulersVisible: false, initialPaletteMode: "hidden", nativePalette: true
     })));
     const rect = { x: 0, y: 0, left: 0, top: 0, right: 792, bottom: 612, width: 792, height: 612, toJSON: () => ({}) } as DOMRect;
@@ -98,6 +98,23 @@ describe("drawing tools on grouped and boxed structures", () => {
     expect(after).toHaveLength(2);
     expect(after.find((candidate) => candidate.id === molecule!.id)!.atoms).toHaveLength(3);
   });
+
+  it.each([["tool.doubleBond", "double"], ["tool.tripleBond", "triple"]] as const)(
+    "%s sets the order of the bond clicked in a grouped structure, drawing nothing new",
+    async (tool, order) => {
+      await mount(groupedDocument(), tool);
+      const [molecule] = molecules(current());
+      const [from, to] = molecule!.atoms;
+      const middle = { x: (from!.x + to!.x) / 2, y: (from!.y + to!.y) / 2 };
+      const wrapper = container.querySelector(`[data-object-id="${molecule!.id}"]`)!;
+      await pointer("pointermove", middle, wrapper);
+      await pointer("pointerdown", middle, wrapper);
+      await pointer("pointerup", middle, wrapper);
+      const after = molecules(current());
+      expect(after).toHaveLength(2);
+      expect(after.find((candidate) => candidate.id === molecule!.id)!.bonds[0]!.order).toBe(order);
+    }
+  );
 
   it("lets an atom seen through an unfilled box take the press", async () => {
     await mount(withBox(groupedDocument()));
