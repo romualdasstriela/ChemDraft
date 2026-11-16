@@ -9,7 +9,7 @@ import {
   type MoleculeObject,
   type TextObject
 } from "@chemdraft/chem-core";
-import { moleculeAnchorForArrangement, moleculeVisualBoundsForArrangement } from "@chemdraft/layout-engine";
+import { moleculeAnchorForArrangement, moleculeInkBoundsForArrangement } from "@chemdraft/layout-engine";
 import {
   cleanUpReactionLayout,
   createPhase4Document,
@@ -86,7 +86,7 @@ describe("Clean Up Reaction", () => {
     expect(document.selection.objectIds).toContain(plus.id);
 
     // Left to right with the same gap between neighbours.
-    const [first, second, product] = [...molecules].sort((a, b) => a.x - b.x).map(moleculeVisualBoundsForArrangement);
+    const [first, second, product] = [...molecules].sort((a, b) => a.x - b.x).map(moleculeInkBoundsForArrangement);
     const plusCenter = plus.x + plus.width / 2, plusHalf = 0.29 * plusStyle.fontSizePx;
     const gaps = [
       plusCenter - plusHalf - (first.x + first.width),
@@ -144,11 +144,68 @@ describe("Clean Up Reaction", () => {
     expect(next.selection.objectIds).toContain(pluses[0].id);
 
     const [, first, second] = next.pages[0].objects.filter((object): object is MoleculeObject => object.type === "molecule")
-      .map(moleculeVisualBoundsForArrangement).sort((a, b) => a.x - b.x);
+      .map(moleculeInkBoundsForArrangement).sort((a, b) => a.x - b.x);
     const center = pluses[0].x + pluses[0].width / 2, half = 0.29 * style.fontSizePx;
     expect(center - half - (first.x + first.width)).toBeCloseTo(second.x - (center + half), 6);
     const lineY = (byId(next, "arrow") as GraphicObject).data.lineStart!.y;
     expect(pluses[0].y + style.fontSizePx * (1 - 0.32)).toBeCloseTo(lineY, 6);
+  });
+
+  it("lays a top-to-bottom scheme out down one line, with conditions beside the arrow", () => {
+    // A, a down arrow with two conditions on its right, then B + C stacked below.
+    let document = createPhase4Document("Vertical");
+    document = insertNativeTemplateMolecule(document, { x: 150, y: 200 }, "benzene");
+    document = insertNativeTemplateMolecule(document, { x: 165, y: 380 }, "benzene");
+    document = insertNativeTemplateMolecule(document, { x: 140, y: 480 }, "cyclohexane");
+    const molecules = document.pages[0].objects.filter((object) => object.type === "molecule").map((object) => object.id);
+    const objects: DocumentObject[] = [
+      arrow("arrow", { x: 152, y: 255 }, { x: 151, y: 330 }),
+      text("above", "MeI, K2CO3", 160, 270),
+      text("below", "DMSO, 60 °C", 160, 296),
+      { ...text("plus", "+", 150, 430), style: { fontSizePx: 18, textBoxSizingMode: "auto" } }
+    ];
+    document = applyPatches(document, objects.map((object) => ({ op: "addObject" as const, pageId: document.pages[0].id, object })));
+    document = selectDocumentObjects(document, document.pages[0].id, [...molecules, ...objects.map((o) => o.id)]);
+
+    const { document: next, status } = cleanUpReactionLayout(document);
+    expect(status).toBe("Cleaned up reaction: 3 items, 1 arrow");
+    const line = (byId(next, "arrow") as GraphicObject).data;
+    const lineX = line.lineStart!.x;
+    expect(line.lineEnd!.x).toBeCloseTo(lineX, 6);
+    expect(line.lineEnd!.y).toBeGreaterThan(line.lineStart!.y);
+
+    const placed = next.pages[0].objects.filter((object): object is MoleculeObject => object.type === "molecule");
+    for (const molecule of placed) expect(moleculeAnchorForArrangement(molecule).x).toBeCloseTo(lineX, 6);
+    const plus = byId(next, "plus") as TextObject;
+    expect(plus.x + plus.width / 2).toBeCloseTo(lineX, 6);
+    expect(nativeTextStyleFromObjectStyle(plus.style).fontWeight).toBe(700);
+
+    // Top to bottom with equal gaps: A, arrow, B, +, C.
+    const [a, b, c] = placed.map(moleculeInkBoundsForArrangement).sort((p, q) => p.y - q.y);
+    const plusStyle = nativeTextStyleFromObjectStyle(plus.style);
+    const plusTop = plus.y + 0.28 * plusStyle.fontSizePx, plusBottom = plus.y + 1.22 * plusStyle.fontSizePx;
+    const gaps = [line.lineStart!.y - (a.y + a.height), b.y - line.lineEnd!.y, plusTop - (b.y + b.height), c.y - plusBottom];
+    for (const gap of gaps) expect(gap).toBeCloseTo(gaps[0], 6);
+
+    // Conditions: 10 pt, left-aligned just right of the arrow, as one block centred on it.
+    const above = byId(next, "above") as TextObject, below = byId(next, "below") as TextObject;
+    for (const condition of [above, below]) {
+      const style = nativeTextStyleFromObjectStyle(condition.style);
+      expect(style.fontSizePx).toBeCloseTo(REACTION_CONDITIONS_FONT_SIZE_PX, 6);
+      expect(style.textAlign).toBe("left");
+      expect(condition.x).toBeGreaterThan(lineX);
+      expect(condition.x).toBeLessThan(lineX + 12);
+    }
+    expect(below.y).toBeGreaterThan(above.y);
+    const blockMiddle = ((above.y + 0.28 * REACTION_CONDITIONS_FONT_SIZE_PX) + (below.y + 1.22 * REACTION_CONDITIONS_FONT_SIZE_PX)) / 2;
+    expect(blockMiddle).toBeCloseTo((line.lineStart!.y + line.lineEnd!.y) / 2, 6);
+  });
+
+  it("refuses a scheme whose arrows run different ways", () => {
+    let document = messyReaction();
+    document = applyPatches(document, [{ op: "addObject", pageId: document.pages[0].id, object: arrow("down", { x: 600, y: 100 }, { x: 600, y: 200 }) }]);
+    document = selectDocumentObjects(document, document.pages[0].id, [...document.selection.objectIds, "down"]);
+    expect(cleanUpReactionLayout(document).status).toBe("Clean Up Reaction needs all arrows running the same way: all across or all down");
   });
 
   it("keeps a right-to-left arrow pointing left and refuses selections without an arrow", () => {

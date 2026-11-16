@@ -322,9 +322,13 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
        between them;
      - text or structures over an arrow are its conditions: text becomes 10 pt, and everything
        is centred above or below the arrow, keeping its side.
+   - Top-to-bottom schemes work the same way, down one line: conditions go beside a vertical
+     arrow, left-aligned on its right or right-aligned on its left, as one block centred on it.
+     Arrows must all run the same way (all across or all down); otherwise nothing changes.
+   - Gaps are measured between what is drawn (atoms, bonds, labels), so they look the same
+     across and down.
    - Chemistry is not changed: structures only move. Several arrows (A -> B -> C) work.
-     Vertical schemes and curved arrows are not handled; the command says so and changes
-     nothing. One Undo restores the old layout.
+     Curved arrows are not straightened. One Undo restores the old layout.
 
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
@@ -390,3 +394,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Rulers in centimetres on every tab; View > Ruler Units picks cm or inches
 (next)  Clean Up Reaction (Ctrl+Shift+X): one line, even spacing, 14 pt bold +, 10 pt conditions
 (next)  Clean Up Reaction adds a missing + between neighbouring structures
+(next)  Clean Up Reaction lays out top-to-bottom schemes; gaps measured between drawn ink

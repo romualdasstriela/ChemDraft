@@ -5475,6 +5475,28 @@ export function moleculeVisualBoundsForArrangement(object: MoleculeObject): Layo
   };
 }
 
+/** What a molecule actually draws: its atoms (bond ends, plus half a bold bond's width) and its
+ *  visible labels, without the empty margin a stored frame can carry. Spacing that should look the
+ *  same in every direction (Clean Up Reaction) measures this. */
+export function moleculeInkBoundsForArrangement(object: MoleculeObject): LayoutBounds {
+  if (object.atoms.length === 0) return moleculeVisualBoundsForArrangement(object);
+  const margin = 2;
+  const boxes = [
+    ...object.atoms.map((atom) => ({ x: atom.x - margin, y: atom.y - margin, width: 2 * margin, height: 2 * margin })),
+    ...planMoleculeAtomLabels(object).map((plan) => ({
+      x: plan.anchor.x + plan.layout.bounds.x,
+      y: plan.anchor.y + plan.layout.bounds.y,
+      width: plan.layout.bounds.width,
+      height: plan.layout.bounds.height
+    }))
+  ];
+  const points = boxes.flatMap((b) => [{ x: b.x, y: b.y }, { x: b.x + b.width, y: b.y }, { x: b.x + b.width, y: b.y + b.height }, { x: b.x, y: b.y + b.height }])
+    .map((point) => transformPointForObject(object, point));
+  const x = Math.min(...points.map((p) => p.x));
+  const y = Math.min(...points.map((p) => p.y));
+  return { x, y, width: Math.max(...points.map((p) => p.x)) - x, height: Math.max(...points.map((p) => p.y)) - y };
+}
+
 export function planAtomLabel(
   atom: MoleculeAtom,
   bonds: readonly CoreMoleculeBond[],

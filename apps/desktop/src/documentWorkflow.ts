@@ -1,5 +1,5 @@
 import { formulaSpansFromText } from "@chemdraft/document-workflow-core";
-import { planObjectArrangement, moleculeAnchorForArrangement, moleculeVisualBoundsForArrangement, textVisualBoundsForArrangement, type ArrangementLayout, type ArrangementOptions, type ArrangementItem, type LayoutBounds } from "@chemdraft/layout-engine";
+import { planObjectArrangement, moleculeAnchorForArrangement, moleculeInkBoundsForArrangement, moleculeVisualBoundsForArrangement, textVisualBoundsForArrangement, type ArrangementLayout, type ArrangementOptions, type ArrangementItem, type LayoutBounds } from "@chemdraft/layout-engine";
 import { snapRotationDegrees } from "./rotationSnap";
 import { snapPlacementDegrees } from "./placementSnap";
 import { projectedDoubleBondSides } from "./interaction/projectedDoubleBondSides";
@@ -13918,12 +13918,14 @@ function uniqueObjectId(taken: Set<string>, base: string): string {
 }
 
 /**
- * Clean Up Reaction: lay the selected scheme out left to right on one line. Structures sit with
- * their ring centres (or frame centres) on the arrow's line, "+" signs (14 pt bold) centred on it,
- * items evenly spaced, each arrow long enough for its conditions, and conditions text (10 pt)
- * centred above and below its arrow. Text or structures over an arrow's span count as its
- * conditions. Chemistry is untouched: objects only move, text only changes size, and a plus drawn
- * as a free charge mark or plus object becomes "+" text.
+ * Clean Up Reaction: lay the selected scheme out on one line, left to right or top to bottom (the
+ * way its arrows run). Structures sit with their ring centres (or frame centres) on the arrows'
+ * line, "+" signs (14 pt bold) centred on it, items evenly spaced, each arrow long enough for its
+ * conditions, and conditions (10 pt text) beside their arrow: above and below a horizontal arrow,
+ * left and right of a vertical one. Text or structures over an arrow's span count as its
+ * conditions, and two structures next to each other get a "+" between them. Chemistry is
+ * untouched: objects only move, text only changes size, and a plus drawn as a free charge mark or
+ * plus object becomes "+" text.
  */
 export function cleanUpReactionLayout(document: ChemDraftDocument): { document: ChemDraftDocument; status: string } {
   const fail = (status: string) => ({ document, status });
@@ -13935,13 +13937,15 @@ export function cleanUpReactionLayout(document: ChemDraftDocument): { document: 
   const molecules = ids.flatMap((id) => resolveGroupedDocumentObjectIds(page.objects, [id]))
     .map((id) => objects.get(id)).filter((object): object is MoleculeObject => object?.type === "molecule");
   const bond = molecules.length > 0 ? nativeDrawingStyleFromObjectStyle(molecules[0].style).bondLengthPx : 20;
-  const gap = bond * 0.9;
+  // Measured between drawn ink (see arrangementItemInkBounds), so it is the same across and down.
+  const gap = bond * 1.2;
   const minArrowLength = bond * 3;
   const conditionsPadding = bond * 0.4;
 
+  // `anchor` is the point that sits on the reaction line: a ring centre, a "+" glyph's centre, an arrow's middle.
   type Entry = {
     id: string; object: DocumentObject; kind: "arrow" | "plus" | "item";
-    bounds: LayoutBounds; middleY: number;
+    bounds: LayoutBounds; anchor: PagePoint;
     line?: ReactionLine; text?: TextObject; replaces?: boolean; added?: boolean;
   };
   const taken = new Set(page.objects.map((object) => object.id));
@@ -13950,81 +13954,96 @@ export function cleanUpReactionLayout(document: ChemDraftDocument): { document: 
     const created = createDocumentTextObject(document, center, "+", { ...plusStyle, ...(color ? { color } : {}) });
     return { ...created, id: uniqueObjectId(taken, "text_plus"), x: center.x - created.width / 2, y: center.y - created.height / 2 };
   };
+  const textEntryParts = (text: TextObject) => {
+    const ink = reactionTextInk(text);
+    return { bounds: ink.bounds, anchor: { x: ink.bounds.x + ink.bounds.width / 2, y: ink.middleY } };
+  };
   const entries: Entry[] = [];
   for (const id of ids) {
     const object = objects.get(id);
     if (!object) continue;
     const line = reactionArrowLine(object);
     if (line) {
-      if (Math.abs(line.end.y - line.start.y) > Math.abs(line.end.x - line.start.x)) {
-        return fail("Clean Up Reaction lays out left-to-right schemes; turn vertical arrows first");
-      }
-      const x = Math.min(line.start.x, line.end.x);
-      entries.push({ id, object, kind: "arrow", line, middleY: (line.start.y + line.end.y) / 2,
-        bounds: { x, y: Math.min(line.start.y, line.end.y), width: Math.abs(line.end.x - line.start.x), height: Math.abs(line.end.y - line.start.y) } });
+      entries.push({ id, object, kind: "arrow", line,
+        anchor: { x: (line.start.x + line.end.x) / 2, y: (line.start.y + line.end.y) / 2 },
+        bounds: { x: Math.min(line.start.x, line.end.x), y: Math.min(line.start.y, line.end.y),
+          width: Math.abs(line.end.x - line.start.x), height: Math.abs(line.end.y - line.start.y) } });
       continue;
     }
     if (isReactionPlusObject(object)) {
       const text = object.type === "text"
         ? restyledReactionText(object, page, plusStyle)
         : newPlusText(objectCenter(object), typeof object.style.color === "string" ? object.style.color : undefined);
-      const ink = reactionTextInk(text);
-      entries.push({ id, object, kind: "plus", text, replaces: object.type !== "text", bounds: ink.bounds, middleY: ink.middleY });
+      entries.push({ id, object, kind: "plus", text, replaces: object.type !== "text", ...textEntryParts(text) });
       continue;
     }
     const item = arrangementItem(page.objects, id);
     if (!item) continue;
-    entries.push({ id, object, kind: "item", bounds: item.bounds,
-      middleY: item.anchor?.y ?? item.bounds.y + item.bounds.height / 2 });
+    entries.push({ id, object, kind: "item", bounds: arrangementItemInkBounds(page.objects, id) ?? item.bounds,
+      anchor: item.anchor ?? { x: item.bounds.x + item.bounds.width / 2, y: item.bounds.y + item.bounds.height / 2 } });
   }
 
-  const arrows = entries.filter((entry) => entry.kind === "arrow").sort((a, b) => a.bounds.x - b.bounds.x);
-  if (arrows.length === 0) return fail("Select a reaction with at least one arrow");
+  const arrowEntries = entries.filter((entry) => entry.kind === "arrow");
+  if (arrowEntries.length === 0) return fail("Select a reaction with at least one arrow");
+  const runsDown = (entry: Entry) => entry.bounds.height > entry.bounds.width;
+  const vertical = runsDown(arrowEntries[0]);
+  if (arrowEntries.some((arrow) => runsDown(arrow) !== vertical)) {
+    return fail("Clean Up Reaction needs all arrows running the same way: all across or all down");
+  }
+
+  // Main axis: the way the scheme runs. Cross axis: across it; the reaction line is a cross position.
+  const main = (point: PagePoint) => vertical ? point.y : point.x;
+  const cross = (point: PagePoint) => vertical ? point.x : point.y;
+  const mainStart = (bounds: LayoutBounds) => vertical ? bounds.y : bounds.x;
+  const mainSize = (bounds: LayoutBounds) => vertical ? bounds.height : bounds.width;
+  const crossStart = (bounds: LayoutBounds) => vertical ? bounds.x : bounds.y;
+  const crossSize = (bounds: LayoutBounds) => vertical ? bounds.width : bounds.height;
+  const point = (mainValue: number, crossValue: number): PagePoint =>
+    vertical ? { x: crossValue, y: mainValue } : { x: mainValue, y: crossValue };
+  const arrows = arrowEntries.sort((a, b) => mainStart(a.bounds) - mainStart(b.bounds));
 
   // An arrow's conditions: anything centred over its span, or overlapping the span while lying
-  // wholly above or below its line (text that runs past a short arrow's end).
+  // wholly on one side of its line (text that runs past a short arrow's end).
   const conditions = new Map<Entry, Entry[]>(arrows.map((arrow) => [arrow, []]));
   const row: Entry[] = [];
   const isConditionOf = (entry: Entry, arrow: Entry) => {
-    const left = entry.bounds.x, right = entry.bounds.x + entry.bounds.width, centerX = (left + right) / 2;
-    const spanLeft = arrow.bounds.x, spanRight = arrow.bounds.x + arrow.bounds.width;
-    if (centerX >= spanLeft && centerX <= spanRight) return true;
-    const overlaps = right > spanLeft && left < spanRight;
-    const offLine = entry.bounds.y + entry.bounds.height <= arrow.middleY || entry.bounds.y >= arrow.middleY;
-    return overlaps && offLine;
+    const low = mainStart(entry.bounds), high = low + mainSize(entry.bounds), middle = (low + high) / 2;
+    const spanLow = mainStart(arrow.bounds), spanHigh = spanLow + mainSize(arrow.bounds);
+    if (middle >= spanLow && middle <= spanHigh) return true;
+    const lineCross = cross(arrow.anchor);
+    const offLine = crossStart(entry.bounds) + crossSize(entry.bounds) <= lineCross || crossStart(entry.bounds) >= lineCross;
+    return high > spanLow && low < spanHigh && offLine;
   };
   for (const entry of entries) {
     if (entry.kind !== "item") { row.push(entry); continue; }
     const over = arrows.filter((arrow) => isConditionOf(entry, arrow))
-      .sort((a, b) => Math.abs(a.middleY - entry.middleY) - Math.abs(b.middleY - entry.middleY))[0];
+      .sort((a, b) => Math.abs(cross(a.anchor) - cross(entry.anchor)) - Math.abs(cross(b.anchor) - cross(entry.anchor)))[0];
     if (!over) { row.push(entry); continue; }
     if (entry.object.type === "text") {
-      const text = restyledReactionText(entry.object, page, { fontSizePx: REACTION_CONDITIONS_FONT_SIZE_PX, textAlign: "center" });
-      const ink = reactionTextInk(text);
-      entry.text = text;
-      entry.bounds = ink.bounds;
+      // Beside a vertical arrow, text lines up against the arrow: left-aligned on its right, right-aligned on its left.
+      const textAlign = !vertical ? "center" : entry.anchor.x >= over.anchor.x ? "left" : "right";
+      const text = restyledReactionText(entry.object, page, { fontSizePx: REACTION_CONDITIONS_FONT_SIZE_PX, textAlign });
+      Object.assign(entry, { text }, textEntryParts(text), { anchor: entry.anchor });
     }
     conditions.get(over)!.push(entry);
   }
-  row.sort((a, b) => (a.bounds.x + a.bounds.width / 2) - (b.bounds.x + b.bounds.width / 2));
-  // Two structures side by side on one side of an arrow are separate species: a "+" goes between them.
+  row.sort((a, b) => (mainStart(a.bounds) + mainSize(a.bounds) / 2) - (mainStart(b.bounds) + mainSize(b.bounds) / 2));
+  // Two structures next to each other on one side of an arrow are separate species: a "+" goes between them.
   for (let index = row.length - 1; index > 0; index--) {
     if (row[index].kind !== "item" || row[index - 1].kind !== "item") continue;
-    const left = row[index - 1].bounds, right = row[index].bounds;
-    const text = newPlusText({ x: (left.x + left.width + right.x) / 2, y: (row[index - 1].middleY + row[index].middleY) / 2 });
-    const ink = reactionTextInk(text);
-    row.splice(index, 0, { id: text.id, object: text, kind: "plus", text, added: true, bounds: ink.bounds, middleY: ink.middleY });
+    const before = row[index - 1], after = row[index];
+    const text = newPlusText(point((mainStart(before.bounds) + mainSize(before.bounds) + mainStart(after.bounds)) / 2,
+      (cross(before.anchor) + cross(after.anchor)) / 2));
+    row.splice(index, 0, { id: text.id, object: text, kind: "plus", text, added: true, ...textEntryParts(text) });
   }
 
-  const lineY = arrows[0].middleY;
+  const lineCross = cross(arrows[0].anchor);
   const moves: LayoutItemMove[] = [];
   const patches: DocumentPatch[] = [];
   const replaced = new Map<string, string>();
   const added: string[] = [];
-  // Place one entry so its bounds' top-left lands at (x, y) - or, with `middle`, so its middle sits on y.
-  const place = (entry: Entry, x: number, y: number, middle: boolean) => {
-    const dx = x - entry.bounds.x;
-    const dy = middle ? y - entry.middleY : y - entry.bounds.y;
+  const place = (entry: Entry, mainDelta: number, crossDelta: number) => {
+    const { x: dx, y: dy } = point(mainDelta, crossDelta);
     if (entry.text) {
       const text = { ...entry.text, x: entry.text.x + dx, y: entry.text.y + dy };
       if (entry.added) {
@@ -14041,15 +14060,18 @@ export function cleanUpReactionLayout(document: ChemDraftDocument): { document: 
     }
     moves.push(...selectionLayoutItemMoves(page.objects, entry.id, dx, dy));
   };
-  const placeArrow = (arrow: Entry, startX: number, length: number) => {
+  const placeArrow = (arrow: Entry, from: number, length: number) => {
     const object = arrow.object, line = arrow.line!;
-    const forward = line.end.x >= line.start.x;
-    const start = { x: forward ? startX : startX + length, y: lineY };
-    const end = { x: forward ? startX + length : startX, y: lineY };
+    const forward = main(line.end) >= main(line.start);
+    const start = point(forward ? from : from + length, lineCross);
+    const end = point(forward ? from + length : from, lineCross);
     const minX = Math.min(line.start.x, line.end.x), maxX = Math.max(line.start.x, line.end.x);
     const minY = Math.min(line.start.y, line.end.y), maxY = Math.max(line.start.y, line.end.y);
     const pad = Math.max(8, minX - object.x, object.x + object.width - maxX, minY - object.y, object.y + object.height - maxY);
-    const frame = { x: startX - pad, y: lineY - pad, width: length + 2 * pad, height: 2 * pad };
+    const corner = point(from - pad, lineCross - pad);
+    const frame = vertical
+      ? { ...corner, width: 2 * pad, height: length + 2 * pad }
+      : { ...corner, width: length + 2 * pad, height: 2 * pad };
     if (object.type === "graphic") {
       patches.push({ op: "updateObject", objectId: object.id, changes: { ...frame, data: { ...object.data, lineStart: start, lineEnd: end } } });
     } else if (object.type === "reaction-arrow") {
@@ -14058,32 +14080,47 @@ export function cleanUpReactionLayout(document: ChemDraftDocument): { document: 
     }
   };
 
-  let cursor = Math.min(...row.map((entry) => entry.bounds.x));
+  let cursor = Math.min(...row.map((entry) => mainStart(entry.bounds)));
   for (const entry of row) {
     if (entry.kind !== "arrow") {
-      place(entry, cursor, lineY, true);
-      cursor += entry.bounds.width + gap;
+      place(entry, cursor - mainStart(entry.bounds), lineCross - cross(entry.anchor));
+      cursor += mainSize(entry.bounds) + gap;
       continue;
     }
     const attached = conditions.get(entry) ?? [];
-    const widest = Math.max(0, ...attached.map((item) => item.bounds.width));
-    const length = Math.max(minArrowLength, widest + 2 * conditionsPadding);
+    const before = attached.filter((item) => cross(item.anchor) < cross(entry.anchor));
+    const after = attached.filter((item) => cross(item.anchor) >= cross(entry.anchor));
+    const stackLength = (items: Entry[]) => items.reduce((sum, item) => sum + mainSize(item.bounds), 0) + 2 * Math.max(0, items.length - 1);
+    // Across the arrow, conditions stack outwards from it; beside a vertical arrow, each side is one block along it.
+    const needed = vertical
+      ? Math.max(stackLength(before), stackLength(after))
+      : Math.max(0, ...attached.map((item) => item.bounds.width));
+    const length = Math.max(minArrowLength, needed + 2 * conditionsPadding);
     placeArrow(entry, cursor, length);
-    const middleX = cursor + length / 2;
+    const middle = cursor + length / 2;
     const data = entry.object.type === "graphic" ? entry.object.data : undefined;
     const strokeWidth = entry.object.type === "graphic" && typeof entry.object.style.strokeWidth === "number" ? entry.object.style.strokeWidth : 1.5;
     const clearance = Math.max(3, bond * 0.25) + strokeWidth / 2 + (data?.dualShaft ? (data.dualShaftGapPx ?? 7) / 2 : 0);
-    const above = attached.filter((item) => item.middleY < entry.middleY).sort((a, b) => b.middleY - a.middleY);
-    const below = attached.filter((item) => item.middleY >= entry.middleY).sort((a, b) => a.middleY - b.middleY);
-    let edge = lineY - clearance;
-    for (const item of above) {
-      place(item, middleX - item.bounds.width / 2, edge - item.bounds.height, false);
-      edge -= item.bounds.height + 2;
-    }
-    edge = lineY + clearance;
-    for (const item of below) {
-      place(item, middleX - item.bounds.width / 2, edge, false);
-      edge += item.bounds.height + 2;
+    if (vertical) {
+      for (const [side, items] of [[-1, before], [1, after]] as const) {
+        let along = middle - stackLength(items) / 2;
+        for (const item of [...items].sort((a, b) => main(a.anchor) - main(b.anchor))) {
+          const target = side < 0 ? lineCross - clearance - crossSize(item.bounds) : lineCross + clearance;
+          place(item, along - mainStart(item.bounds), target - crossStart(item.bounds));
+          along += mainSize(item.bounds) + 2;
+        }
+      }
+    } else {
+      let edge = lineCross - clearance;
+      for (const item of [...before].sort((a, b) => cross(b.anchor) - cross(a.anchor))) {
+        place(item, middle - mainSize(item.bounds) / 2 - mainStart(item.bounds), edge - crossSize(item.bounds) - crossStart(item.bounds));
+        edge -= crossSize(item.bounds) + 2;
+      }
+      edge = lineCross + clearance;
+      for (const item of [...after].sort((a, b) => cross(a.anchor) - cross(b.anchor))) {
+        place(item, middle - mainSize(item.bounds) / 2 - mainStart(item.bounds), edge - crossStart(item.bounds));
+        edge += crossSize(item.bounds) + 2;
+      }
     }
     cursor += length + gap;
   }
@@ -14171,6 +14208,20 @@ function arrangementItem(pageObjects: readonly DocumentObject[], id: string): Ar
       width: Math.max(...boxes.map((b) => b.x + b.width)) - x,
       height: Math.max(...boxes.map((b) => b.y + b.height)) - y
     } };
+}
+
+/** An arrangement item's drawn extent: molecules by their atoms and labels, not their stored frame. */
+function arrangementItemInkBounds(pageObjects: readonly DocumentObject[], id: string): LayoutBounds | undefined {
+  const objects = objectByIdIndex(pageObjects);
+  if (!objects.has(id)) return undefined;
+  const members = [...expandWithAnchoredMarkIds(pageObjects, resolveGroupedDocumentObjectIds(pageObjects, [id]))]
+    .map((memberId) => objects.get(memberId))
+    .filter((object): object is DocumentObject => object !== undefined && object.type !== "group");
+  const boxes = (members.length > 0 ? members : [objects.get(id)!]).map((object) =>
+    object.type === "molecule" ? moleculeInkBoundsForArrangement(object) :
+      object.type === "text" ? textVisualBoundsForArrangement(object) : documentObjectVisualBounds(object, pageObjects));
+  const x = Math.min(...boxes.map((b) => b.x)), y = Math.min(...boxes.map((b) => b.y));
+  return { x, y, width: Math.max(...boxes.map((b) => b.x + b.width)) - x, height: Math.max(...boxes.map((b) => b.y + b.height)) - y };
 }
 
 export function alignSelectedDocumentObjects(
