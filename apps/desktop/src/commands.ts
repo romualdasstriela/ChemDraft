@@ -1996,6 +1996,8 @@ export function createOpenWarningsAction(availability: CommandAvailability = {})
   };
 }
 
+export const cleanUpReactionCommandId = "layout.cleanUpReaction";
+
 export function createLayerActions(document: ChemDraftDocument, layoutsEnabled = loadCompoundLayoutSettings().enabled): CommandSpec[] {
   const hasSelection = document.selection.objectIds.length > 0;
   const hasMultiSelection = document.selection.objectIds.length >= 2;
@@ -2119,6 +2121,19 @@ export function createLayerActions(document: ChemDraftDocument, layoutsEnabled =
       enabled: hasDistributableSelection,
       disabledReason: "Select at least three objects",
       description: "Distribute selected document objects evenly from top to bottom"
+    },
+    {
+      id: cleanUpReactionCommandId,
+      title: "Clean Up Reaction",
+      icon: "align",
+      assetName: "Custom_Reaction_Cleanup",
+      shortcut: "Shift+Cmd+X",
+      shortcutLabel: "⇧⌘X",
+      source: "core",
+      category: "layout",
+      enabled: hasMultiSelection,
+      disabledReason: "Select a reaction: structures, plus signs and an arrow",
+      description: "Line up the selected reaction: structures and arrows on one line, even spacing, 14 pt bold plus signs, 10 pt conditions"
     },
     {
       id: distributeModeCommandIds.centers,

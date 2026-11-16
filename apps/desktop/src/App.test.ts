@@ -4314,6 +4314,7 @@ describe("ChemDraft desktop shell", () => {
       "style.color",
       "tool.settings",
       structureCleanupCommandId,
+      "layout.cleanUpReaction",
       structureSpin3dCommandId,
       structureInteractive3dCommandId,
       structureCleanup3dCommandId,

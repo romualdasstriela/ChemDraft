@@ -78,6 +78,7 @@ export const toolbarAssetNames = [
   "Custom_RadicalAnion",
   "Custom_RadicalCation",
   "Custom_RadicalDot",
+  "Custom_Reaction_Cleanup",
   "Custom_Right",
   "Custom_Rotation",
   "Custom_Select",

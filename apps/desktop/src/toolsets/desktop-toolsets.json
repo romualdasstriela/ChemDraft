@@ -1882,6 +1882,32 @@
               }
             },
             {
+              "commandId": "layout.cleanUpReaction",
+              "title": "Clean Up Reaction",
+              "icon": "align",
+              "assetName": "Custom_Reaction_Cleanup",
+              "shortcutDisplay": "Shift+Cmd+X",
+              "disabledReason": "Select a reaction: structures, plus signs and an arrow",
+              "category": "layout",
+              "id": "layout.cleanUpReaction",
+              "kind": "button",
+              "label": "Clean Up Reaction",
+              "primary": {
+                "type": "command",
+                "commandId": "layout.cleanUpReaction"
+              },
+              "submenu": null,
+              "tooltip": {
+                "title": "Clean Up Reaction",
+                "shortcut": "Shift+Cmd+X",
+                "description": "Line up the selected reaction: structures and arrows on one line, even spacing, 14 pt bold plus signs, 10 pt conditions"
+              },
+              "layout": {
+                "colSpan": 1,
+                "rowSpan": 1
+              }
+            },
+            {
               "commandId": "structure.spin3d",
               "title": "Spin 3D",
               "icon": "style",

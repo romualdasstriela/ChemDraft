@@ -213,6 +213,7 @@ import {
   nativeSingleHeavyElementLabelValence,
   nativeTextObjectMinimumDimensions,
   nativeTextObjectSizeForText,
+  createNativeTextObject as createDocumentTextObject,
   nextObjectId,
   normalizeNativeAtomElementLabel,
   normalizeNativeMoleculeGeometry,
@@ -13833,6 +13834,258 @@ export function adjustArrangementSpacing(document:ChemDraftDocument,factor:numbe
   const moves=ids.flatMap((id,i)=>selectionLayoutItemMoves(page.objects,id,deltas[i].x,deltas[i].y));
   const result=applyLayoutItemMoves(document,moves,true);
   return {document:result,ok:true,status:`Spacing adjusted to ${Math.round(factor*100)}%`};
+}
+
+/** Clean Up Reaction: "+" signs are 14 pt bold, conditions above and below an arrow 10 pt (px = pt / 0.75). */
+export const REACTION_PLUS_FONT_SIZE_PX = 14 / 0.75;
+export const REACTION_CONDITIONS_FONT_SIZE_PX = 10 / 0.75;
+
+interface ReactionLine { start: PagePoint; end: PagePoint }
+
+/** A straight, unrotated reaction arrow and its shaft, or undefined for anything else. */
+function reactionArrowLine(object: DocumentObject): ReactionLine | undefined {
+  if (Math.abs(Math.sin(object.rotation * Math.PI / 180)) > 1e-6 || Math.cos(object.rotation * Math.PI / 180) < 0) return undefined;
+  if (object.type === "graphic") {
+    const data = object.data;
+    if (!data.lineStart || !data.lineEnd || data.pathControlPoint) return undefined;
+    if (data.artPathKind !== undefined && data.artPathKind !== "line" && data.artPathKind !== "wavy") return undefined;
+    if (!data.markerEnd && !data.markerStart && !data.dualShaft && !isNativeArrowGraphic(object)) return undefined;
+    return { start: data.lineStart, end: data.lineEnd };
+  }
+  if (object.type === "reaction-arrow" && object.start.kind === "point" && object.start.point &&
+    object.end.kind === "point" && object.end.point) {
+    return { start: object.start.point, end: object.end.point };
+  }
+  return undefined;
+}
+
+/** A reaction "+": "+" text, a plus object, or a free-standing plain charge mark. */
+function isReactionPlusObject(object: DocumentObject): boolean {
+  if (object.type === "plus") return true;
+  if (object.type === "text") return object.text.trim() === "+";
+  return object.type === "electron-mark" && object.markKind === "charge" && object.anchor.kind === "point" &&
+    object.charge === 1 && object.radical !== true;
+}
+
+/** A text object restyled in place: new font size/weight, centred lines, span sizes dropped so the
+ *  object's size applies to every run, and the box resized to the new text. */
+function restyledReactionText(object: TextObject, page: ChemDraftDocument["pages"][number], style: Partial<NativeTextStyle>): TextObject {
+  const nextStyle = nativeTextStyleFromObjectStyle({ ...nativeTextStyleFromObjectStyle(object.style), ...style });
+  const fixedWidth = object.style.textBoxSizingMode === "fixed-width" || object.style.textBoxSizingMode === "fixed-size";
+  const size = nativeTextObjectSizeForText(object.text, nextStyle, {
+    width: fixedWidth ? object.width : undefined,
+    maxWidth: Math.max(nativeTextObjectMinimumDimensions.width, page.width - object.x)
+  });
+  const dropped = new Set(["fontSizePx", ...(style.fontWeight === undefined ? [] : ["fontWeight"])]);
+  const spans = object.spans.map((span) => ({
+    ...span,
+    style: Object.fromEntries(Object.entries(span.style).filter(([key]) => !dropped.has(key)))
+  }));
+  return {
+    ...object,
+    width: size.width,
+    height: size.height,
+    spans,
+    style: { ...object.style, ...textStyleToObjectStyle(nextStyle), ...(fixedWidth ? {} : { textBoxSizingMode: "auto" }) }
+  };
+}
+
+/** The inked part of a centred text object (box padding and the 36 px minimum box excluded), and
+ *  the height of its middle: the "+" glyph's centre for a plus, the box's middle otherwise. */
+function reactionTextInk(object: TextObject): { bounds: LayoutBounds; middleY: number } {
+  const style = nativeTextStyleFromObjectStyle(object.style);
+  const fontSize = style.fontSizePx;
+  const lines = Math.max(1, object.text.replace(/\r\n?/g, "\n").split("\n").length);
+  const baseline = object.y + fontSize;
+  const top = baseline - 0.72 * fontSize;
+  const bottom = baseline + (lines - 1) * (fontSize * style.lineHeight + style.paragraphSpacingPx) + 0.22 * fontSize;
+  const plus = object.text.trim() === "+";
+  const width = plus ? 0.58 * fontSize : Math.max(fontSize * 0.5, object.width - 6);
+  const centerX = style.textAlign === "center" ? object.x + object.width / 2
+    : style.textAlign === "right" ? object.x + object.width - width / 2 : object.x + width / 2;
+  return {
+    bounds: { x: centerX - width / 2, y: top, width, height: bottom - top },
+    middleY: plus ? baseline - 0.32 * fontSize : (top + bottom) / 2
+  };
+}
+
+function uniqueObjectId(taken: Set<string>, base: string): string {
+  let index = 1;
+  while (taken.has(`${base}_${index}`)) index++;
+  const id = `${base}_${index}`;
+  taken.add(id);
+  return id;
+}
+
+/**
+ * Clean Up Reaction: lay the selected scheme out left to right on one line. Structures sit with
+ * their ring centres (or frame centres) on the arrow's line, "+" signs (14 pt bold) centred on it,
+ * items evenly spaced, each arrow long enough for its conditions, and conditions text (10 pt)
+ * centred above and below its arrow. Text or structures over an arrow's span count as its
+ * conditions. Chemistry is untouched: objects only move, text only changes size, and a plus drawn
+ * as a free charge mark or plus object becomes "+" text.
+ */
+export function cleanUpReactionLayout(document: ChemDraftDocument): { document: ChemDraftDocument; status: string } {
+  const fail = (status: string) => ({ document, status });
+  const page = selectionPage(document);
+  const objects = objectByIdIndex(page.objects);
+  const ids = selectedArrangementObjectIds(document);
+  if (ids.length < 2) return fail("Select the reaction: its structures, plus signs and arrows");
+
+  const molecules = ids.flatMap((id) => resolveGroupedDocumentObjectIds(page.objects, [id]))
+    .map((id) => objects.get(id)).filter((object): object is MoleculeObject => object?.type === "molecule");
+  const bond = molecules.length > 0 ? nativeDrawingStyleFromObjectStyle(molecules[0].style).bondLengthPx : 20;
+  const gap = bond * 0.9;
+  const minArrowLength = bond * 3;
+  const conditionsPadding = bond * 0.4;
+
+  type Entry = {
+    id: string; object: DocumentObject; kind: "arrow" | "plus" | "item";
+    bounds: LayoutBounds; middleY: number;
+    line?: ReactionLine; text?: TextObject; replaces?: boolean;
+  };
+  const taken = new Set(page.objects.map((object) => object.id));
+  const entries: Entry[] = [];
+  for (const id of ids) {
+    const object = objects.get(id);
+    if (!object) continue;
+    const line = reactionArrowLine(object);
+    if (line) {
+      if (Math.abs(line.end.y - line.start.y) > Math.abs(line.end.x - line.start.x)) {
+        return fail("Clean Up Reaction lays out left-to-right schemes; turn vertical arrows first");
+      }
+      const x = Math.min(line.start.x, line.end.x);
+      entries.push({ id, object, kind: "arrow", line, middleY: (line.start.y + line.end.y) / 2,
+        bounds: { x, y: Math.min(line.start.y, line.end.y), width: Math.abs(line.end.x - line.start.x), height: Math.abs(line.end.y - line.start.y) } });
+      continue;
+    }
+    if (isReactionPlusObject(object)) {
+      const plusStyle: Partial<NativeTextStyle> = { fontSizePx: REACTION_PLUS_FONT_SIZE_PX, fontWeight: 700, textAlign: "center" };
+      let text: TextObject;
+      if (object.type === "text") {
+        text = restyledReactionText(object, page, plusStyle);
+      } else {
+        const center = objectCenter(object);
+        const color = typeof object.style.color === "string" ? { color: object.style.color } : {};
+        const created = createDocumentTextObject(document, center, "+", { ...plusStyle, ...color });
+        text = { ...created, id: uniqueObjectId(taken, "text_plus"), x: center.x - created.width / 2, y: center.y - created.height / 2 };
+      }
+      const ink = reactionTextInk(text);
+      entries.push({ id, object, kind: "plus", text, replaces: object.type !== "text", bounds: ink.bounds, middleY: ink.middleY });
+      continue;
+    }
+    const item = arrangementItem(page.objects, id);
+    if (!item) continue;
+    entries.push({ id, object, kind: "item", bounds: item.bounds,
+      middleY: item.anchor?.y ?? item.bounds.y + item.bounds.height / 2 });
+  }
+
+  const arrows = entries.filter((entry) => entry.kind === "arrow").sort((a, b) => a.bounds.x - b.bounds.x);
+  if (arrows.length === 0) return fail("Select a reaction with at least one arrow");
+
+  // An arrow's conditions: anything centred over its span, or overlapping the span while lying
+  // wholly above or below its line (text that runs past a short arrow's end).
+  const conditions = new Map<Entry, Entry[]>(arrows.map((arrow) => [arrow, []]));
+  const row: Entry[] = [];
+  const isConditionOf = (entry: Entry, arrow: Entry) => {
+    const left = entry.bounds.x, right = entry.bounds.x + entry.bounds.width, centerX = (left + right) / 2;
+    const spanLeft = arrow.bounds.x, spanRight = arrow.bounds.x + arrow.bounds.width;
+    if (centerX >= spanLeft && centerX <= spanRight) return true;
+    const overlaps = right > spanLeft && left < spanRight;
+    const offLine = entry.bounds.y + entry.bounds.height <= arrow.middleY || entry.bounds.y >= arrow.middleY;
+    return overlaps && offLine;
+  };
+  for (const entry of entries) {
+    if (entry.kind !== "item") { row.push(entry); continue; }
+    const over = arrows.filter((arrow) => isConditionOf(entry, arrow))
+      .sort((a, b) => Math.abs(a.middleY - entry.middleY) - Math.abs(b.middleY - entry.middleY))[0];
+    if (!over) { row.push(entry); continue; }
+    if (entry.object.type === "text") {
+      const text = restyledReactionText(entry.object, page, { fontSizePx: REACTION_CONDITIONS_FONT_SIZE_PX, textAlign: "center" });
+      const ink = reactionTextInk(text);
+      entry.text = text;
+      entry.bounds = ink.bounds;
+    }
+    conditions.get(over)!.push(entry);
+  }
+  row.sort((a, b) => (a.bounds.x + a.bounds.width / 2) - (b.bounds.x + b.bounds.width / 2));
+
+  const lineY = arrows[0].middleY;
+  const moves: LayoutItemMove[] = [];
+  const patches: DocumentPatch[] = [];
+  const replaced = new Map<string, string>();
+  // Place one entry so its bounds' top-left lands at (x, y) - or, with `middle`, so its middle sits on y.
+  const place = (entry: Entry, x: number, y: number, middle: boolean) => {
+    const dx = x - entry.bounds.x;
+    const dy = middle ? y - entry.middleY : y - entry.bounds.y;
+    if (entry.text) {
+      const text = { ...entry.text, x: entry.text.x + dx, y: entry.text.y + dy };
+      if (entry.replaces) {
+        patches.push({ op: "removeObject", objectId: entry.id }, { op: "addObject", pageId: page.id, object: text });
+        replaced.set(entry.id, text.id);
+      } else {
+        const { id: _id, type: _type, ...changes } = text;
+        patches.push({ op: "updateObject", objectId: entry.id, changes });
+      }
+      return;
+    }
+    moves.push(...selectionLayoutItemMoves(page.objects, entry.id, dx, dy));
+  };
+  const placeArrow = (arrow: Entry, startX: number, length: number) => {
+    const object = arrow.object, line = arrow.line!;
+    const forward = line.end.x >= line.start.x;
+    const start = { x: forward ? startX : startX + length, y: lineY };
+    const end = { x: forward ? startX + length : startX, y: lineY };
+    const minX = Math.min(line.start.x, line.end.x), maxX = Math.max(line.start.x, line.end.x);
+    const minY = Math.min(line.start.y, line.end.y), maxY = Math.max(line.start.y, line.end.y);
+    const pad = Math.max(8, minX - object.x, object.x + object.width - maxX, minY - object.y, object.y + object.height - maxY);
+    const frame = { x: startX - pad, y: lineY - pad, width: length + 2 * pad, height: 2 * pad };
+    if (object.type === "graphic") {
+      patches.push({ op: "updateObject", objectId: object.id, changes: { ...frame, data: { ...object.data, lineStart: start, lineEnd: end } } });
+    } else if (object.type === "reaction-arrow") {
+      patches.push({ op: "updateObject", objectId: object.id, changes: {
+        ...frame, start: { ...object.start, point: start }, end: { ...object.end, point: end } } as Partial<DocumentObject> });
+    }
+  };
+
+  let cursor = Math.min(...row.map((entry) => entry.bounds.x));
+  for (const entry of row) {
+    if (entry.kind !== "arrow") {
+      place(entry, cursor, lineY, true);
+      cursor += entry.bounds.width + gap;
+      continue;
+    }
+    const attached = conditions.get(entry) ?? [];
+    const widest = Math.max(0, ...attached.map((item) => item.bounds.width));
+    const length = Math.max(minArrowLength, widest + 2 * conditionsPadding);
+    placeArrow(entry, cursor, length);
+    const middleX = cursor + length / 2;
+    const data = entry.object.type === "graphic" ? entry.object.data : undefined;
+    const strokeWidth = entry.object.type === "graphic" && typeof entry.object.style.strokeWidth === "number" ? entry.object.style.strokeWidth : 1.5;
+    const clearance = Math.max(3, bond * 0.25) + strokeWidth / 2 + (data?.dualShaft ? (data.dualShaftGapPx ?? 7) / 2 : 0);
+    const above = attached.filter((item) => item.middleY < entry.middleY).sort((a, b) => b.middleY - a.middleY);
+    const below = attached.filter((item) => item.middleY >= entry.middleY).sort((a, b) => a.middleY - b.middleY);
+    let edge = lineY - clearance;
+    for (const item of above) {
+      place(item, middleX - item.bounds.width / 2, edge - item.bounds.height, false);
+      edge -= item.bounds.height + 2;
+    }
+    edge = lineY + clearance;
+    for (const item of below) {
+      place(item, middleX - item.bounds.width / 2, edge, false);
+      edge += item.bounds.height + 2;
+    }
+    cursor += length + gap;
+  }
+
+  let next = applyLayoutItemMoves(document, moves, true);
+  const selection = document.selection.objectIds.map((id) => replaced.get(id) ?? id);
+  next = applyPatches(next, [...patches, { op: "setSelection", pageId: page.id, objectIds: selection }], { now: phase4Timestamp });
+  const structures = row.filter((entry) => entry.kind === "item").length;
+  return {
+    document: next,
+    status: `Cleaned up reaction: ${structures} ${structures === 1 ? "item" : "items"}, ${arrows.length} ${arrows.length === 1 ? "arrow" : "arrows"}`
+  };
 }
 
 export function arrangementSpacingRange(document:ChemDraftDocument):{min:number;max:number} {

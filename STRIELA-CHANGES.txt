@@ -309,6 +309,21 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      page size. View > Ruler Units (just under Show Rulers) switches between Centimeters and
      Inches; the choice is remembered. Before, a new tab could show inches.
 
+17a. Clean Up Reaction
+   - New Main toolbar button (next to Clean up Structure 2D) and shortcut Ctrl+Shift+X.
+     Select a reaction - structures, plus signs, arrows and their conditions text - and it
+     lays the scheme out left to right on one line:
+     - structures sit with their ring centres (or middles) on the arrow's line;
+     - structures, "+" signs and arrows are evenly spaced, starting where the scheme starts;
+     - each arrow is made horizontal and long enough for its conditions;
+     - "+" signs become 14 pt bold and centred on the line. A "+" drawn with the charge tool
+       (or an imported plus) is turned into "+" text;
+     - text or structures over an arrow are its conditions: text becomes 10 pt, and everything
+       is centred above or below the arrow, keeping its side.
+   - Chemistry is not changed: structures only move. Several arrows (A -> B -> C) work.
+     Vertical schemes and curved arrows are not handled; the command says so and changes
+     nothing. One Undo restores the old layout.
+
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
      installer and publishes it as a pre-release on this fork's Releases page, with
@@ -371,3 +386,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  CDX/CDXML: script digits as script runs, arrows head first, lone reagent labels kept
 (next)  Publish ChemDraft_RS-v* tags as downloadable pre-releases with an install guide
 (next)  Rulers in centimetres on every tab; View > Ruler Units picks cm or inches
+(next)  Clean Up Reaction (Ctrl+Shift+X): one line, even spacing, 14 pt bold +, 10 pt conditions
