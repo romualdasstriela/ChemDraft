@@ -1689,7 +1689,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.16.18.40-opus";
+const CURRENT_BUILD_STAMP = "11.16.19.20-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -13083,7 +13083,7 @@ export function MainWindow({
           documentRef.current,
           selectedNativeMoleculePart,
           hoveredNativeDeleteTargetRef.current,
-          event.key,
+          hoverChargeKey(event),
           keybindingSchemeRef.current
         );
         if (hoveredTargetCommandId) {
@@ -23194,6 +23194,19 @@ export function shouldOpenMoleculeEditorFromObjectClick(
   void activeToolKind;
   void clickCount;
   return false;
+}
+
+/**
+ * The + and − hover keys, read by the physical key as well as by the character it types. Layouts
+ * that put a letter on the =/+ key (Lithuanian types "ž" / "Ž" there and has "+" only on the
+ * keypad) would otherwise have no way to charge a hovered atom: Shift + that key, the −/_ key and
+ * the keypad + and − always mean a charge. Any other key comes back as the character it types.
+ */
+export function hoverChargeKey(event: Pick<KeyboardEvent, "key" | "code" | "shiftKey">): string {
+  if (event.key === "+" || event.key === "-") return event.key;
+  if (event.code === "NumpadAdd" || (event.code === "Equal" && event.shiftKey)) return "+";
+  if (event.code === "NumpadSubtract" || (event.code === "Minus" && !event.shiftKey)) return "-";
+  return event.key;
 }
 
 export function hoveredNativeTargetShortcutCommand(

@@ -350,6 +350,16 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      is selected while the toolbox is open; it is labelled "Predicted", its tooltip gives the
      method's typical error, and it shows why when Joback has no estimate.
 
+17c. Charges
+   - The plain (uncircled) + and - charge tools in the Charge and Electron drop-down now have
+     uncircled icons, so they can be told apart from the circled ones.
+   - A charge put on a carbon (by any charge tool or hover key) keeps the carbon a bare
+     vertex with the charge beside it; it is no longer relabelled "C" or "CH". Charged
+     heteroatoms (N+, O-) keep their labels.
+   - Hovering an atom and pressing + or - adds the charge. The keys also work by physical
+     key: Shift + the =/+ key, the -/_ key and the keypad + and -, so a layout that types a
+     letter on the =/+ key (Lithuanian: z with caron) still charges the atom.
+
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
      installer and publishes it as a pre-release on this fork's Releases page, with
@@ -419,3 +429,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Brackets drop-down with ( )n, [ ]n, { }n pairs and the single brackets
 (next)  Brackets stretch wider or taller from side handles
 (next)  Compound Data toolbox: formula, MW, m/z, predicted bp; Paste and Copy
+(next)  Charges: plain +/- icons, charged carbons stay bare vertices, +/- hover keys by physical key

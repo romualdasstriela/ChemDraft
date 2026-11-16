@@ -6028,7 +6028,9 @@ export function atomDisplayLabelPlacement(
           - dativeDeprotonationCount(atom, bonds, atoms, resolution)
       ));
 
-  if (element === "C" && formalCharge === 0) {
+  // A carbon whose whole charge comes from a placed charge mark stays a bare vertex: the mark
+  // already shows the sign, so a carbocation or carbanion is not relabelled "CH" or "C".
+  if (element === "C" && labelCharge === 0) {
     const terminalCarbon = atoms.length > 0 && heavyAtomNeighborCount(atom.id, resolution) === 1;
     // "Naked" means no bond at all, not zero covalent valence: a dashed (dative) bond
     // contributes no valence, so testing valenceUsed here labeled the carbon at the end of

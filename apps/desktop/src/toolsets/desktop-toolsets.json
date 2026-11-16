@@ -819,13 +819,13 @@
                     "commandId": "tool.plusPlain",
                     "label": "Positive Charge (plain)",
                     "icon": "charge",
-                    "assetName": "Custom_Plus"
+                    "assetName": "Custom_PlusPlain"
                   },
                   {
                     "commandId": "tool.minusPlain",
                     "label": "Negative Charge (plain)",
                     "icon": "charge",
-                    "assetName": "Custom_Minus"
+                    "assetName": "Custom_MinusPlain"
                   },
                   {
                     "commandId": "tool.radicalCation",
@@ -2921,13 +2921,13 @@
                     "commandId": "tool.plusPlain",
                     "label": "Positive Charge (plain)",
                     "icon": "charge",
-                    "assetName": "Custom_Plus"
+                    "assetName": "Custom_PlusPlain"
                   },
                   {
                     "commandId": "tool.minusPlain",
                     "label": "Negative Charge (plain)",
                     "icon": "charge",
-                    "assetName": "Custom_Minus"
+                    "assetName": "Custom_MinusPlain"
                   },
                   {
                     "commandId": "tool.radicalCation",
