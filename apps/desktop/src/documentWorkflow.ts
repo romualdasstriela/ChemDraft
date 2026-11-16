@@ -14080,17 +14080,26 @@ export function cleanUpReactionLayout(document: ChemDraftDocument): { document: 
     }
   };
 
+  // Down a column a "+" sits closer to its neighbours: a full gap on each side of it leaves the
+  // products of one step looking like separate rows.
+  const spacing = (previous: Entry, entry: Entry) =>
+    vertical && (previous.kind === "plus" || entry.kind === "plus") ? bond * 0.6 : gap;
+  // Lines of conditions text sit about 1.25 line heights apart.
+  const stackGap = 0.3 * REACTION_CONDITIONS_FONT_SIZE_PX;
   let cursor = Math.min(...row.map((entry) => mainStart(entry.bounds)));
+  let previous: Entry | undefined;
   for (const entry of row) {
+    if (previous) cursor += spacing(previous, entry);
+    previous = entry;
     if (entry.kind !== "arrow") {
       place(entry, cursor - mainStart(entry.bounds), lineCross - cross(entry.anchor));
-      cursor += mainSize(entry.bounds) + gap;
+      cursor += mainSize(entry.bounds);
       continue;
     }
     const attached = conditions.get(entry) ?? [];
     const before = attached.filter((item) => cross(item.anchor) < cross(entry.anchor));
     const after = attached.filter((item) => cross(item.anchor) >= cross(entry.anchor));
-    const stackLength = (items: Entry[]) => items.reduce((sum, item) => sum + mainSize(item.bounds), 0) + 2 * Math.max(0, items.length - 1);
+    const stackLength = (items: Entry[]) => items.reduce((sum, item) => sum + mainSize(item.bounds), 0) + stackGap * Math.max(0, items.length - 1);
     // Across the arrow, conditions stack outwards from it; beside a vertical arrow, each side is one block along it.
     const needed = vertical
       ? Math.max(stackLength(before), stackLength(after))
@@ -14100,29 +14109,30 @@ export function cleanUpReactionLayout(document: ChemDraftDocument): { document: 
     const middle = cursor + length / 2;
     const data = entry.object.type === "graphic" ? entry.object.data : undefined;
     const strokeWidth = entry.object.type === "graphic" && typeof entry.object.style.strokeWidth === "number" ? entry.object.style.strokeWidth : 1.5;
-    const clearance = Math.max(3, bond * 0.25) + strokeWidth / 2 + (data?.dualShaft ? (data.dualShaftGapPx ?? 7) / 2 : 0);
+    const clearance = Math.max(3, bond * 0.25) + strokeWidth / 2 + (data?.dualShaft ? (data.dualShaftGapPx ?? 7) / 2 : 0) +
+      (vertical ? 2 : 0);
     if (vertical) {
       for (const [side, items] of [[-1, before], [1, after]] as const) {
         let along = middle - stackLength(items) / 2;
         for (const item of [...items].sort((a, b) => main(a.anchor) - main(b.anchor))) {
           const target = side < 0 ? lineCross - clearance - crossSize(item.bounds) : lineCross + clearance;
           place(item, along - mainStart(item.bounds), target - crossStart(item.bounds));
-          along += mainSize(item.bounds) + 2;
+          along += mainSize(item.bounds) + stackGap;
         }
       }
     } else {
       let edge = lineCross - clearance;
       for (const item of [...before].sort((a, b) => cross(b.anchor) - cross(a.anchor))) {
         place(item, middle - mainSize(item.bounds) / 2 - mainStart(item.bounds), edge - crossSize(item.bounds) - crossStart(item.bounds));
-        edge -= crossSize(item.bounds) + 2;
+        edge -= crossSize(item.bounds) + stackGap;
       }
       edge = lineCross + clearance;
       for (const item of [...after].sort((a, b) => cross(a.anchor) - cross(b.anchor))) {
         place(item, middle - mainSize(item.bounds) / 2 - mainStart(item.bounds), edge - crossStart(item.bounds));
-        edge += crossSize(item.bounds) + 2;
+        edge += crossSize(item.bounds) + stackGap;
       }
     }
-    cursor += length + gap;
+    cursor += length;
   }
 
   let next = applyLayoutItemMoves(document, moves, true);

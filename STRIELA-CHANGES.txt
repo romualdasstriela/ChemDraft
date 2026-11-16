@@ -325,6 +325,8 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - Top-to-bottom schemes work the same way, down one line: conditions go beside a vertical
      arrow, left-aligned on its right or right-aligned on its left, as one block centred on it.
      Arrows must all run the same way (all across or all down); otherwise nothing changes.
+     Down a column a "+" sits closer to its neighbours (0.6 bond lengths instead of 1.2).
+   - Stacked lines of conditions text are about 1.25 line heights apart.
    - Gaps are measured between what is drawn (atoms, bonds, labels), so they look the same
      across and down.
    - Chemistry is not changed: structures only move. Several arrows (A -> B -> C) work.
@@ -395,3 +397,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Clean Up Reaction (Ctrl+Shift+X): one line, even spacing, 14 pt bold +, 10 pt conditions
 (next)  Clean Up Reaction adds a missing + between neighbouring structures
 (next)  Clean Up Reaction lays out top-to-bottom schemes; gaps measured between drawn ink
+(next)  Clean Up Reaction: roomier conditions lines; closer + in vertical schemes

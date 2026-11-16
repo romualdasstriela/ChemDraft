@@ -184,8 +184,13 @@ describe("Clean Up Reaction", () => {
     const [a, b, c] = placed.map(moleculeInkBoundsForArrangement).sort((p, q) => p.y - q.y);
     const plusStyle = nativeTextStyleFromObjectStyle(plus.style);
     const plusTop = plus.y + 0.28 * plusStyle.fontSizePx, plusBottom = plus.y + 1.22 * plusStyle.fontSizePx;
-    const gaps = [line.lineStart!.y - (a.y + a.height), b.y - line.lineEnd!.y, plusTop - (b.y + b.height), c.y - plusBottom];
-    for (const gap of gaps) expect(gap).toBeCloseTo(gaps[0], 6);
+    // Even gaps around the arrow; down a column the "+" sits closer to its neighbours, evenly too.
+    const arrowGaps = [line.lineStart!.y - (a.y + a.height), b.y - line.lineEnd!.y];
+    const plusGaps = [plusTop - (b.y + b.height), c.y - plusBottom];
+    expect(arrowGaps[1]).toBeCloseTo(arrowGaps[0], 6);
+    expect(plusGaps[1]).toBeCloseTo(plusGaps[0], 6);
+    expect(plusGaps[0]).toBeLessThan(arrowGaps[0] * 0.6);
+    expect(plusGaps[0]).toBeGreaterThan(8);
 
     // Conditions: 10 pt, left-aligned just right of the arrow, as one block centred on it.
     const above = byId(next, "above") as TextObject, below = byId(next, "below") as TextObject;
@@ -196,7 +201,8 @@ describe("Clean Up Reaction", () => {
       expect(condition.x).toBeGreaterThan(lineX);
       expect(condition.x).toBeLessThan(lineX + 12);
     }
-    expect(below.y).toBeGreaterThan(above.y);
+    // About 1.25 line heights apart, not touching.
+    expect(below.y - above.y).toBeCloseTo(0.94 * REACTION_CONDITIONS_FONT_SIZE_PX + 0.3 * REACTION_CONDITIONS_FONT_SIZE_PX, 6);
     const blockMiddle = ((above.y + 0.28 * REACTION_CONDITIONS_FONT_SIZE_PX) + (below.y + 1.22 * REACTION_CONDITIONS_FONT_SIZE_PX)) / 2;
     expect(blockMiddle).toBeCloseTo((line.lineStart!.y + line.lineEnd!.y) / 2, 6);
   });
