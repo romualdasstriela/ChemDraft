@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   createPhase4Document,
   insertNativeArtGraphicObject,
+  insertNativeBracket,
   objectEdgeStretch,
   stretchDocumentObjectFromEdge
 } from "./documentWorkflow";
-import type { ChemDraftDocument } from "@chemdraft/chem-core";
+import type { BracketObject, ChemDraftDocument } from "@chemdraft/chem-core";
 
 function frame(document: ChemDraftDocument, objectId: string) {
   const object = document.pages[0].objects.find((candidate) => candidate.id === objectId);
@@ -59,5 +60,25 @@ describe("stretching a shape by one side", () => {
     expect(after.width).toBeCloseTo(before.width + 50);
     expect(after.y).toBeCloseTo(before.y);
     expect(after.height).toBeCloseTo(before.height);
+  });
+
+  it.each([
+    ["( )n", "polymer", "round"],
+    ["[ ]n", "polymer", "square"],
+    ["{ }n", "polymer", "curly"],
+    ["single {", "curly", undefined]
+  ] as const)("stretches a %s bracket wider only, or taller only, keeping its n", (_name, kind, shape) => {
+    const document = insertNativeBracket(createPhase4Document("Brackets"), { x: 300, y: 300 }, kind, shape);
+    const objectId = document.selection.objectIds[0]!;
+    const before = frame(document, objectId);
+    const wider = stretchDocumentObjectFromEdge(document, objectId, "right", { x: before.x + before.width + 40, y: 0 });
+    expect(frame(wider, objectId)).toMatchObject({ x: before.x, y: before.y, height: before.height });
+    expect(frame(wider, objectId).width).toBeCloseTo(before.width + 40);
+    const taller = stretchDocumentObjectFromEdge(document, objectId, "bottom", { x: 0, y: before.y + before.height + 30 });
+    expect(frame(taller, objectId)).toMatchObject({ x: before.x, y: before.y, width: before.width });
+    expect(frame(taller, objectId).height).toBeCloseTo(before.height + 30);
+    const bracket = taller.pages[0].objects.find((object) => object.id === objectId) as BracketObject;
+    expect(bracket.label).toBe(kind === "polymer" ? "n" : undefined);
+    expect(bracket.style.bracketPairShape).toBe(shape === "round" ? undefined : shape);
   });
 });

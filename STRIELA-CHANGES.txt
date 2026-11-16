@@ -165,6 +165,8 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      ( )n, [ ]n, { }n, and the single curly { and square [ brackets. Square [ ]n and curly
      { }n work exactly like ( )n: one object, an "n" label, double-click to change it. The
      button shows the bracket last picked from the drop-down, and a click places that one.
+   - A selected bracket (any kind) has a handle in the middle of each side: drag one to make
+     it only wider or only taller, the opposite side staying put. Corners still scale.
    - The bracket uses the "polymer" kind the document model already had (drawn as a square
      bracket before), so it saves in .chemdraft files. CDXML export still writes only a
      placeholder for it, as for every native bracket.
@@ -403,3 +405,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Clean Up Reaction lays out top-to-bottom schemes; gaps measured between drawn ink
 (next)  Clean Up Reaction: roomier conditions lines; closer + in vertical schemes
 (next)  Brackets drop-down with ( )n, [ ]n, { }n pairs and the single brackets
+(next)  Brackets stretch wider or taller from side handles
