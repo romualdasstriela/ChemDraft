@@ -155,6 +155,26 @@ describe("CDXML from other programs", () => {
     expect(molecules[0]!.style.bondBoldWidthPx).toBeCloseTo(3.84);
   });
 
+  it("keeps a reagent formula standing alone as the label drawn, not its atoms", () => {
+    // ChemDraw's reading of "PCl3" written over an arrow: a nickname node holding P and three Cl.
+    const { molecules } = open(`<fragment id="2">
+      <n id="3" p="100 50" NodeType="Nickname"><fragment id="10">
+        <n id="11" p="100 50" Element="15"/><n id="12" p="110 40" Element="17"/>
+        <n id="13" p="110 60" Element="17"/><n id="14" p="90 50" Element="17"/>
+        <b id="15" B="11" E="12"/><b id="16" B="11" E="13"/><b id="17" B="11" E="14"/>
+      </fragment>${label("PCl3")}</n>
+    </fragment>`);
+    expect(molecules[0]!.atoms.map((atom) => atom.element)).toEqual(["PCl3"]);
+    expect(molecules[0]!.bonds).toHaveLength(0);
+  });
+
+  it("reads a legacy line arrow with no Start/End from its head end, as ChemDraw writes it", () => {
+    // ChemDraw's legacy line: BoundingBox from the head (289) to the tail (203).
+    const { graphics } = open(`<graphic id="2" GraphicType="Line" ArrowType="FullHead" BoundingBox="289 141 203 141"/>`);
+    expect(graphics[0]!.data.lineEnd!.x).toBeGreaterThan(graphics[0]!.data.lineStart!.x);
+    expect(graphics[0]!.data.markerEnd).toBeDefined();
+  });
+
   it("reads ArrowheadTail=\"NoHead\" as an unheaded end, not a second head", () => {
     const { graphics } = open(`<arrow id="2" ArrowheadType="Solid" ArrowheadHead="Full" ArrowheadTail="NoHead"
       Head3D="289 141 0" Tail3D="203 141 0" BoundingBox="203 141 289 141"/>`);

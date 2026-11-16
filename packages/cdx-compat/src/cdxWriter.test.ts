@@ -76,6 +76,43 @@ describe("ChemDraw binary (.cdx) writer", () => {
     expect(arrow?.data.markerEnd?.kind).toBe("filled-arrow");
   });
 
+  it("writes script digits as subscript and superscript runs, and reads them back as the same label", () => {
+    const labelled = sample
+      .replace('Element="OMe"', 'Element="PAd₂"')
+      .replace('<n id="d" xyz="128.8 50 -9.5"/>', '<n id="d" xyz="128.8 50 -9.5" Element="R¹"/>');
+    const { bytes, warnings } = cdxmlToCdx(labelled);
+    expect(warnings.map((warning) => warning.code)).not.toContain("cdx.characters_replaced");
+    const xml = cdxToCdxml(bytes!).contents!;
+    expect(xml).toMatch(/<s [^>]*face="0"[^>]*>PAd<\/s><s [^>]*face="32"[^>]*>2<\/s>/);
+    expect(xml).toMatch(/<s [^>]*face="0"[^>]*>R<\/s><s [^>]*face="64"[^>]*>1<\/s>/);
+    const molecule = openChemDraftBytes(bytes!).document!.pages[0]!.objects.find((object): object is MoleculeObject => object.type === "molecule")!;
+    expect(molecule.atoms.map((atom) => atom.element)).toEqual(["O", "C", "PAd₂", "R¹"]);
+  });
+
+  it("writes a reaction arrow head end first, so other programs draw the head where ChemDraft does", () => {
+    const original = openChemDraftPayload(sample.replace(/<objecttag[^>]*\/>/, "")).document!;
+    const cdxml = exportDocumentToCdxml(original).contents;
+    const back = openChemDraftBytes(cdxmlToCdx(cdxml).bytes!).document!;
+    const arrow = (document: typeof original) => document.pages[0]!.objects
+      .find((object): object is GraphicObject => object.type === "graphic" && object.data.markerEnd !== undefined)!;
+    // The sample's arrow runs left to right (tail 140, head 200).
+    expect(arrow(original).data.lineEnd!.x).toBeGreaterThan(arrow(original).data.lineStart!.x);
+    expect(arrow(back).data.lineEnd!.x).toBeCloseTo(arrow(original).data.lineEnd!.x, 3);
+    expect(arrow(back).data.lineStart!.x).toBeCloseTo(arrow(original).data.lineStart!.x, 3);
+  });
+
+  it("writes a line-form reaction arrow head first in CDXML and CDX, and reads it back unreversed", () => {
+    const lineArrow = sample.replace(/<arrow [^>]*\/>/, '<graphic id="arrow" GraphicType="Line" ArrowType="FullHead" BoundingBox="140 80 200 80" Start="140 80" End="200 80"/>')
+      .replace(/<objecttag[^>]*\/>/, "");
+    const original = openChemDraftPayload(lineArrow).document!;
+    const cdxml = exportDocumentToCdxml(original).contents;
+    // Head (x 200) first, as ChemDraw reads a line arrow's box.
+    expect(cdxml).toMatch(/GraphicType="Line" ArrowType="FullHead"[^>]*BoundingBox="200 80 140 80"/);
+    const back = openChemDraftBytes(cdxmlToCdx(cdxml).bytes!).document!;
+    const arrow = back.pages[0]!.objects.find((object): object is GraphicObject => object.type === "graphic" && object.data.markerEnd !== undefined)!;
+    expect(arrow.data.lineEnd!.x).toBeGreaterThan(arrow.data.lineStart!.x);
+  });
+
   it("replaces characters CDX cannot store, and says so", () => {
     const { bytes, warnings } = cdxmlToCdx(sample.replace("Slow addition;", "Slow addition ✓"));
     expect(bytes).toBeDefined();

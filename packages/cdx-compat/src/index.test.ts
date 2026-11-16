@@ -437,9 +437,10 @@ describe("CDXML abbreviation fallbacks", () => {
     for (let depth = 6; depth >= 0; depth -= 1) {
       node = `<n id="node${depth}" NodeType="Fragment"><fragment id="fragment${depth}">${node}</fragment><t><s>SO</s><s>3</s></t></n>`;
     }
-    const opened = openChemDraftPayload(`<CDXML><page id="1"><fragment id="2">${node}</fragment></page></CDXML>`);
+    // A second, separate atom: a label standing alone would be kept as drawn before nesting is checked.
+    const opened = openChemDraftPayload(`<CDXML><page id="1"><fragment id="2">${node}<n id="other" Element="6"/></fragment></page></CDXML>`);
     const graph = opened.document?.pages[0].objects[0] as MoleculeObject;
-    expect(graph.atoms).toHaveLength(1);
+    expect(graph.atoms).toHaveLength(2);
     expect(graph.atoms[0]).toMatchObject({ element: "SO3", labelLiteral: true });
     expect(opened.warnings?.find(({ code }) => code === "cdxml.abbreviation_not_expanded")?.message).toContain("nesting");
   });

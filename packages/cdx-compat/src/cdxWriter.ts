@@ -277,8 +277,37 @@ function encodeText(text: string, lost: { count: number }): number[] {
 
 interface Run { font: number; face: number; sizePoints: number; color: number; text: string }
 
+const FACE_SUBSCRIPT = 0x20;
+const FACE_SUPERSCRIPT = 0x40;
+const subscriptChars = "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎";
+const superscriptChars = "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾";
+const scriptBase = "0123456789+-=()";
+/** Characters with a plain stand-in the CDX character set holds. */
+const plainStandIns: Readonly<Record<string, string>> = { "′": "'", "″": "\"", "‴": "'''", "−": "-" };
+
+/**
+ * ChemDraft writes sub- and superscript digits as their own characters (PAd₂, R¹); CDX has none of
+ * those (most are not even in its character set) and marks a script as a face on a run of plain
+ * text instead. So each run is split where the script changes, and the script digits written as
+ * plain ones in a subscript or superscript run.
+ */
+function scriptRuns(run: Run): Run[] {
+  const out: Run[] = [];
+  for (const raw of run.text) {
+    const sub = subscriptChars.indexOf(raw);
+    const sup = superscriptChars.indexOf(raw);
+    const face = sub >= 0 ? run.face | FACE_SUBSCRIPT : sup >= 0 ? run.face | FACE_SUPERSCRIPT : run.face;
+    const char = sub >= 0 ? scriptBase[sub]! : sup >= 0 ? scriptBase[sup]! : plainStandIns[raw] ?? raw;
+    const last = out[out.length - 1];
+    if (last && last.face === face) last.text += char;
+    else out.push({ ...run, face, text: char });
+  }
+  return out.length > 0 ? out : [run];
+}
+
 /** A CDX string: run count, then start, font, face, size (1/20 pt), colour per run, then the text. */
-function textProperty(runs: readonly Run[], lost: { count: number }): number[] {
+function textProperty(styledRuns: readonly Run[], lost: { count: number }): number[] {
+  const runs = styledRuns.flatMap(scriptRuns);
   const out = int16(runs.length);
   let start = 0;
   const text: number[] = [];

@@ -843,7 +843,7 @@ function exportReactionArrowObject(
     });
   }
   const arrowTypeAttribute = arrowType === undefined ? "" : ` ArrowType="${escapeXmlAttribute(arrowType)}"`;
-  return `<graphic id="${graphicId}" GraphicType="Line"${arrowTypeAttribute} BoundingBox="${formatLineBoundingBox(start, end)}" Start="${formatPoint(start)}" End="${formatPoint(end)}"/>`;
+  return `<graphic id="${graphicId}" GraphicType="Line"${arrowTypeAttribute} BoundingBox="${formatHeadFirstLineBoundingBox(start, end)}" Start="${formatPoint(start)}" End="${formatPoint(end)}"/>`;
 }
 
 function exportGraphicObject(
@@ -935,7 +935,7 @@ function exportSemanticReactionArrowGraphic(
     `ArrowType="${escapeXmlAttribute(arrowType)}"`,
     ...cdxmlGraphicColorAttribute(graphic, warnings),
     ...cdxmlLineTypeAttributes(graphic),
-    `BoundingBox="${formatLineBoundingBox(line.start, line.end)}"`,
+    `BoundingBox="${formatHeadFirstLineBoundingBox(line.start, line.end)}"`,
     `Start="${formatPoint(line.start)}"`,
     `End="${formatPoint(line.end)}"`
   ];
@@ -1957,6 +1957,16 @@ function expandCdxmlAbbreviationNodes(
     if (groupLabel !== undefined) {
       expandedAtoms.push(atomElement);
       groupLabelByCdxmlId.set(nodeId, groupLabel);
+      continue;
+    }
+
+    // A labelled node standing alone (the whole structure is "PCl3", "LiAlH4", "TMSOTf" over an
+    // arrow) is a reagent written as a formula: ChemDraw draws it as that text and keeps the atoms
+    // behind it only as its reading of the formula. Drawing those atoms out instead put a large
+    // structure in the middle of a scheme; the label is what was drawn.
+    if (label && depth === 0 && atomElements.length === 1 && outerBondCount === 0) {
+      expandedAtoms.push(atomElement);
+      literalLabelByCdxmlId.set(nodeId, label);
       continue;
     }
 
@@ -3345,7 +3355,21 @@ function cdxmlLinePointsForShape(element: XmlElementView): { start: Point; end: 
   // with those endpoints read left-top-right-bottom.
   const tail = parseCdxmlXyPoint(element.attributes.Tail3D) ?? parseCdxmlXyPoint(element.attributes.Start);
   const head = parseCdxmlXyPoint(element.attributes.Head3D) ?? parseCdxmlXyPoint(element.attributes.End);
-  return tail && head ? { start: tail, end: head } : undefined;
+  if (tail && head) {
+    return { start: tail, end: head };
+  }
+  // A legacy Line graphic with neither (as a CDX file stores it) runs from its BoundingBox's first
+  // corner, the head, to its second, the tail (see formatHeadFirstLineBoundingBox).
+  if (element.name === "graphic" && normalizedCdxmlToken(element.attributes.GraphicType) === "line") {
+    const values = (element.attributes.BoundingBox ?? "").trim().split(/\s+/).map(Number);
+    if (values.length === 4 && values.every(Number.isFinite)) {
+      return {
+        start: { x: cdxmlToCssPx(values[2]!), y: cdxmlToCssPx(values[3]!) },
+        end: { x: cdxmlToCssPx(values[0]!), y: cdxmlToCssPx(values[1]!) }
+      };
+    }
+  }
+  return undefined;
 }
 
 function graphicBoundsForCdxmlShape(
@@ -3767,7 +3791,31 @@ function textContent(children: OrderedXmlTree): string {
       return cdata;
     }
     const element = elementView(child);
-    return element ? textContent(element.children) : "";
+    if (!element) {
+      return "";
+    }
+    const inner = textContent(element.children);
+    return element.name === "s" ? scriptCharacters(inner, element.attributes.face) : inner;
+  }).join("");
+}
+
+const plainScriptCharacters = "0123456789+-=()";
+const subscriptCharacters = "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎";
+const superscriptCharacters = "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾";
+
+/** A style run set in subscript (face bit 0x20) or superscript (0x40) alone becomes the script
+ *  characters ChemDraft writes (PAd₂, R¹), as a CDX file written by ChemDraft carries them. The
+ *  "formula" face sets both bits and means digits are subscripted automatically (CF3): it stays
+ *  plain, as do characters with no script form. */
+function scriptCharacters(text: string, faceAttribute: string | undefined): string {
+  const face = Number(faceAttribute) & 0x60;
+  const target = face === 0x20 ? subscriptCharacters : face === 0x40 ? superscriptCharacters : undefined;
+  if (!target) {
+    return text;
+  }
+  return [...text].map((char) => {
+    const index = plainScriptCharacters.indexOf(char);
+    return index >= 0 ? target[index]! : char;
   }).join("");
 }
 
@@ -4182,9 +4230,15 @@ function formatBoundingBox(object: { x: number; y: number; width: number; height
   return `${formatNumber(cssPxToCdxml(object.x))} ${formatNumber(cssPxToCdxml(object.y))} ${formatNumber(cssPxToCdxml(object.x + object.width))} ${formatNumber(cssPxToCdxml(object.y + object.height))}`;
 }
 
-function formatLineBoundingBox(start: Point, end: Point): string {
-  return `${formatNumber(cssPxToCdxml(Math.min(start.x, end.x)))} ${formatNumber(cssPxToCdxml(Math.min(start.y, end.y)))} ${formatNumber(cssPxToCdxml(Math.max(start.x, end.x)))} ${formatNumber(cssPxToCdxml(Math.max(start.y, end.y)))}`;
+/** A line arrow's BoundingBox, written the way ChemDraw reads it: from the head end to the tail end.
+ *  A ChemDraw file's legacy Line graphic and the <arrow> that supersedes it agree on that (the
+ *  graphic's first corner is the arrow's Head3D). Writing the corners sorted put the head at the
+ *  tail of every left-to-right arrow once another program read the file. `Start`/`End` still carry
+ *  the ends for ChemDraft; CDX, which has no place for them, keeps only this. */
+function formatHeadFirstLineBoundingBox(start: Point, end: Point): string {
+  return [end.x, end.y, start.x, start.y].map((value) => formatNumber(cssPxToCdxml(value))).join(" ");
 }
+
 
 /** Spec-order rectangle: "left top right bottom", falling back to a 1x1 frame at the origin when
  *  the attribute is absent or malformed. One reader, so a corner-reversed box normalizes the same
