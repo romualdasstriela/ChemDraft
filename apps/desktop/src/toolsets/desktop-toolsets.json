@@ -678,68 +678,76 @@
               }
             },
             {
-              "commandId": "tool.bracket",
-              "title": "Curly Bracket Tool",
-              "icon": "bracket",
-              "assetName": "Custom_Bracket",
-              "category": "annotation",
-              "id": "tool.bracket",
-              "kind": "button",
-              "label": "Curly Bracket Tool",
-              "primary": {
-                "type": "command",
-                "commandId": "tool.bracket"
-              },
-              "submenu": null,
-              "tooltip": {
-                "title": "Curly Bracket Tool",
-                "shortcut": null
-              },
-              "layout": {
-                "colSpan": 1,
-                "rowSpan": 1
-              }
-            },
-            {
-              "commandId": "tool.squareBracket",
-              "title": "Square Bracket Tool",
-              "icon": "bracket",
-              "assetName": "Custom_Square_Bracket",
-              "category": "annotation",
-              "id": "tool.squareBracket",
-              "kind": "button",
-              "label": "Square Bracket Tool",
-              "primary": {
-                "type": "command",
-                "commandId": "tool.squareBracket"
-              },
-              "submenu": null,
-              "tooltip": {
-                "title": "Square Bracket Tool",
-                "shortcut": null
-              },
-              "layout": {
-                "colSpan": 1,
-                "rowSpan": 1
-              }
-            },
-            {
               "commandId": "tool.polymerBracket",
-              "title": "Polymer Bracket Tool",
+              "title": "Brackets",
               "icon": "polymerBracket",
               "category": "annotation",
               "id": "tool.polymerBracket",
               "kind": "button",
-              "label": "Polymer Bracket Tool",
+              "label": "Brackets",
               "primary": {
                 "type": "command",
                 "commandId": "tool.polymerBracket"
               },
-              "submenu": null,
+              "submenu": {
+                "type": "command-grid",
+                "title": "Brackets",
+                "columns": 3,
+                "items": [
+                  {
+                    "commandId": "tool.polymerBracket",
+                    "label": "Polymer Bracket ( )n",
+                    "icon": "polymerBracket",
+                    "tooltip": {
+                      "title": "Polymer Bracket Tool",
+                      "description": "Place a pair of parentheses with an n label as one object. Resize with the handles; double-click to change n."
+                    }
+                  },
+                  {
+                    "commandId": "tool.squareBracketPair",
+                    "label": "Square Bracket Pair [ ]n",
+                    "icon": "squareBracketPair",
+                    "tooltip": {
+                      "title": "Square Bracket Pair Tool",
+                      "description": "Place a pair of square brackets with an n label as one object. Resize with the handles; double-click to change n."
+                    }
+                  },
+                  {
+                    "commandId": "tool.curlyBracketPair",
+                    "label": "Curly Bracket Pair { }n",
+                    "icon": "curlyBracketPair",
+                    "tooltip": {
+                      "title": "Curly Bracket Pair Tool",
+                      "description": "Place a pair of curly brackets with an n label as one object. Resize with the handles; double-click to change n."
+                    }
+                  },
+                  {
+                    "commandId": "tool.bracket",
+                    "label": "Curly Bracket Tool",
+                    "icon": "bracket",
+                    "assetName": "Custom_Bracket",
+                    "tooltip": {
+                      "title": "Curly Bracket Tool",
+                      "description": "A single curly bracket."
+                    }
+                  },
+                  {
+                    "commandId": "tool.squareBracket",
+                    "label": "Square Bracket Tool",
+                    "icon": "bracket",
+                    "assetName": "Custom_Square_Bracket",
+                    "tooltip": {
+                      "title": "Square Bracket Tool",
+                      "description": "A single square bracket."
+                    }
+                  }
+                ],
+                "id": "bracket-tools"
+              },
               "tooltip": {
-                "title": "Polymer Bracket Tool",
+                "title": "Brackets",
                 "shortcut": null,
-                "description": "Place a pair of parentheses with an n label as one object. Resize with the handles; double-click to change n."
+                "description": "Place a bracket pair with an n label. Long-press for ( )n, [ ]n, { }n and single brackets."
               },
               "layout": {
                 "colSpan": 1,
@@ -2772,68 +2780,76 @@
               }
             },
             {
-              "commandId": "tool.bracket",
-              "title": "Curly Bracket Tool",
-              "icon": "bracket",
-              "assetName": "Custom_Bracket",
-              "category": "annotation",
-              "id": "tool.bracket",
-              "kind": "button",
-              "label": "Curly Bracket Tool",
-              "primary": {
-                "type": "command",
-                "commandId": "tool.bracket"
-              },
-              "submenu": null,
-              "tooltip": {
-                "title": "Curly Bracket Tool",
-                "shortcut": null
-              },
-              "layout": {
-                "colSpan": 1,
-                "rowSpan": 1
-              }
-            },
-            {
-              "commandId": "tool.squareBracket",
-              "title": "Square Bracket Tool",
-              "icon": "bracket",
-              "assetName": "Custom_Square_Bracket",
-              "category": "annotation",
-              "id": "tool.squareBracket",
-              "kind": "button",
-              "label": "Square Bracket Tool",
-              "primary": {
-                "type": "command",
-                "commandId": "tool.squareBracket"
-              },
-              "submenu": null,
-              "tooltip": {
-                "title": "Square Bracket Tool",
-                "shortcut": null
-              },
-              "layout": {
-                "colSpan": 1,
-                "rowSpan": 1
-              }
-            },
-            {
               "commandId": "tool.polymerBracket",
-              "title": "Polymer Bracket Tool",
+              "title": "Brackets",
               "icon": "polymerBracket",
               "category": "annotation",
               "id": "tool.polymerBracket",
               "kind": "button",
-              "label": "Polymer Bracket Tool",
+              "label": "Brackets",
               "primary": {
                 "type": "command",
                 "commandId": "tool.polymerBracket"
               },
-              "submenu": null,
+              "submenu": {
+                "type": "command-grid",
+                "title": "Brackets",
+                "columns": 3,
+                "items": [
+                  {
+                    "commandId": "tool.polymerBracket",
+                    "label": "Polymer Bracket ( )n",
+                    "icon": "polymerBracket",
+                    "tooltip": {
+                      "title": "Polymer Bracket Tool",
+                      "description": "Place a pair of parentheses with an n label as one object. Resize with the handles; double-click to change n."
+                    }
+                  },
+                  {
+                    "commandId": "tool.squareBracketPair",
+                    "label": "Square Bracket Pair [ ]n",
+                    "icon": "squareBracketPair",
+                    "tooltip": {
+                      "title": "Square Bracket Pair Tool",
+                      "description": "Place a pair of square brackets with an n label as one object. Resize with the handles; double-click to change n."
+                    }
+                  },
+                  {
+                    "commandId": "tool.curlyBracketPair",
+                    "label": "Curly Bracket Pair { }n",
+                    "icon": "curlyBracketPair",
+                    "tooltip": {
+                      "title": "Curly Bracket Pair Tool",
+                      "description": "Place a pair of curly brackets with an n label as one object. Resize with the handles; double-click to change n."
+                    }
+                  },
+                  {
+                    "commandId": "tool.bracket",
+                    "label": "Curly Bracket Tool",
+                    "icon": "bracket",
+                    "assetName": "Custom_Bracket",
+                    "tooltip": {
+                      "title": "Curly Bracket Tool",
+                      "description": "A single curly bracket."
+                    }
+                  },
+                  {
+                    "commandId": "tool.squareBracket",
+                    "label": "Square Bracket Tool",
+                    "icon": "bracket",
+                    "assetName": "Custom_Square_Bracket",
+                    "tooltip": {
+                      "title": "Square Bracket Tool",
+                      "description": "A single square bracket."
+                    }
+                  }
+                ],
+                "id": "bracket-tools"
+              },
               "tooltip": {
-                "title": "Polymer Bracket Tool",
+                "title": "Brackets",
                 "shortcut": null,
-                "description": "Place a pair of parentheses with an n label as one object. Resize with the handles; double-click to change n."
+                "description": "Place a bracket pair with an n label. Long-press for ( )n, [ ]n, { }n and single brackets."
               },
               "layout": {
                 "colSpan": 1,

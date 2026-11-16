@@ -324,6 +324,22 @@ export const coreDrawingToolDefinitions = [
     usageHint: usageHint("click canvas to place ( )n", "resize with the transform handles", "double-click to edit n")
   },
   {
+    commandId: "tool.squareBracketPair",
+    title: "Square Bracket Pair Tool",
+    kind: "bracket",
+    category: "annotation",
+    icon: "squareBracketPair",
+    usageHint: usageHint("click canvas to place [ ]n", "resize with the transform handles", "double-click to edit n")
+  },
+  {
+    commandId: "tool.curlyBracketPair",
+    title: "Curly Bracket Pair Tool",
+    kind: "bracket",
+    category: "annotation",
+    icon: "curlyBracketPair",
+    usageHint: usageHint("click canvas to place { }n", "resize with the transform handles", "double-click to edit n")
+  },
+  {
     commandId: "tool.dagger",
     title: "Dagger Symbol Tool",
     kind: "text",

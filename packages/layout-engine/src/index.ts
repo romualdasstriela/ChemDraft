@@ -4775,11 +4775,21 @@ export function polymerBracketLabelAnchor(width: number, height: number): Layout
  *  pair of parentheses at the two ends of the box (its label is drawn beside the closing one);
  *  "unknown" falls back to the square outline. An optional projection maps every path point,
  *  including Bezier controls, without transforming the stroke. */
+/** The shape of a bracket pair ("polymer" kind): ( )n, [ ]n or { }n. Kept in the object's style, so
+ *  every pair is the same object with the same label and editing. */
+export type BracketPairShape = "round" | "square" | "curly";
+
+export function bracketPairShape(object: Pick<BracketObject, "style">): BracketPairShape {
+  const shape = object.style?.bracketPairShape;
+  return shape === "square" || shape === "curly" ? shape : "round";
+}
+
 export function bracketGlyphPathD(
   kind: BracketObject["bracketKind"],
   width: number,
   height: number,
-  project?: (point: LayoutPoint) => LayoutPoint
+  project?: (point: LayoutPoint) => LayoutPoint,
+  pairShape: BracketPairShape = "round"
 ): string {
   // Project endpoints and Bezier controls, preserving a constant stroke in SVG/PDF.
   // Keep raw number serialization for the original, untilted glyph.
@@ -4797,6 +4807,27 @@ export function bracketGlyphPathD(
     const low = Math.max(height - 0.5, top);
     const leftEdge = 0.5;
     const rightEdge = Math.max(width - 0.5, leftEdge);
+    if (pairShape === "square") {
+      return [
+        `M ${point(leftEdge + depth, top)} L ${point(leftEdge, top)} L ${point(leftEdge, low)} L ${point(leftEdge + depth, low)}`,
+        `M ${point(rightEdge - depth, top)} L ${point(rightEdge, top)} L ${point(rightEdge, low)} L ${point(rightEdge - depth, low)}`
+      ].join(" ");
+    }
+    if (pairShape === "curly") {
+      // "{" and "}" in strips at the two ends, the single curly bracket's outline mirrored for "}".
+      const strip = Math.min(width * 0.3, depth * 1.6);
+      const span = low - top;
+      const brace = (spur: number, arm: number) => {
+        const x = (fraction: number) => spur + (arm - spur) * fraction;
+        const y = (fraction: number) => top + span * fraction;
+        return [
+          `M ${point(arm, top)}`,
+          `C ${point(x(0.15), y(0.1))}, ${point(x(0.85), y(0.38))}, ${point(x(0.2), y(0.5))}`,
+          `C ${point(x(0.85), y(0.62))}, ${point(x(0.15), y(0.9))}, ${point(arm, low)}`
+        ].join(" ");
+      };
+      return [brace(leftEdge, leftEdge + strip), brace(rightEdge, rightEdge - strip)].join(" ");
+    }
     return [
       `M ${point(leftEdge + depth, top)} C ${point(leftEdge, height * 0.22)}, ${point(leftEdge, height * 0.78)}, ${point(leftEdge + depth, low)}`,
       `M ${point(rightEdge - depth, top)} C ${point(rightEdge, height * 0.22)}, ${point(rightEdge, height * 0.78)}, ${point(rightEdge - depth, low)}`
@@ -4828,7 +4859,7 @@ function bracketObjectFragment(object: BracketObject, layerIndex: number): PageS
       class: "bracket-glyph-path",
       "data-bracket-kind": object.bracketKind,
       transform: projection ? undefined : `translate(${formatNumber(object.x)} ${formatNumber(object.y)})`,
-      d: bracketGlyphPathD(object.bracketKind, width, height, project),
+      d: bracketGlyphPathD(object.bracketKind, width, height, project, bracketPairShape(object)),
       fill: "none",
       stroke: "#172026",
       "stroke-width": 1.5,

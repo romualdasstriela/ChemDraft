@@ -233,6 +233,8 @@ import {
   type PageSvgFragment,
   type PageSvgRenderPlan,
   bracketGlyphPathD,
+  bracketPairShape,
+  type BracketPairShape,
   polymerBracketLabelAnchor,
   polymerBracketLabelFontSizePx,
   polymerBracketParenDepth,
@@ -550,6 +552,7 @@ import {
   applyReactionArrowToolAtPoint,
   stretchNativeReactionArrowTo,
   bracketKindForToolCommand,
+  bracketPairShapeForToolCommand,
   insertNativeBracket,
   setBracketLabel,
   applyNativeChainTool,
@@ -1675,7 +1678,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.16.17.00-opus";
+const CURRENT_BUILD_STAMP = "11.16.17.30-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -6801,12 +6804,13 @@ export function MainWindow({
     setStatus(`Stamped ${glyph}`);
   }, [assignHoveredNativeDeleteTarget, clearStampInteractionState, commitDocumentChange, textStyleDefaults]);
 
-  const applyBracketAtPoint = useCallback((point: ClientPoint, bracketKind: BracketObject["bracketKind"]) => {
+  const applyBracketAtPoint = useCallback((point: ClientPoint, bracketKind: BracketObject["bracketKind"], pairShape?: BracketPairShape) => {
     const currentDocument = documentRef.current;
-    commitDocumentChange(insertNativeBracket(currentDocument, point, bracketKind));
+    commitDocumentChange(insertNativeBracket(currentDocument, point, bracketKind, pairShape));
     clearStampInteractionState();
     assignHoveredNativeDeleteTarget(undefined);
-    setStatus(bracketKind === "polymer" ? "Inserted polymer bracket ( )n; double-click it to change n" : `Inserted ${bracketKind} bracket`);
+    const pairGlyph = pairShape === "square" ? "[ ]n" : pairShape === "curly" ? "{ }n" : "( )n";
+    setStatus(bracketKind === "polymer" ? `Inserted bracket pair ${pairGlyph}; double-click it to change n` : `Inserted ${bracketKind} bracket`);
   }, [assignHoveredNativeDeleteTarget, clearStampInteractionState, commitDocumentChange]);
 
   // The polymer bracket's label ("n") is edited in place: double-click the bracket, type, Enter.
@@ -16108,7 +16112,7 @@ export function MainWindow({
       if (bracketKind) {
         event.preventDefault();
         event.stopPropagation();
-        applyBracketAtPoint(point, bracketKind);
+        applyBracketAtPoint(point, bracketKind, bracketPairShapeForToolCommand(activeToolState.activeCommandId));
         return;
       }
     }
@@ -17520,7 +17524,7 @@ export function MainWindow({
       if (bracketKind && point) {
         event.preventDefault();
         event.stopPropagation();
-        applyBracketAtPoint(point, bracketKind);
+        applyBracketAtPoint(point, bracketKind, bracketPairShapeForToolCommand(activeToolState.activeCommandId));
         return;
       }
     }
@@ -28899,7 +28903,7 @@ function BracketGlyph({ object, projection }: { object: BracketObject; projectio
   const width = Math.max(object.width, 1);
   const height = Math.max(object.height, 1);
   // Shared generator with SVG export (layout-engine) so canvas and export cannot drift.
-  const pathD = bracketGlyphPathD(object.bracketKind, width, height);
+  const pathD = bracketGlyphPathD(object.bracketKind, width, height, undefined, bracketPairShape(object));
   return (
     <svg
       className="bracket-glyph"

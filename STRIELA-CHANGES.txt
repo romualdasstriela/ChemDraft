@@ -161,6 +161,10 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      cancels; an empty label removes it.
    - Only the two parentheses and the label catch clicks, so atoms and bonds drawn inside
      the brackets stay clickable.
+   - All bracket tools are now in one Brackets drop-down (Main and Annotation toolbars):
+     ( )n, [ ]n, { }n, and the single curly { and square [ brackets. Square [ ]n and curly
+     { }n work exactly like ( )n: one object, an "n" label, double-click to change it. The
+     button shows the bracket last picked from the drop-down, and a click places that one.
    - The bracket uses the "polymer" kind the document model already had (drawn as a square
      bracket before), so it saves in .chemdraft files. CDXML export still writes only a
      placeholder for it, as for every native bracket.
@@ -398,3 +402,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Clean Up Reaction adds a missing + between neighbouring structures
 (next)  Clean Up Reaction lays out top-to-bottom schemes; gaps measured between drawn ink
 (next)  Clean Up Reaction: roomier conditions lines; closer + in vertical schemes
+(next)  Brackets drop-down with ( )n, [ ]n, { }n pairs and the single brackets

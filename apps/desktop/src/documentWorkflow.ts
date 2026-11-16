@@ -1,5 +1,5 @@
 import { formulaSpansFromText } from "@chemdraft/document-workflow-core";
-import { planObjectArrangement, moleculeAnchorForArrangement, moleculeInkBoundsForArrangement, moleculeVisualBoundsForArrangement, textVisualBoundsForArrangement, type ArrangementLayout, type ArrangementOptions, type ArrangementItem, type LayoutBounds } from "@chemdraft/layout-engine";
+import { type BracketPairShape, planObjectArrangement, moleculeAnchorForArrangement, moleculeInkBoundsForArrangement, moleculeVisualBoundsForArrangement, textVisualBoundsForArrangement, type ArrangementLayout, type ArrangementOptions, type ArrangementItem, type LayoutBounds } from "@chemdraft/layout-engine";
 import { snapRotationDegrees } from "./rotationSnap";
 import { snapPlacementDegrees } from "./placementSnap";
 import { projectedDoubleBondSides } from "./interaction/projectedDoubleBondSides";
@@ -4844,11 +4844,24 @@ export function convertNativeTextObjectToAtom(
 const bracketKindByToolCommandId: ReadonlyMap<string, BracketObject["bracketKind"]> = new Map([
   ["tool.bracket", "curly"],
   ["tool.squareBracket", "square"],
-  ["tool.polymerBracket", "polymer"]
+  ["tool.polymerBracket", "polymer"],
+  ["tool.squareBracketPair", "polymer"],
+  ["tool.curlyBracketPair", "polymer"]
+]);
+
+/** Bracket-pair tools: each places a pair with an "n" label as one object, like ( )n. */
+const bracketPairShapeByToolCommandId: ReadonlyMap<string, BracketPairShape> = new Map([
+  ["tool.polymerBracket", "round"],
+  ["tool.squareBracketPair", "square"],
+  ["tool.curlyBracketPair", "curly"]
 ]);
 
 export function bracketKindForToolCommand(commandId: string): BracketObject["bracketKind"] | undefined {
   return bracketKindByToolCommandId.get(commandId);
+}
+
+export function bracketPairShapeForToolCommand(commandId: string): BracketPairShape | undefined {
+  return bracketPairShapeByToolCommandId.get(commandId);
 }
 
 export const nativeBracketDefaultSize = { width: 16, height: 64 } as const;
@@ -4861,7 +4874,8 @@ export const nativePolymerBracketDefaultLabel = "n";
 export function insertNativeBracket(
   document: ChemDraftDocument,
   point: PagePoint,
-  bracketKind: BracketObject["bracketKind"]
+  bracketKind: BracketObject["bracketKind"],
+  pairShape: BracketPairShape = "round"
 ): ChemDraftDocument {
   const page = firstPage(document);
   const { width, height } = bracketKind === "polymer" ? nativePolymerBracketDefaultSize : nativeBracketDefaultSize;
@@ -4873,7 +4887,7 @@ export function insertNativeBracket(
     width,
     height,
     rotation: 0,
-    style: {},
+    style: bracketKind === "polymer" && pairShape !== "round" ? { bracketPairShape: pairShape } : {},
     bracketKind,
     ...(bracketKind === "polymer" ? { label: nativePolymerBracketDefaultLabel } : {}),
     containedObjectIds: [],
