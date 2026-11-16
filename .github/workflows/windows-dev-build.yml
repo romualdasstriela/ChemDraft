@@ -2,14 +2,14 @@ name: Windows dev build
 
 # Builds for a fork: an unsigned "ChemDraft (dev)" NSIS installer, uploaded as a workflow artifact.
 # It installs beside the stable app (own identifier, app data and lock) and never updates it.
-# Pushing a tag "striela-v*" also publishes that installer as a GitHub pre-release of the fork, so
+# Pushing a tag "ChemDraft_RS-v*" also publishes that installer as a GitHub pre-release of the fork, so
 # others can download it without a GitHub account. Official releases stay with
 # windows-release.yml upstream.
 on:
   workflow_dispatch:
   push:
     branches-ignore: [main]
-    tags: ['striela-v*']
+    tags: ['ChemDraft_RS-v*']
 
 permissions:
   contents: read
@@ -78,10 +78,10 @@ jobs:
           path: installer/*.exe
           if-no-files-found: error
 
-  # Only for a "striela-v*" tag, and the only job allowed to write to the repository.
+  # Only for a "ChemDraft_RS-v*" tag, and the only job allowed to write to the repository.
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/striela-v') && github.repository != 'jgassens/ChemDraft'
+    if: startsWith(github.ref, 'refs/tags/ChemDraft_RS-v') && github.repository != 'jgassens/ChemDraft'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -102,7 +102,7 @@ jobs:
           shopt -s nullglob
           installers=(installer/*.exe)
           if [ "${#installers[@]}" -ne 1 ]; then echo "Expected one installer, found ${#installers[@]}."; exit 1; fi
-          asset="ChemDraft-dev-${TAG#striela-}-windows-x64-setup.exe"
+          asset="${TAG}-windows-x64-setup.exe"
           cp "${installers[0]}" "$asset"
           sha256sum "$asset" > "$asset.sha256"
           {
@@ -117,5 +117,5 @@ jobs:
           gh release create "$TAG" "$asset" "$asset.sha256" \
             --repo "$GITHUB_REPOSITORY" \
             --prerelease \
-            --title "ChemDraft (dev) ${TAG#striela-}" \
+            --title "ChemDraft_RS ${TAG#ChemDraft_RS-}" \
             --notes-file release-notes.md

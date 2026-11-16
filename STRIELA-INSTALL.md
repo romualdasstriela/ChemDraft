@@ -1,7 +1,7 @@
-# Installing ChemDraft (dev), the striela-changes build
+# Installing ChemDraft_RS
 
-This is a personal build of ChemDraft with the changes listed in STRIELA-CHANGES.txt. It is not an
-official ChemDraft release.
+ChemDraft_RS is a personal build of ChemDraft with the changes listed in STRIELA-CHANGES.txt. It is
+not an official ChemDraft release.
 
 ## Windows
 
@@ -25,7 +25,7 @@ page and run its installer; it replaces the earlier ChemDraft (dev).
 Each installer has a `.sha256` file next to it. In PowerShell:
 
 ```powershell
-Get-FileHash .\ChemDraft-dev-*-windows-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\ChemDraft_RS-*-windows-x64-setup.exe -Algorithm SHA256
 ```
 
 The hash shown should match the one in the `.sha256` file.

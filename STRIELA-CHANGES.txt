@@ -307,7 +307,7 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      still set any other size. Files keep the page they were saved with.
 
 18. Downloads for other users
-   - Pushing a tag named striela-v<date> (for example striela-v2026.11.16) builds the Windows
+   - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
      installer and publishes it as a pre-release on this fork's Releases page, with
      STRIELA-INSTALL.md as its install guide and a SHA-256 checksum file. Anyone can download
      it there without a GitHub account. Ordinary pushes still only build.
@@ -366,4 +366,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Export ChemDraw binary (.cdx) files; CDXML text keeps its size and line starts
 (next)  New drawings open on an A4 page (rulers in centimetres)
 (next)  CDX/CDXML: script digits as script runs, arrows head first, lone reagent labels kept
-(next)  Publish striela-v* tags as downloadable pre-releases with an install guide
+(next)  Publish ChemDraft_RS-v* tags as downloadable pre-releases with an install guide
