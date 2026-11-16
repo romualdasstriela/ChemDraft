@@ -318,6 +318,8 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      - each arrow is made horizontal and long enough for its conditions;
      - "+" signs become 14 pt bold and centred on the line. A "+" drawn with the charge tool
        (or an imported plus) is turned into "+" text;
+     - two structures side by side with nothing between them (A -> B C) get a new "+"
+       between them;
      - text or structures over an arrow are its conditions: text becomes 10 pt, and everything
        is centred above or below the arrow, keeping its side.
    - Chemistry is not changed: structures only move. Several arrows (A -> B -> C) work.
@@ -387,3 +389,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Publish ChemDraft_RS-v* tags as downloadable pre-releases with an install guide
 (next)  Rulers in centimetres on every tab; View > Ruler Units picks cm or inches
 (next)  Clean Up Reaction (Ctrl+Shift+X): one line, even spacing, 14 pt bold +, 10 pt conditions
+(next)  Clean Up Reaction adds a missing + between neighbouring structures

@@ -13942,9 +13942,14 @@ export function cleanUpReactionLayout(document: ChemDraftDocument): { document: 
   type Entry = {
     id: string; object: DocumentObject; kind: "arrow" | "plus" | "item";
     bounds: LayoutBounds; middleY: number;
-    line?: ReactionLine; text?: TextObject; replaces?: boolean;
+    line?: ReactionLine; text?: TextObject; replaces?: boolean; added?: boolean;
   };
   const taken = new Set(page.objects.map((object) => object.id));
+  const plusStyle: Partial<NativeTextStyle> = { fontSizePx: REACTION_PLUS_FONT_SIZE_PX, fontWeight: 700, textAlign: "center" };
+  const newPlusText = (center: PagePoint, color?: string): TextObject => {
+    const created = createDocumentTextObject(document, center, "+", { ...plusStyle, ...(color ? { color } : {}) });
+    return { ...created, id: uniqueObjectId(taken, "text_plus"), x: center.x - created.width / 2, y: center.y - created.height / 2 };
+  };
   const entries: Entry[] = [];
   for (const id of ids) {
     const object = objects.get(id);
@@ -13960,16 +13965,9 @@ export function cleanUpReactionLayout(document: ChemDraftDocument): { document: 
       continue;
     }
     if (isReactionPlusObject(object)) {
-      const plusStyle: Partial<NativeTextStyle> = { fontSizePx: REACTION_PLUS_FONT_SIZE_PX, fontWeight: 700, textAlign: "center" };
-      let text: TextObject;
-      if (object.type === "text") {
-        text = restyledReactionText(object, page, plusStyle);
-      } else {
-        const center = objectCenter(object);
-        const color = typeof object.style.color === "string" ? { color: object.style.color } : {};
-        const created = createDocumentTextObject(document, center, "+", { ...plusStyle, ...color });
-        text = { ...created, id: uniqueObjectId(taken, "text_plus"), x: center.x - created.width / 2, y: center.y - created.height / 2 };
-      }
+      const text = object.type === "text"
+        ? restyledReactionText(object, page, plusStyle)
+        : newPlusText(objectCenter(object), typeof object.style.color === "string" ? object.style.color : undefined);
       const ink = reactionTextInk(text);
       entries.push({ id, object, kind: "plus", text, replaces: object.type !== "text", bounds: ink.bounds, middleY: ink.middleY });
       continue;
@@ -14009,18 +14007,30 @@ export function cleanUpReactionLayout(document: ChemDraftDocument): { document: 
     conditions.get(over)!.push(entry);
   }
   row.sort((a, b) => (a.bounds.x + a.bounds.width / 2) - (b.bounds.x + b.bounds.width / 2));
+  // Two structures side by side on one side of an arrow are separate species: a "+" goes between them.
+  for (let index = row.length - 1; index > 0; index--) {
+    if (row[index].kind !== "item" || row[index - 1].kind !== "item") continue;
+    const left = row[index - 1].bounds, right = row[index].bounds;
+    const text = newPlusText({ x: (left.x + left.width + right.x) / 2, y: (row[index - 1].middleY + row[index].middleY) / 2 });
+    const ink = reactionTextInk(text);
+    row.splice(index, 0, { id: text.id, object: text, kind: "plus", text, added: true, bounds: ink.bounds, middleY: ink.middleY });
+  }
 
   const lineY = arrows[0].middleY;
   const moves: LayoutItemMove[] = [];
   const patches: DocumentPatch[] = [];
   const replaced = new Map<string, string>();
+  const added: string[] = [];
   // Place one entry so its bounds' top-left lands at (x, y) - or, with `middle`, so its middle sits on y.
   const place = (entry: Entry, x: number, y: number, middle: boolean) => {
     const dx = x - entry.bounds.x;
     const dy = middle ? y - entry.middleY : y - entry.bounds.y;
     if (entry.text) {
       const text = { ...entry.text, x: entry.text.x + dx, y: entry.text.y + dy };
-      if (entry.replaces) {
+      if (entry.added) {
+        patches.push({ op: "addObject", pageId: page.id, object: text });
+        added.push(text.id);
+      } else if (entry.replaces) {
         patches.push({ op: "removeObject", objectId: entry.id }, { op: "addObject", pageId: page.id, object: text });
         replaced.set(entry.id, text.id);
       } else {
@@ -14079,12 +14089,13 @@ export function cleanUpReactionLayout(document: ChemDraftDocument): { document: 
   }
 
   let next = applyLayoutItemMoves(document, moves, true);
-  const selection = document.selection.objectIds.map((id) => replaced.get(id) ?? id);
+  const selection = [...document.selection.objectIds.map((id) => replaced.get(id) ?? id), ...added];
   next = applyPatches(next, [...patches, { op: "setSelection", pageId: page.id, objectIds: selection }], { now: phase4Timestamp });
   const structures = row.filter((entry) => entry.kind === "item").length;
   return {
     document: next,
-    status: `Cleaned up reaction: ${structures} ${structures === 1 ? "item" : "items"}, ${arrows.length} ${arrows.length === 1 ? "arrow" : "arrows"}`
+    status: `Cleaned up reaction: ${structures} ${structures === 1 ? "item" : "items"}, ${arrows.length} ${arrows.length === 1 ? "arrow" : "arrows"}` +
+      (added.length > 0 ? `, ${added.length} "+" added` : "")
   };
 }
 

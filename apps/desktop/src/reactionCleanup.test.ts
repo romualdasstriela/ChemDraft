@@ -124,6 +124,33 @@ describe("Clean Up Reaction", () => {
     }
   });
 
+  it("adds a 14 pt bold + between two products drawn side by side without one", () => {
+    // A -> B C, as drawn: no plus between the two products.
+    let document = createPhase4Document("Two products");
+    document = insertNativeTemplateMolecule(document, { x: 120, y: 200 }, "benzene");
+    document = insertNativeTemplateMolecule(document, { x: 400, y: 200 }, "benzene");
+    document = insertNativeTemplateMolecule(document, { x: 520, y: 190 }, "cyclohexane");
+    const molecules = document.pages[0].objects.filter((object) => object.type === "molecule").map((object) => object.id);
+    document = applyPatches(document, [{ op: "addObject", pageId: document.pages[0].id, object: arrow("arrow", { x: 200, y: 205 }, { x: 330, y: 205 }) }]);
+    document = selectDocumentObjects(document, document.pages[0].id, [...molecules, "arrow"]);
+
+    const { document: next, status } = cleanUpReactionLayout(document);
+    expect(status).toBe('Cleaned up reaction: 3 items, 1 arrow, 1 "+" added');
+    const pluses = next.pages[0].objects.filter((object): object is TextObject => object.type === "text" && object.text === "+");
+    expect(pluses).toHaveLength(1);
+    const style = nativeTextStyleFromObjectStyle(pluses[0].style);
+    expect(style.fontSizePx).toBeCloseTo(REACTION_PLUS_FONT_SIZE_PX, 6);
+    expect(style.fontWeight).toBe(700);
+    expect(next.selection.objectIds).toContain(pluses[0].id);
+
+    const [, first, second] = next.pages[0].objects.filter((object): object is MoleculeObject => object.type === "molecule")
+      .map(moleculeVisualBoundsForArrangement).sort((a, b) => a.x - b.x);
+    const center = pluses[0].x + pluses[0].width / 2, half = 0.29 * style.fontSizePx;
+    expect(center - half - (first.x + first.width)).toBeCloseTo(second.x - (center + half), 6);
+    const lineY = (byId(next, "arrow") as GraphicObject).data.lineStart!.y;
+    expect(pluses[0].y + style.fontSizePx * (1 - 0.32)).toBeCloseTo(lineY, 6);
+  });
+
   it("keeps a right-to-left arrow pointing left and refuses selections without an arrow", () => {
     let document = messyReaction();
     document = applyPatches(document, [{ op: "updateObject", objectId: "arrow", changes: {
