@@ -11,6 +11,7 @@ import type { ToolbarPaletteItemModel } from "../toolsets";
 // (which imports the context *value* from here).
 import type { ToolbarPopoverAnchor } from "../ToolPalette";
 import type { ToolbarSelectionModel } from "./toolbarSelectionKind";
+import type { CompoundDataField, CompoundDataModel } from "../compoundData";
 
 /**
  * Live state + callbacks a toolbar widget (style controls, ring/molecule inspector) needs to render
@@ -54,6 +55,10 @@ export interface ToolbarWidgetState {
   onMoleculeInspectorCancel?: () => void;
   onMolecularInspectorCopy?: (text: string) => void;
   onMolecularInspectorChangeInterpretation?: (interpretationId: string | undefined) => void;
+  /** What the Compound Data toolbox shows. Absent: nothing selected yet. */
+  compoundData?: CompoundDataModel;
+  /** Compound Data ▸ Paste or Copy, with the ticked fields. */
+  onCompoundDataAction?: (action: "paste" | "copy", fields: CompoundDataField[]) => void;
 }
 
 const DEFAULT_TOOLBAR_WIDGET_STATE: ToolbarWidgetState = {
@@ -86,6 +91,7 @@ export const TOOLBAR_WIDGET_IDS = {
   ringInspector: "widget.core.ringInspector",
   drawnStructureSettings: "widget.core.drawnStructureSettings",
   molecularInspector: "widget.core.molecularInspector",
+  compoundData: "widget.core.compoundData",
   periodicTable: "widget.core.periodicTable",
   nicknames: "widget.core.nicknames"
 } as const;

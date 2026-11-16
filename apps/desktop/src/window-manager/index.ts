@@ -6,6 +6,7 @@ import type { ArtInspectorModel, ArtInspectorPaintTarget } from "../artInspector
 import type { CommandSpec } from "../commands";
 import type { MoleculeInspectorModel } from "../moleculeInspectorModel";
 import type { ToolbarSelectionModel } from "../toolbars/toolbarSelectionKind";
+import { isCompoundDataField, type CompoundDataField, type CompoundDataModel } from "../compoundData";
 import { isSpin3dSettings, type Spin3dSettings } from "../spin3dSettings";
 import { isCompoundLayoutSettings, COMPOUND_LAYOUT_STORAGE_KEY, loadCompoundLayoutSettings, type CompoundLayoutSettings } from "../compoundLayoutSettings";
 import { isKeybindingSettings, type KeybindingScheme, type KeybindingSettings } from "../keybindingSettings";
@@ -93,6 +94,8 @@ export interface ToolsetTextStylePayload {
   currentMolecularInspector?: AnalysisReport;
   molecularInspectorBusy?: boolean;
   molecularInspectorStale?: boolean;
+  /** What the Compound Data toolbox shows for the selected structure. */
+  compoundData?: CompoundDataModel;
 }
 
 export interface ToolsetCommandSpecsPayload {
@@ -162,9 +165,11 @@ export function createToolsetTextStylePayload(
   currentSelection?: ToolbarSelectionModel,
   currentMolecularInspector?: AnalysisReport,
   molecularInspectorBusy = false,
-  molecularInspectorStale = false
+  molecularInspectorStale = false,
+  compoundData?: CompoundDataModel
 ): ToolsetTextStylePayload {
   return {
+    ...(compoundData ? { compoundData } : {}),
     currentTextStyle,
     currentTextScript,
     ...(currentArtStyle ? { currentArtStyle, currentArtStyleTarget } : {}),
@@ -747,7 +752,9 @@ async function emitToolsetCommandEvent(eventName: string, commandId: string): Pr
 /** What a detached palette asks the main window to do on its behalf. */
 export type PaletteInspectorAction =
   | { kind: "copy"; format: "text" | "markdown" }
-  | { kind: "interpretation"; interpretationId: string | undefined };
+  | { kind: "interpretation"; interpretationId: string | undefined }
+  /** Compound Data ▸ Paste (text under the structure) or Copy, with the ticked fields. */
+  | { kind: "compoundData"; action: "paste" | "copy"; fields: CompoundDataField[] };
 
 export async function sendPaletteInspectorAction(action: PaletteInspectorAction): Promise<void> {
   dispatchDomToolsetEvent(PALETTE_INSPECTOR_ACTION_EVENT, action as unknown as ToolsetCommandPayload);
@@ -1002,6 +1009,10 @@ function isPaletteInspectorAction(payload: unknown): payload is PaletteInspector
   if (candidate.kind === "copy") return candidate.format === "text" || candidate.format === "markdown";
   if (candidate.kind === "interpretation") {
     return candidate.interpretationId === undefined || typeof candidate.interpretationId === "string";
+  }
+  if (candidate.kind === "compoundData") {
+    const { action, fields } = payload as { action?: unknown; fields?: unknown };
+    return (action === "paste" || action === "copy") && Array.isArray(fields) && fields.every(isCompoundDataField);
   }
   return false;
 }

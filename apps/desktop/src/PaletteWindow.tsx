@@ -1,4 +1,5 @@
 import type { AnalysisReport } from "@chemdraft/analysis-core";
+import type { CompoundDataModel } from "./compoundData";
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent } from "react";
 import { DefaultNativeTextStyle, type NativeTextStyle, type TextSpan } from "@chemdraft/chem-core";
 import {
@@ -175,6 +176,7 @@ export function PaletteWindow({
   const [currentMolecularInspector, setCurrentMolecularInspector] = useState<AnalysisReport | undefined>();
   const [molecularInspectorBusy, setMolecularInspectorBusy] = useState(false);
   const [molecularInspectorStale, setMolecularInspectorStale] = useState(false);
+  const [compoundData, setCompoundData] = useState<CompoundDataModel | undefined>();
   // A window opened for a plugin/user toolset starts with the core-only registry (its definition
   // arrives over the definitions IPC channel a beat later). While it's unknown, render an empty
   // placeholder carrying THIS window's real id — never fall back to core.main, which would render the
@@ -527,6 +529,7 @@ export function PaletteWindow({
       );
       setMolecularInspectorBusy(payload.molecularInspectorBusy === true);
       setMolecularInspectorStale(payload.molecularInspectorStale === true);
+      setCompoundData(payload.compoundData);
     })
       .then((cleanup) => {
         unlisten = cleanup;
@@ -985,6 +988,11 @@ export function PaletteWindow({
           onMoleculeInspectorCancel: cancelPreviewCommand,
           onMolecularInspectorCopy: molecularInspectorCopy,
           onMolecularInspectorChangeInterpretation: molecularInspectorChangeInterpretation,
+          compoundData,
+          // Paste edits the document and Copy needs the main window's data, so both go there.
+          onCompoundDataAction: (action, fields) => {
+            void sendPaletteInspectorAction({ kind: "compoundData", action, fields }).catch(() => undefined);
+          },
           onInvoke: invokeCommand
         }}
       />

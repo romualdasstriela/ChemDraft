@@ -27,6 +27,7 @@ import {
   type ToolbarWidgetState
 } from "./toolbars/toolbarWidgets";
 import { MolecularInspectorPane } from "./analysis/MolecularInspectorPane";
+import { CompoundDataPane } from "./toolbars/CompoundDataPane";
 import {
   ScriptGlyph,
   TextFontSelect,
@@ -604,6 +605,12 @@ const TOOLBAR_WIDGET_REGISTRY: Record<
     title: "Molecular Inspector",
     render: () => <MolecularInspectorPaneWidget />
   },
+  [TOOLBAR_WIDGET_IDS.compoundData]: {
+    gridMode: "hide-grid",
+    className: "compound-data-palette",
+    title: "Compound Data",
+    render: () => <CompoundDataWidget />
+  },
   [TOOLBAR_WIDGET_IDS.periodicTable]: {
     gridMode: "hide-grid",
     className: "periodic-table-palette",
@@ -641,6 +648,12 @@ function MolecularInspectorPaneWidget() {
       onChangeInterpretation={onMolecularInspectorChangeInterpretation}
     />
   );
+}
+
+/** Compound Data: the small inspector, fed from the broadcast payload like the Molecular Inspector. */
+function CompoundDataWidget() {
+  const { compoundData, onCompoundDataAction } = useToolbarWidgetState();
+  return <CompoundDataPane model={compoundData} onAction={onCompoundDataAction} />;
 }
 
 /** Public widget catalog (id + title) for the customize gallery's "Widgets" tiles. */

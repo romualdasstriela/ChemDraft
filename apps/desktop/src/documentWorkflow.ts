@@ -13850,6 +13850,38 @@ export function adjustArrangementSpacing(document:ChemDraftDocument,factor:numbe
   return {document:result,ok:true,status:`Spacing adjusted to ${Math.round(factor*100)}%`};
 }
 
+/**
+ * Compound Data ▸ Paste: the ticked lines as one centred text object just under the structure's
+ * drawn atoms and labels, the formula's counts as subscripts. The structure stays selected, so the
+ * toolbox keeps showing its data. One undo entry.
+ */
+export function insertCompoundDataText(
+  document: ChemDraftDocument,
+  moleculeId: string,
+  lines: readonly { field: string; label: string; value: string }[],
+  style: Partial<NativeTextStyle> = {}
+): ChemDraftDocument {
+  const page = pageContainingObject(document, moleculeId);
+  const molecule = objectOnPage(page, moleculeId);
+  if (!page || molecule?.type !== "molecule" || lines.length === 0) return document;
+  const text = lines.map((line) => `${line.label}: ${line.value}`).join("\n");
+  const spans: TextSpan[] = lines.flatMap((line, index) => [
+    ...(index > 0 ? [{ text: "\n", script: "normal" as const, style: {} }] : []),
+    { text: `${line.label}: `, script: "normal" as const, style: {} },
+    ...(line.field === "formula" ? formulaSpansFromText(line.value) : [{ text: line.value, script: "normal" as const, style: {} }])
+  ]);
+  const created = createDocumentTextObject(document, { x: 0, y: 0 }, text, { ...style, textAlign: "center" });
+  const ink = moleculeInkBoundsForArrangement(molecule);
+  const gap = nativeDrawingStyleFromObjectStyle(molecule.style).bondLengthPx * 0.8;
+  const object: TextObject = {
+    ...created,
+    spans,
+    x: clamp(ink.x + ink.width / 2 - created.width / 2, 0, Math.max(0, page.width - created.width)),
+    y: clamp(ink.y + ink.height + gap, 0, Math.max(0, page.height - created.height))
+  };
+  return applyPatches(document, [{ op: "addObject", pageId: page.id, object }], { now: phase4Timestamp });
+}
+
 /** Clean Up Reaction: "+" signs are 14 pt bold, conditions above and below an arrow 10 pt (px = pt / 0.75). */
 export const REACTION_PLUS_FONT_SIZE_PX = 14 / 0.75;
 export const REACTION_CONDITIONS_FONT_SIZE_PX = 10 / 0.75;

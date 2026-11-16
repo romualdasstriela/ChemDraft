@@ -316,6 +316,7 @@ import {
   ringInspectorToolsetId,
   drawnStructureSettingsToolsetId,
   molecularInspectorToolsetId,
+  compoundDataToolsetId,
   artToolsetId,
   textToolsetId,
   toggleRingInspectorCommandId,
@@ -605,6 +606,8 @@ import {
   wrapProjectedPlaneTiltVectorRadians,
   alignSelectedDocumentObjects,
   cleanUpReactionLayout,
+  insertCompoundDataText,
+  REACTION_CONDITIONS_FONT_SIZE_PX,
   distributeSelectedDocumentObjects,
   duplicateSelectedDocumentObjects,
   flipSelectedDocumentObjects,
@@ -806,6 +809,14 @@ import {
   type ToolbarPaletteGroupModel
 } from "./toolsets";
 import { MenuBar } from "./MenuBar";
+import {
+  compoundBoilingPointFromRun,
+  compoundDataLines,
+  compoundDataModel,
+  compoundDataText,
+  type CompoundBoilingPoint,
+  type CompoundDataField
+} from "./compoundData";
 import {
   buildAppMenuModel,
   PLUGIN_MANAGER_COMMAND_ID,
@@ -1678,7 +1689,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.16.17.50-opus";
+const CURRENT_BUILD_STAMP = "11.16.18.40-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -2210,6 +2221,7 @@ export function MainWindow({
    */
   const paletteInspectorHandlersRef = useRef<{
     changeInterpretation: (interpretationId: string | undefined) => void;
+    compoundData?: (action: "paste" | "copy", fields: CompoundDataField[]) => void;
   }>({ changeInterpretation: () => undefined });
   const selectionClipboardPayloadRef = useRef<ReturnType<typeof createSelectionClipboardPayload>>(undefined);
   const selectionClipboardPasteStateRef = useRef<SelectionClipboardPasteState | undefined>(undefined);
@@ -2272,7 +2284,8 @@ export function MainWindow({
   }, []);
 
   const runMolecularProperties = useCallback(
-    async (molecule: MoleculeObject, interpretationOverride: string | undefined): Promise<void> => {
+    async (molecule: MoleculeObject, interpretationOverride: string | undefined, options: { quiet?: boolean } = {}): Promise<void> => {
+      const say = options.quiet ? (_message: string) => undefined : setStatus;
       // The live atom/bond graph, not the object's `structure` string: that string is empty for an
       // imported molecule ("The structure input is empty.") and a lossy SMILES for a drawn fused ring
       // system, which analysed a different molecule than the one on the page.
@@ -2281,11 +2294,11 @@ export function MainWindow({
       const unspellableLabels = nativeMoleculeUnspellableLabels(molecule);
       const client = analysisClient();
       if (!client) {
-        setStatus("Analysis is unavailable in this runtime");
+        say("Analysis is unavailable in this runtime");
         return;
       }
       setAnalysisBusy(true);
-      setStatus("Analyzing structure…");
+      say("Analyzing structure…");
       let superseded = false;
       try {
         const run = await client.analyze(
@@ -2308,11 +2321,12 @@ export function MainWindow({
         }
         const report = buildAnalysisReport(run);
         setAnalysisReport(report);
+        setCompoundBoilingPoint(compoundBoilingPointFromRun(run, subjectKey));
         // What these numbers describe, so the pane can say when they stop describing it.
         setAnalysisSubject(subjectKey);
         setAnalysisInterpretation(interpretationOverride);
         const placeholderNote = nativePlaceholderAtomStatus(unspellableLabels);
-        setStatus(`${formatAnalysisRunStatus(run)}${placeholderNote ? `; ${placeholderNote}` : ""}`);
+        say(`${formatAnalysisRunStatus(run)}${placeholderNote ? `; ${placeholderNote}` : ""}`);
       } finally {
         if (!superseded) setAnalysisBusy(false);
       }
@@ -2348,6 +2362,8 @@ export function MainWindow({
   );
   const [analysisBusy, setAnalysisBusy] = useState(false);
   const [analysisInterpretation, setAnalysisInterpretation] = useState<string | undefined>();
+  /** Compound Data's boiling point: the Joback value from the last analysis run, keyed by structure. */
+  const [compoundBoilingPoint, setCompoundBoilingPoint] = useState<CompoundBoilingPoint | undefined>();
 
   // Every document entering the app is normalized so charge marks near atoms carry their
   // chemistry from the first paint — the commit funnels keep it normalized from then on.
@@ -2811,6 +2827,33 @@ export function MainWindow({
     analysisReport !== undefined &&
     analysisSubject !== undefined &&
     (selectedMolecule ? analysisSubjectKey(selectedMolecule) : undefined) !== analysisSubject;
+  // Compound Data: built only while its toolbox is open, and memoised on its content so an edit
+  // that changes none of its numbers is not a broadcast to the toolbox window.
+  const compoundDataOpen = visibleToolsetIds.has(compoundDataToolsetId);
+  const selectedAnalysisSubject = selectedMolecule ? analysisSubjectKey(selectedMolecule) : undefined;
+  const compoundDataNow = compoundDataOpen
+    ? compoundDataModel(selectedMolecule, compoundBoilingPoint, { subject: selectedAnalysisSubject, pending: true })
+    : undefined;
+  const compoundDataKey = compoundDataNow ? JSON.stringify(compoundDataNow) : "";
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the key IS the model's content.
+  const compoundData = useMemo(() => compoundDataNow, [compoundDataKey]);
+  // While the toolbox is open, a newly selected structure gets its boiling point computed: the same
+  // analysis run the Molecular Inspector uses, quietly (no status-bar chatter on every click).
+  const compoundAnalysisRequestedRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!compoundDataOpen || !selectedMolecule || !selectedAnalysisSubject) return;
+    if (compoundBoilingPoint?.subject === selectedAnalysisSubject) return;
+    if (compoundAnalysisRequestedRef.current === selectedAnalysisSubject) return;
+    const molecule = selectedMolecule;
+    const timer = window.setTimeout(() => {
+      compoundAnalysisRequestedRef.current = selectedAnalysisSubject;
+      void runMolecularProperties(molecule, undefined, { quiet: true }).catch(() => {
+        compoundAnalysisRequestedRef.current = undefined;
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the structure, not the object identity.
+  }, [compoundDataOpen, selectedAnalysisSubject, compoundBoilingPoint?.subject]);
   const selectedTextObject = getSelectedTextObject(document);
   const selectedTextRange = selectedTextObject &&
     activeTextEditObjectId === selectedTextObject.id &&
@@ -2933,7 +2976,7 @@ export function MainWindow({
 
   // Keep the ref current so the mount-time palette listener always calls the live callback.
   useEffect(() => {
-    paletteInspectorHandlersRef.current = { changeInterpretation: recomputeAnalysisFor };
+    paletteInspectorHandlersRef.current = { ...paletteInspectorHandlersRef.current, changeInterpretation: recomputeAnalysisFor };
   }, [recomputeAnalysisFor]);
 
   const currentMoleculeInspector = useMemo(
@@ -3005,7 +3048,10 @@ export function MainWindow({
     currentMoleculeInspector,
     currentToolbarSelection,
     analysisReport,
-    analysisBusy
+    analysisBusy,
+    analysisReportIsStale,
+    // A Compound Data window opening asks for this snapshot, so it shows its data at once.
+    compoundData
   );
   const activeEditorMolecule =
     selectedMolecule && selectedMolecule.id === activeEditorObjectId ? selectedMolecule : undefined;
@@ -3703,7 +3749,8 @@ export function MainWindow({
         // unchanged while making the effect's identity stable across document changes.
         analysisReportForBroadcast,
         analysisBusy,
-        analysisReportIsStale
+        analysisReportIsStale,
+        compoundData
       )
     ).catch(() => undefined);
     // `analysisReport` reaches this through `analysisReportForBroadcast`, so a detached Molecular
@@ -3714,6 +3761,7 @@ export function MainWindow({
     analysisBusy,
     analysisReportIsStale,
     analysisReportForBroadcast,
+    compoundData,
     currentArtStyle,
     currentMoleculeInspector,
     currentToolbarSelection,
@@ -13520,6 +13568,8 @@ export function MainWindow({
     void listenForPaletteInspectorActions((action) => {
       if (action.kind === "interpretation") {
         paletteInspectorHandlersRef.current.changeInterpretation(action.interpretationId);
+      } else if (action.kind === "compoundData") {
+        paletteInspectorHandlersRef.current.compoundData?.(action.action, action.fields);
       }
     })
       .then((cleanup) => {
@@ -20314,8 +20364,37 @@ export function MainWindow({
     return () => globalThis.document.removeEventListener("keydown", onKeyDown);
   }, [openCanvasKeyboardContextMenu]);
 
+  // Compound Data ▸ Paste (the ticked lines as text under the selected structure, one undo entry)
+  // and Copy (the same lines, as plain text).
+  const runCompoundDataAction = useCallback((action: "paste" | "copy", fields: CompoundDataField[]) => {
+    const molecule = getSelectedMolecule(documentRef.current);
+    const model = compoundDataModel(molecule, compoundBoilingPoint, {
+      subject: molecule ? analysisSubjectKey(molecule) : undefined
+    });
+    const lines = compoundDataLines(model, fields);
+    if (!molecule || lines.length === 0) {
+      setStatus("Select a structure and tick the data to use");
+      return;
+    }
+    if (action === "copy") {
+      void writeClipboardTextItems([{ type: "text/plain", text: compoundDataText(lines) }])
+        .catch(() => false)
+        .then((ok) => setStatus(ok ? "Compound data copied" : "Could not copy the compound data"));
+      return;
+    }
+    // 10 pt, like reaction conditions: data under a structure, not a caption competing with it.
+    const changed = commitDocumentChange(insertCompoundDataText(documentRef.current, molecule.id, lines,
+      { ...textStyleDefaults, fontSizePx: REACTION_CONDITIONS_FONT_SIZE_PX }), "Paste Compound Data");
+    setStatus(changed ? "Compound data added under the structure" : "Could not add the compound data");
+  }, [commitDocumentChange, compoundBoilingPoint, textStyleDefaults]);
+  useEffect(() => {
+    paletteInspectorHandlersRef.current.compoundData = runCompoundDataAction;
+  }, [runCompoundDataAction]);
+
   // Live state for palettes drawn in this window (docked toolbars, and the in-window fallback).
   const inWindowPaletteWidgetState: ToolbarWidgetState = {
+    compoundData,
+    onCompoundDataAction: runCompoundDataAction,
     currentObjectColor: currentToolbarObjectColor,
     currentArtStyle,
     currentArtStyleTarget: activeArtPaintTarget,

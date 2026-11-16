@@ -1149,6 +1149,65 @@ textarea:focus-visible,
 
 /* The Nicknames toolbar: a search box over a wrapping, scrolling list of label buttons. The list
    has a fixed height so the content-fit palette window stays a usable size with 500 groups. */
+/* Compound Data: a small fixed-width panel; the window hugs its content height. */
+.tool-palette.horizontal.compound-data-palette,
+.tool-palette.floating.horizontal.compound-data-palette {
+  width: 250px;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+
+.compound-data-pane {
+  display: grid;
+  gap: 8px;
+  padding: 4px 2px 2px;
+  font-size: 12px;
+}
+
+.compound-data-empty {
+  margin: 0;
+  color: #6b7378;
+  font-style: italic;
+}
+
+.compound-data-rows {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compound-data-row label {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.compound-data-label {
+  color: #3a4247;
+}
+
+.compound-data-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: text;
+}
+
+.compound-data-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.compound-data-actions button {
+  min-width: 64px;
+  padding: 3px 10px;
+}
+
 .tool-palette.horizontal.nicknames-palette,
 .tool-palette.floating.horizontal.nicknames-palette {
   width: 300px;

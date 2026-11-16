@@ -338,6 +338,18 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - Chemistry is not changed: structures only move. Several arrows (A -> B -> C) work.
      Curved arrows are not straightened. One Undo restores the old layout.
 
+17b. Compound Data toolbox
+   - View > Toolbars > Compound Data opens a small floating toolbox (a compact Molecular
+     Inspector) for the selected structure: Formula, Molecular Weight, m/z (monoisotopic mass)
+     and Predicted bp in °C. Each has a tick box; the ticks are remembered.
+   - Paste adds the ticked lines as one centred 10 pt text under the selected structure (the
+     formula's counts as subscripts); one Undo removes it. Copy puts the same lines on the
+     clipboard as plain text.
+   - Formula and masses update as the structure is edited. The boiling point is the Joback
+     estimate from the same analysis as the Molecular Inspector, run quietly when a structure
+     is selected while the toolbox is open; it is labelled "Predicted", its tooltip gives the
+     method's typical error, and it shows why when Joback has no estimate.
+
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
      installer and publishes it as a pre-release on this fork's Releases page, with
@@ -406,3 +418,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Clean Up Reaction: roomier conditions lines; closer + in vertical schemes
 (next)  Brackets drop-down with ( )n, [ ]n, { }n pairs and the single brackets
 (next)  Brackets stretch wider or taller from side handles
+(next)  Compound Data toolbox: formula, MW, m/z, predicted bp; Paste and Copy

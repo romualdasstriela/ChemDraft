@@ -166,6 +166,8 @@ export const toggleRingInspectorCommandId = "view.toggleRingInspector";
 export const drawnStructureSettingsToolsetId = "core.drawnStructureSettings";
 /** The analysis surface: one palette for every analysis of the selected structure. */
 export const molecularInspectorToolsetId = "core.molecularInspector";
+/** The small Molecular Inspector: formula, MW, m/z and predicted bp of the selected structure. */
+export const compoundDataToolsetId = "core.compoundData";
 export const toggleDrawnStructureSettingsCommandId = "view.toggleDrawnStructureSettings";
 export const artToolsetId = "core.art";
 export const textToolsetId = "core.text";
