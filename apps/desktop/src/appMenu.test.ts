@@ -134,6 +134,18 @@ describe("app menu model", () => {
     expect(commands.find((command) => command.commandId === "view.toggleCrosshairs")?.checked).toBe(true);
   });
 
+  it("offers View ▸ Ruler Units with centimeters checked unless inches are chosen", () => {
+    const view = buildAppMenuModel(EMPTY_CONTEXT).find((section) => section.id === "view");
+    const rulers = view?.items.findIndex((item) => item.kind === "command" && item.commandId === "view.toggleRulers") ?? -1;
+    const units = view?.items[rulers + 1];
+    expect(units).toMatchObject({ kind: "submenu", label: "Ruler Units" });
+    const checked = (context: typeof EMPTY_CONTEXT) => flattenAppMenuCommands(buildAppMenuModel(context))
+      .filter((command) => command.commandId.startsWith("view.rulerUnit."))
+      .map((command) => [command.label, command.checked]);
+    expect(checked(EMPTY_CONTEXT)).toEqual([["Centimeters", true], ["Inches", false]]);
+    expect(checked({ ...EMPTY_CONTEXT, rulerUnit: "inch" })).toEqual([["Centimeters", false], ["Inches", true]]);
+  });
+
   it("disables selection-dependent items until there is a selection", () => {
     const empty = flattenAppMenuCommands(buildAppMenuModel(EMPTY_CONTEXT));
     expect(empty.find((command) => command.commandId === "clipboard.copy")?.enabled).toBe(false);

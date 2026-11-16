@@ -371,6 +371,28 @@ describe("documents in one window", () => {
     expect(native.writeFile).toHaveBeenCalledWith("D:\\rescued.chemdraft", expect.any(String));
     expect(bridge().snapshot().file).toEqual({ dirty: false });
   });
+  it("measures rulers in centimeters by default, in new tabs too, and remembers View ▸ Ruler Units", async () => {
+    const storage = new MemoryStorage();
+    vi.stubGlobal("localStorage", storage);
+    await remount();
+    const unit = () => (bridge().snapshot().viewport as { rulerUnit: { kind: string } }).rulerUnit.kind;
+    expect(unit()).toBe("centimeter");
+    await command("document.new");
+    expect(unit()).toBe("centimeter");
+    expect(vi.mocked(setToolbarsMenu).mock.lastCall?.[4]).toBe("centimeter");
+
+    await command("view.rulerUnit.inches");
+    expect(unit()).toBe("inch");
+    expect(vi.mocked(setToolbarsMenu).mock.lastCall?.[4]).toBe("inch");
+    await command("document.new");
+    expect(unit()).toBe("inch");
+    await remount();
+    expect(unit()).toBe("inch");
+
+    await command("view.rulerUnit.centimeters");
+    expect(unit()).toBe("centimeter");
+    expect(storage.getItem("chemdraft.rulerUnit")).toBe("centimeter");
+  });
   function bridge(): ChemDraftAgentBridge {
     return (window as Window & { __CHEMDRAFT_AGENT__: ChemDraftAgentBridge }).__CHEMDRAFT_AGENT__;
   }
@@ -920,17 +942,17 @@ describe("documents in one window", () => {
   });
 
   it("keeps native Close Window / Close Tab menu routing tied to the document count", async () => {
-    expect(setToolbarsMenu).toHaveBeenLastCalledWith(expect.any(Array), false, false, false);
+    expect(setToolbarsMenu).toHaveBeenLastCalledWith(expect.any(Array), false, false, false, "centimeter");
     await command("document.new");
-    expect(setToolbarsMenu).toHaveBeenLastCalledWith(expect.any(Array), false, false, true);
+    expect(setToolbarsMenu).toHaveBeenLastCalledWith(expect.any(Array), false, false, true, "centimeter");
     await closeTab();
     expect(tabs()).toHaveLength(1);
     expect(container.querySelector('[role="dialog"]')).toBeNull();
     expect(pendingPrompt).toBeUndefined();
-    expect(setToolbarsMenu).toHaveBeenLastCalledWith(expect.any(Array), false, false, false);
+    expect(setToolbarsMenu).toHaveBeenLastCalledWith(expect.any(Array), false, false, false, "centimeter");
     await closeTab();
     expect(tabs()).toHaveLength(1);
-    expect(setToolbarsMenu).toHaveBeenLastCalledWith(expect.any(Array), false, false, false);
+    expect(setToolbarsMenu).toHaveBeenLastCalledWith(expect.any(Array), false, false, false, "centimeter");
   });
 
   it("New tab is keyboard-focusable and invokes the registered File New command exactly once", async () => {

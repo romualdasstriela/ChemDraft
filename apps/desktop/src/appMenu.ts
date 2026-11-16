@@ -87,8 +87,16 @@ export interface PluginAppMenuItem {
   command: AppMenuCommand;
 }
 
+export type RulerUnitPreference = "centimeter" | "inch";
+
+/** View ▸ Ruler Units. Routed natively too (lib.rs RULER_UNIT_*_COMMAND_ID). */
+export const RULER_UNIT_CENTIMETERS_COMMAND_ID = "view.rulerUnit.centimeters";
+export const RULER_UNIT_INCHES_COMMAND_ID = "view.rulerUnit.inches";
+
 export interface AppMenuContext {
   rulersVisible: boolean;
+  /** Ruler unit; centimeters when absent. */
+  rulerUnit?: RulerUnitPreference;
   crosshairsVisible: boolean;
   canUndo: boolean;
   canRedo: boolean;
@@ -283,6 +291,15 @@ export function buildAppMenuModel(context: AppMenuContext): AppMenuSection[] {
           accelerator: chemDrawScheme ? "Cmd+;" : "Cmd+R",
           checked: context.rulersVisible
         }),
+        {
+          kind: "submenu",
+          id: "view.rulerUnits",
+          label: "Ruler Units",
+          items: [
+            command(RULER_UNIT_CENTIMETERS_COMMAND_ID, "Centimeters", { checked: context.rulerUnit !== "inch" }),
+            command(RULER_UNIT_INCHES_COMMAND_ID, "Inches", { checked: context.rulerUnit === "inch" })
+          ]
+        },
         command("view.toggleCrosshairs", "Show Crosshairs", {
           accelerator: chemDrawScheme ? "Alt+Cmd+X" : "Shift+Cmd+R",
           checked: context.crosshairsVisible

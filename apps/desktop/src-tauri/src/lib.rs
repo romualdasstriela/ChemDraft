@@ -99,6 +99,8 @@ const SPIN3D_DEBUGGER_TOGGLE_COMMAND_ID: &str = "view.toggle3dDebugger";
 const PREFERENCES_WINDOW_LABEL: &str = "preferences";
 const PREFERENCES_WINDOW_ROUTE: &str = "/?window=preferences";
 const PREFERENCES_TOGGLE_COMMAND_ID: &str = "view.togglePreferences";
+const RULER_UNIT_CENTIMETERS_COMMAND_ID: &str = "view.rulerUnit.centimeters";
+const RULER_UNIT_INCHES_COMMAND_ID: &str = "view.rulerUnit.inches";
 #[cfg(any(target_os = "macos", windows))]
 const CHECK_FOR_UPDATES_COMMAND_ID: &str = "app.checkForUpdates";
 /// The two Close Window / Close Tab items (File and Window menus). Native window closes stay
@@ -606,6 +608,8 @@ const MENU_COMMAND_IDS: &[&str] = &[
     "page.setOrientation.portrait",
     "page.setOrientation.landscape",
     "view.toggleRulers",
+    RULER_UNIT_CENTIMETERS_COMMAND_ID,
+    RULER_UNIT_INCHES_COMMAND_ID,
     "view.toggleCrosshairs",
     "view.customizeToolbars",
     "view.customizeMainToolbar",
@@ -2608,11 +2612,13 @@ fn set_toolbars_menu(
     rulers_visible: bool,
     crosshairs_visible: bool,
     has_multiple_document_tabs: Option<bool>,
+    ruler_unit: Option<String>,
 ) -> Result<(), String> {
     // JS carries the current View-toggle state so the whole-menu rebuild preserves the Show Rulers /
     // Show Crosshairs checkmarks (they aren't re-mirrored by set_menu_checked like toolset toggles).
     let view_state = ViewMenuState {
         rulers_visible,
+        ruler_inches: ruler_unit.as_deref() == Some("inch"),
         crosshairs_visible,
         has_multiple_document_tabs: has_multiple_document_tabs.unwrap_or(false),
     };
@@ -2639,6 +2645,14 @@ fn set_toolbars_menu(
                     .map(|entry| (toolset_toggle_command_id(&entry.toolset_id), entry.visible))
                     .chain([
                         ("view.toggleRulers".to_string(), view_state.rulers_visible),
+                        (
+                            RULER_UNIT_CENTIMETERS_COMMAND_ID.to_string(),
+                            !view_state.ruler_inches,
+                        ),
+                        (
+                            RULER_UNIT_INCHES_COMMAND_ID.to_string(),
+                            view_state.ruler_inches,
+                        ),
                         (
                             "view.toggleCrosshairs".to_string(),
                             view_state.crosshairs_visible,
@@ -6157,6 +6171,8 @@ fn emit_toolset_window_state_to_main<R: Runtime>(
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct ViewMenuState {
     rulers_visible: bool,
+    /// Rulers in inches; centimeters (the default) otherwise.
+    ruler_inches: bool,
     crosshairs_visible: bool,
     has_multiple_document_tabs: bool,
 }
@@ -6165,6 +6181,7 @@ impl Default for ViewMenuState {
     fn default() -> Self {
         Self {
             rulers_visible: true,
+            ruler_inches: false,
             crosshairs_visible: true,
             has_multiple_document_tabs: false,
         }
@@ -6907,6 +6924,29 @@ fn create_view_menu<R: Runtime>(
             KeybindingScheme::ChemDraw => "Alt+CmdOrCtrl+X",
         }),
     )?;
+    let ruler_units = Submenu::with_items(
+        app,
+        "Ruler Units",
+        true,
+        &[
+            &CheckMenuItem::with_id(
+                app,
+                RULER_UNIT_CENTIMETERS_COMMAND_ID,
+                "Centimeters",
+                true,
+                !view_state.ruler_inches,
+                None::<&str>,
+            )?,
+            &CheckMenuItem::with_id(
+                app,
+                RULER_UNIT_INCHES_COMMAND_ID,
+                "Inches",
+                true,
+                view_state.ruler_inches,
+                None::<&str>,
+            )?,
+        ],
+    )?;
     let separator = PredefinedMenuItem::separator(app)?;
     let debugger_separator = PredefinedMenuItem::separator(app)?;
     let debugger = MenuItem::with_id(
@@ -6947,6 +6987,7 @@ fn create_view_menu<R: Runtime>(
             &preferences,
             &preferences_separator,
             &show_rulers,
+            &ruler_units,
             &show_crosshairs,
             &separator,
             &debugger,
@@ -8376,6 +8417,17 @@ mod tests {
                 &previous.0,
                 ViewMenuState {
                     rulers_visible: false,
+                    ..view
+                }
+            ),
+            ToolbarsMenuUpdate::ChecksOnly
+        );
+        assert_eq!(
+            classify_toolbars_menu_update(
+                &previous,
+                &previous.0,
+                ViewMenuState {
+                    ruler_inches: true,
                     ..view
                 }
             ),

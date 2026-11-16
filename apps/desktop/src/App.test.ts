@@ -16,7 +16,8 @@ import {
   type GraphicObject,
   type MoleculeObject
 } from "@chemdraft/chem-core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { MemoryStorage } from "./testSupport/memoryStorage";
 import {
   projectGraphicObjectPoint
 } from "@chemdraft/art-engine";
@@ -7010,28 +7011,26 @@ describe("ChemDraft desktop shell", () => {
     expect(markup).toContain(`--page-layout-height:${document.pages[0].height}px`);
   });
 
-  it("sets ruler units from the active document page family", () => {
-    const a4Document = setDocumentPageSize(createPhase4Document("Metric Canvas"), "a4");
-    const legalDocument = setDocumentPageSize(createPhase4Document("US Legal Canvas"), "legal");
-    const a4Markup = renderToStaticMarkup(
+  it("measures rulers in the chosen unit (centimeters by default), whatever the page size", () => {
+    const render = (presetId: "a4" | "legal") => renderToStaticMarkup(
       createElement(MainWindow, {
-        initialDocument: a4Document,
+        initialDocument: setDocumentPageSize(createPhase4Document("Canvas"), presetId),
         initialPaletteMode: "hidden",
         nativePalette: true
       })
     );
-    const legalMarkup = renderToStaticMarkup(
-      createElement(MainWindow, {
-        initialDocument: legalDocument,
-        initialPaletteMode: "hidden",
-        nativePalette: true
-      })
-    );
+    for (const markup of [render("a4"), render("legal")]) {
+      expect(markup).toContain(">cm</span>");
+      expect(markup).toContain("crosshair-tick-half");
+    }
 
-    expect(a4Markup).toContain(">cm</span>");
-    expect(a4Markup).toContain("crosshair-tick-half");
-    expect(legalMarkup).toContain(">in</span>");
-    expect(legalMarkup).toContain("crosshair-tick-quarter");
+    vi.stubGlobal("localStorage", new MemoryStorage());
+    try {
+      localStorage.setItem("chemdraft.rulerUnit", "inch");
+      expect(render("a4")).toContain(">in</span>");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("updates page size and orientation without mutating molecule payloads", () => {

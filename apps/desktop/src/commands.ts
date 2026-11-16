@@ -589,6 +589,22 @@ export const viewActions: CommandSpec[] = [
     description: "Show or hide document rulers"
   },
   {
+    id: "view.rulerUnit.centimeters",
+    title: "Ruler Units: Centimeters",
+    icon: "grid",
+    source: "core",
+    category: "view",
+    description: "Measure rulers in centimeters"
+  },
+  {
+    id: "view.rulerUnit.inches",
+    title: "Ruler Units: Inches",
+    icon: "grid",
+    source: "core",
+    category: "view",
+    description: "Measure rulers in inches"
+  },
+  {
     id: "view.toggleCrosshairs",
     title: "Toggle Crosshairs",
     icon: "align",

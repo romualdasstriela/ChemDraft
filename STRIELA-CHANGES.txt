@@ -303,8 +303,11 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
 
 17. A4 pages for new drawings
    - A new tab, the drawing ChemDraft opens with, and a new drawing inserted from Office start
-     on an A4 portrait page, so the rulers and tape measure read in centimetres. Page Size can
-     still set any other size. Files keep the page they were saved with.
+     on an A4 portrait page. Page Size can still set any other size. Files keep the page they
+     were saved with.
+   - Rulers and the tape measure read in centimetres by default, on every tab and whatever the
+     page size. View > Ruler Units (just under Show Rulers) switches between Centimeters and
+     Inches; the choice is remembered. Before, a new tab could show inches.
 
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
@@ -367,3 +370,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  New drawings open on an A4 page (rulers in centimetres)
 (next)  CDX/CDXML: script digits as script runs, arrows head first, lone reagent labels kept
 (next)  Publish ChemDraft_RS-v* tags as downloadable pre-releases with an install guide
+(next)  Rulers in centimetres on every tab; View > Ruler Units picks cm or inches

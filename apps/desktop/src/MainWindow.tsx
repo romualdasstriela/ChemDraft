@@ -801,7 +801,13 @@ import {
   type ToolbarPaletteGroupModel
 } from "./toolsets";
 import { MenuBar } from "./MenuBar";
-import { buildAppMenuModel, PLUGIN_MANAGER_COMMAND_ID } from "./appMenu";
+import {
+  buildAppMenuModel,
+  PLUGIN_MANAGER_COMMAND_ID,
+  RULER_UNIT_CENTIMETERS_COMMAND_ID,
+  RULER_UNIT_INCHES_COMMAND_ID,
+  type RulerUnitPreference
+} from "./appMenu";
 import {
   editHistoryDirection,
   forceDocumentHistoryCommandId,
@@ -1667,7 +1673,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.16.10.00-opus";
+const CURRENT_BUILD_STAMP = "11.16.12.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -2502,6 +2508,7 @@ export function MainWindow({
     createDefaultToolsetPositions(desktopToolsetRegistry)
   );
   const [rulersVisible, setRulersVisible] = useState(initialRulersVisible);
+  const [rulerUnitPreference, setRulerUnitPreference] = useState<RulerUnitPreference>(loadRulerUnitPreference);
   const [crosshairsVisible, setCrosshairsVisible] = useState(initialCrosshairsVisible);
   const [hoveredNativeAtom, setHoveredNativeAtom] = useState<HoveredNativeAtom | undefined>();
   // Live mirror for the hover hotkeys ('1'/'2'): when the growth arrow is on screen they commit
@@ -2588,7 +2595,7 @@ export function MainWindow({
   const artStyleQaEnabled = useMemo(() => shouldEnableArtStyleQaLayer(), []);
   const [artStyleQaRunCount, setArtStyleQaRunCount] = useState(0);
   const [viewport, setViewport] = useState(() =>
-    createViewportState({ rulerUnit: rulerUnitForDocument(initialDocument) })
+    createViewportState({ rulerUnit: rulerUnitStateFor(rulerUnitPreference) })
   );
   const [rulerFrame, setRulerFrame] = useState<RulerFrame>(() => ({
     horizontalScrollPx: 0,
@@ -3047,7 +3054,7 @@ export function MainWindow({
   const objectOverlayFragments = useMemo(() => moveArrowPreviewFragments
     ? new Map([...baseObjectOverlayFragments, ...moveArrowPreviewFragments])
     : baseObjectOverlayFragments, [baseObjectOverlayFragments, moveArrowPreviewFragments]);
-  const pageRulerUnit = useMemo(() => rulerUnitForPageLayout(activePage.layout), [activePage.layout.sourceUnit]);
+  const pageRulerUnit = useMemo(() => rulerUnitStateFor(rulerUnitPreference), [rulerUnitPreference]);
   if (fileState.dirty || fileState.path || documentHistory.past.length || documentHistory.future.length || !documentIsBlank(document)) {
     nonPristineTabsRef.current.add(activeDocumentTabId);
   }
@@ -3768,7 +3775,8 @@ export function MainWindow({
       viewportRef.current = next;
       return next;
     });
-  }, [pageRulerUnit]);
+    // Also when a new or switched tab brings its own viewport: it must not keep another unit.
+  }, [pageRulerUnit, viewport.rulerUnit.kind]);
 
   useEffect(() => {
     if (objectContextMenu && !findDocumentObject(document, objectContextMenu.objectId)) {
@@ -4091,8 +4099,8 @@ export function MainWindow({
     // macOS Close Tab routing uses has_multiple_document_tabs from this async menu push.
     // Cmd+N then immediate Cmd+W can hide the window before it arrives, with two tabs still live;
     // autosave keeps both tabs, so nothing is lost.
-    void setToolbarsMenu(entries, rulersVisible, crosshairsVisible, documentTabs.length > 1).catch(() => undefined);
-  }, [crosshairsVisible, documentTabs.length, nativePalette, rulersVisible, toolsetRegistry, visibleToolsetIds]);
+    void setToolbarsMenu(entries, rulersVisible, crosshairsVisible, documentTabs.length > 1, rulerUnitPreference).catch(() => undefined);
+  }, [crosshairsVisible, documentTabs.length, nativePalette, rulersVisible, rulerUnitPreference, toolsetRegistry, visibleToolsetIds]);
 
   const deleteHoveredNativeTarget = useCallback(() => {
     const currentDocument = documentRef.current;
@@ -8799,11 +8807,11 @@ export function MainWindow({
     setDocumentTabs(tabs);
     activeDocumentTabIdRef.current = id;
     setActiveDocumentTabId(id);
-    const nextViewport = createViewportState();
+    const nextViewport = createViewportState({ rulerUnit: pageRulerUnit });
     viewportRef.current = nextViewport;
     setViewport(nextViewport);
     pendingTabScrollRef.current = { left: 0, top: 0 };
-  }, [snapshotDocumentTab]);
+  }, [pageRulerUnit, snapshotDocumentTab]);
 
   const newDocumentTab = useCallback(() => {
     addDocumentTab("Untitled");
@@ -10890,6 +10898,14 @@ export function MainWindow({
 
         if (action.id === "view.toggleRulers") {
           setRulersVisible((visible) => !visible);
+          return;
+        }
+
+        if (action.id === RULER_UNIT_CENTIMETERS_COMMAND_ID || action.id === RULER_UNIT_INCHES_COMMAND_ID) {
+          const unit: RulerUnitPreference = action.id === RULER_UNIT_INCHES_COMMAND_ID ? "inch" : "centimeter";
+          saveRulerUnitPreference(unit);
+          setRulerUnitPreference(unit);
+          setStatus(unit === "inch" ? "Rulers in inches" : "Rulers in centimeters");
           return;
         }
 
@@ -20095,6 +20111,7 @@ export function MainWindow({
     () =>
       buildAppMenuModel({
         rulersVisible,
+        rulerUnit: rulerUnitPreference,
         crosshairsVisible,
         canUndo,
         canRedo,
@@ -20107,6 +20124,7 @@ export function MainWindow({
       }),
     [
       rulersVisible,
+      rulerUnitPreference,
       crosshairsVisible,
       canUndo,
       canRedo,
@@ -23700,12 +23718,27 @@ function pageCenterPoint(
   };
 }
 
-function rulerUnitForDocument(document: ChemDraftDocument | undefined): RulerUnitState {
-  return rulerUnitForPageLayout(document?.pages[0]?.layout);
+const RULER_UNIT_STORAGE_KEY = "chemdraft.rulerUnit";
+
+/** View ▸ Ruler Units, remembered across launches; centimeters unless the user picked inches. */
+export function loadRulerUnitPreference(): RulerUnitPreference {
+  try {
+    return globalThis.localStorage?.getItem(RULER_UNIT_STORAGE_KEY) === "inch" ? "inch" : "centimeter";
+  } catch {
+    return "centimeter";
+  }
 }
 
-function rulerUnitForPageLayout(layout: ChemDraftDocument["pages"][number]["layout"] | undefined): RulerUnitState {
-  return layout?.sourceUnit === "mm" ? centimeterRulerUnit : inchRulerUnit;
+function saveRulerUnitPreference(unit: RulerUnitPreference): void {
+  try {
+    globalThis.localStorage?.setItem(RULER_UNIT_STORAGE_KEY, unit);
+  } catch {
+    // Storage unavailable: the choice still applies for this session.
+  }
+}
+
+export function rulerUnitStateFor(unit: RulerUnitPreference): RulerUnitState {
+  return unit === "inch" ? inchRulerUnit : centimeterRulerUnit;
 }
 
 function DocumentRulers({

@@ -332,7 +332,7 @@
     "name": "set_toolbars_menu",
     "async": false,
     "generics": "",
-    "parameters": "app: tauri::AppHandle, entries: Vec<ToolbarMenuEntry>, rulers_visible: bool, crosshairs_visible: bool, has_multiple_document_tabs: Option<bool>,",
+    "parameters": "app: tauri::AppHandle, entries: Vec<ToolbarMenuEntry>, rulers_visible: bool, crosshairs_visible: bool, has_multiple_document_tabs: Option<bool>, ruler_unit: Option<String>,",
     "returnType": "Result<(), String>"
   },
   {
