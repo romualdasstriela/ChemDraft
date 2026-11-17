@@ -3950,6 +3950,25 @@ textarea:focus-visible,
   cursor: crosshair;
 }
 
+/* With a selection tool, anything that a drag would move shows the four-way move pointer: every
+   object on the page (structures through their atom/bond hit targets, text, shapes, arrows,
+   brackets, charges). Empty page keeps the arrow; the handles keep their own pointers. */
+.app-shell[data-active-tool-kind="selection"] .page [data-object-id],
+.app-shell[data-active-tool-kind="selection"] .page .charge-hit-area,
+.app-shell[data-active-tool-kind="selection"] .page .graphic-glyph-hit-target {
+  cursor: move;
+}
+
+.app-shell[data-active-tool-kind="selection"] .page [data-object-id] .object-rotate-handle {
+  cursor: default;
+}
+
+.app-shell[data-active-tool-kind="selection"] .page [data-object-id] textarea,
+.app-shell[data-active-tool-kind="selection"] .page [data-object-id] input,
+.app-shell[data-active-tool-kind="selection"] .page [data-object-id] [contenteditable="true"] {
+  cursor: text;
+}
+
 .page.crosshairs-visible {
   background:
     linear-gradient(var(--cd-canvas-grid) 1px, transparent 1px),

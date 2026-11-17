@@ -371,6 +371,12 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      key: Shift + the =/+ key, the -/_ key and the keypad + and -, so a layout that types a
      letter on the =/+ key (Lithuanian: z with caron) still charges the atom.
 
+17d. Move pointer
+   - With the Selection or Lasso tool, the pointer turns into the four-way move arrow over
+     anything a drag would move: structures (atoms and bonds), text, shapes, arrows,
+     brackets and charges. Empty page keeps the normal arrow; resize handles keep their
+     resize pointers.
+
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
      installer and publishes it as a pre-release on this fork's Releases page, with
