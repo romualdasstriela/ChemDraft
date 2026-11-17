@@ -13,6 +13,7 @@ import {
   type MoleculeObject
 } from "@chemdraft/chem-core";
 import {
+  CHARGE_MARK_HIT_MARGIN_PX,
   projectRotationAboutPageLine,
   atomDisplayLabel,
   atomDegrees,
@@ -805,7 +806,8 @@ function visiblePrimitiveSignature(
       className !== "native-bond-hit-target" &&
       className !== "native-bond-hover-decorator" &&
       className !== "native-atom-hit-target" &&
-      className !== "native-crossing-hit-target"
+      className !== "native-crossing-hit-target" &&
+      className !== "charge-hit-area"
       ? [[
           fragment.tag,
           attrs["data-object-id"],
@@ -1683,8 +1685,15 @@ describe("layout-engine page SVG planner", () => {
     planPageSvgRender(pageWithObjects([chargeMarkObject(id, charge, overrides)])).fragments
       .filter((fragment) => fragment.attrs["data-object-id"] === id);
 
+  // Visible primitives only: the hidden click disc (charge-hit-area) is not part of the glyph.
   const fragmentsByTag = (fragments: PageSvgElementFragment[], tag: string) =>
-    fragments.filter((fragment) => fragment.tag === tag);
+    fragments.filter((fragment) => fragment.tag === tag && fragment.attrs.visibility !== "hidden");
+
+  it("gives a charge mark a hidden, clickable disc a little wider than the mark", () => {
+    const hit = plannedChargeMark("charge_hit", 1).filter((fragment) => fragment.attrs.class === "charge-hit-area");
+    expect(hit).toHaveLength(1);
+    expect(hit[0]?.attrs).toMatchObject({ cx: 329, cy: 169, r: 9 + CHARGE_MARK_HIT_MARGIN_PX, visibility: "hidden", "pointer-events": "all" });
+  });
 
   const numeralText = (numeral: PageSvgElementFragment | undefined) =>
     numeral?.children.map((child) => (child.kind === "text" ? child.text : "")).join("");

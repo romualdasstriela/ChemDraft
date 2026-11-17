@@ -7590,6 +7590,18 @@ export function nativeChargePlacementPointForAtom(
     return undefined;
   }
 
+  // A charge on a carbon inside the skeleton (a carbocation or carbanion vertex) sits in the open
+  // gap between its bonds that faces away from the rest of the molecule — outside a ring, on the
+  // free side of a branch point — where it reads as that atom's and crowds nothing.
+  const outward = atom.element === "C" ? outwardChargeGapPoint(molecule, atom) : undefined;
+  if (outward) {
+    const halfSize = nativeChargeMarkSizePx / 2;
+    return {
+      x: clamp(outward.x, halfSize, Math.max(halfSize, pageWidth - halfSize)),
+      y: clamp(outward.y, halfSize, Math.max(halfSize, pageHeight - halfSize))
+    };
+  }
+
   // The natural direction for a charge is where the next atom would land if the chain kept
   // growing from here — the same slot the bond tool would use — but closer in than a whole bond
   // (nativeChargeMarkDistanceFactor). Only a saturated atom (no growth slot) falls back to the
@@ -7647,6 +7659,37 @@ export function nativeChargePlacementPointForAtom(
   return candidates
     .sort((left, right) => right.score - left.score || left.point.y - right.point.y || left.point.x - right.point.x)[0]
     ?.point;
+}
+
+/**
+ * For an atom with two or more bonds: the point three quarters of a bond out along the bisector of
+ * the widest gap between its bonds, ties (a branch point's three equal gaps) going to the gap that
+ * faces away from the molecule's centre. Undefined for a terminal or bare atom.
+ */
+function outwardChargeGapPoint(molecule: MoleculeObject, atom: MoleculeAtom): PagePoint | undefined {
+  const angles = molecule.bonds
+    .filter((bond) => bond.fromAtomId === atom.id || bond.toAtomId === atom.id)
+    .map((bond) => molecule.atoms.find((candidate) => candidate.id === (bond.fromAtomId === atom.id ? bond.toAtomId : bond.fromAtomId)))
+    .filter((neighbor): neighbor is MoleculeAtom => neighbor !== undefined)
+    .map((neighbor) => Math.atan2(neighbor.y - atom.y, neighbor.x - atom.x))
+    .sort((a, b) => a - b);
+  if (angles.length < 2) return undefined;
+  const centroid = molecule.atoms.reduce((sum, candidate) => ({
+    x: sum.x + candidate.x / molecule.atoms.length,
+    y: sum.y + candidate.y / molecule.atoms.length
+  }), { x: 0, y: 0 });
+  const away = { x: atom.x - centroid.x, y: atom.y - centroid.y };
+  const awayLength = Math.hypot(away.x, away.y);
+  const best = angles.map((angle, index) => {
+    const next = index + 1 < angles.length ? angles[index + 1]! : angles[0]! + 2 * Math.PI;
+    const gap = next - angle;
+    const bisector = angle + gap / 2;
+    const outwardness = awayLength > 1e-6 ? (Math.cos(bisector) * away.x + Math.sin(bisector) * away.y) / awayLength : 0;
+    // Gap size decides; outwardness (at most ±0.5 rad) only separates gaps of about the same size.
+    return { bisector, score: gap + 0.5 * outwardness };
+  }).sort((left, right) => right.score - left.score)[0]!;
+  const distanceOut = nativeDrawingStyleFromObjectStyle(molecule.style).bondLengthPx * nativeChargeMarkDistanceFactor;
+  return { x: atom.x + Math.cos(best.bisector) * distanceOut, y: atom.y + Math.sin(best.bisector) * distanceOut };
 }
 
 /** The growth the on-canvas arrow is showing: where the new atom lands, or which existing atom

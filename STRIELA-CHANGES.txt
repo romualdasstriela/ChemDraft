@@ -361,6 +361,12 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - New charge marks are a quarter smaller (13.5 px instead of 18) and sit a quarter closer
      to their atom (three quarters of a bond length, toward where the next bond would grow).
      Marks already in a file keep their size and place.
+   - A charge on a carbon inside the skeleton goes in the open gap between its bonds that faces
+     away from the rest of the molecule (outside a ring, on the free side of a branch point).
+     Charges on O, N and other atoms are placed as before.
+   - A charge is easier to pick up and move: clicking anywhere within about 4 px around it
+     selects it, not only on the thin lines of the sign. The click area is invisible and is
+     not exported.
    - The +/- hover keys also work by physical
      key: Shift + the =/+ key, the -/_ key and the keypad + and -, so a layout that types a
      letter on the =/+ key (Lithuanian: z with caron) still charges the atom.

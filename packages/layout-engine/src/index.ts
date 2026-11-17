@@ -3624,6 +3624,9 @@ export function textObjectSpansForRendering(object: TextObject): TextSpan[] {
  * charge glyph is the circled form (⊕/⊖) — the plain +/− is an explicit variant — and a `radical`
  * charge carries the unpaired-electron dot beside the sign (•+ / •−).
  */
+/** Extra reach around a charge mark that still picks it up (px), beyond its own box. */
+export const CHARGE_MARK_HIT_MARGIN_PX = 4;
+
 function chargeMarkFragment(object: ElectronMarkObject, layerIndex: number): PageSvgElementFragment {
   const rawCharge = typeof object.charge === "number" && Number.isInteger(object.charge) && object.charge !== 0
     ? object.charge
@@ -3636,7 +3639,21 @@ function chargeMarkFragment(object: ElectronMarkObject, layerIndex: number): Pag
   const barHalf = radius * 0.55;
   const strokeWidth = 1.5;
   const circled = object.chargeStyle !== "plain" && object.radical !== true;
-  const children: PageSvgElementFragment[] = [];
+  const children: PageSvgElementFragment[] = [
+    // What a click catches: a disc a little wider than the mark, not just the sign's 1.5 px
+    // strokes, so a small charge is easy to pick up and move. Hidden (exports skip it) but
+    // `pointer-events="all"` keeps it clickable on the canvas.
+    elementFragment("circle", `charge-hit-${object.id}`, {
+      class: "charge-hit-area",
+      cx: centerX,
+      cy: centerY,
+      r: Math.max(object.width, object.height) / 2 + CHARGE_MARK_HIT_MARGIN_PX,
+      fill: "none",
+      stroke: "none",
+      visibility: "hidden",
+      "pointer-events": "all"
+    })
+  ];
 
   if (circled) {
     children.push(elementFragment("circle", `charge-circle-${object.id}`, {
