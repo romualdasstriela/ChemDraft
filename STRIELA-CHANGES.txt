@@ -357,7 +357,11 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      vertex with the charge beside it; it is no longer relabelled "C" or "CH". Charged
      heteroatoms (N+, O-) keep their labels.
    - Hovering an atom and pressing + or - adds a plain (uncircled) charge; pressing it again
-     raises the charge (2+, 3+...). The keys also work by physical
+     raises the charge (2+, 3+...).
+   - New charge marks are a quarter smaller (13.5 px instead of 18) and sit a quarter closer
+     to their atom (three quarters of a bond length, toward where the next bond would grow).
+     Marks already in a file keep their size and place.
+   - The +/- hover keys also work by physical
      key: Shift + the =/+ key, the -/_ key and the keypad + and -, so a layout that types a
      letter on the =/+ key (Lithuanian: z with caron) still charges the atom.
 

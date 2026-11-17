@@ -818,7 +818,11 @@ export const documentObjectProjectedPlaneTiltMaxDegrees = projectedPlaneTiltMaxD
 export const projectedPlaneTiltMaxRadians = projectedPlaneTiltMaxDegrees * Math.PI / 180;
 
 export const nativeAtomHitRadiusPx = 8;
-export const nativeChargeMarkSizePx = 18;
+/** A new charge mark's box; the sign is drawn from it. 13.5 (was 18): a quarter smaller, so a
+ *  charge reads as belonging to its atom rather than competing with the label. */
+export const nativeChargeMarkSizePx = 13.5;
+/** How far from its atom a new charge sits, as a share of the bond-growth slot (a bond length). */
+export const nativeChargeMarkDistanceFactor = 0.75;
 export const nativeChargeAssociationRadiusPx = nativeBondLengthPx * 1.15;
 /** Stacking the charge tool tops out here — beyond ±9 is a typo, not chemistry. */
 export const nativeChargeMarkMaxMagnitude = 9;
@@ -7586,12 +7590,16 @@ export function nativeChargePlacementPointForAtom(
     return undefined;
   }
 
-  // The natural home for a charge is where the next atom would land if the chain kept growing
-  // from here — the same slot the bond tool would use. Only a saturated atom (no growth slot)
-  // falls back to the open-angle scoring below.
+  // The natural direction for a charge is where the next atom would land if the chain kept
+  // growing from here — the same slot the bond tool would use — but closer in than a whole bond
+  // (nativeChargeMarkDistanceFactor). Only a saturated atom (no growth slot) falls back to the
+  // open-angle scoring below.
   const growth = previewNativeMoleculeBondGrowth(molecule, atom, pageWidth, pageHeight);
   if (growth && growth.atomId === atomId && !growth.targetAtomId) {
-    return growth.newAtomPoint;
+    return {
+      x: atom.x + (growth.newAtomPoint.x - atom.x) * nativeChargeMarkDistanceFactor,
+      y: atom.y + (growth.newAtomPoint.y - atom.y) * nativeChargeMarkDistanceFactor
+    };
   }
 
   const placementRadius = Math.max(nativeChargeMarkSizePx * 1.35, nativeBondLength * 0.55);

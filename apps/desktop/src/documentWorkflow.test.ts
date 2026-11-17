@@ -12450,7 +12450,7 @@ describe("Phase 4 document workflow", () => {
     expect(sodiumAtom).toMatchObject({ element: "Na", formalCharge: 1, markCharge: 1 });
   });
 
-  it("places atom-targeted charge marks at the chain-growth slot, one bond length out", () => {
+  it("places atom-targeted charge marks toward the chain-growth slot, three quarters of a bond out", () => {
     const methanol = setNativeAtomElement(
       insertNativeSingleBondMolecule(createPhase4Document("Charge Placement"), { x: 300, y: 300 }),
       "atom_002",
@@ -12475,8 +12475,11 @@ describe("Phase 4 document workflow", () => {
       throw new Error("Expected placed charge mark.");
     }
 
-    // The mark lands where the next chain atom would go: a full bond length from the atom.
-    expect(pointDistance(nativeChargeMarkCenter(chargeMark), oxygen)).toBeCloseTo(nativeBondLengthPx, 0);
+    // The mark lands toward where the next chain atom would go, three quarters of a bond out,
+    // and is 13.5 px (a quarter smaller than the old 18).
+    expect(pointDistance(nativeChargeMarkCenter(chargeMark), oxygen)).toBeCloseTo(nativeBondLengthPx * 0.75, 0);
+    expect(chargeMark.width).toBe(13.5);
+    expect(chargeMark.height).toBe(13.5);
     // Default presentation is the circled glyph — no explicit style override needed.
     expect(chargeMark.chargeStyle).toBeUndefined();
     expect(chargeMark.radical).toBeUndefined();
