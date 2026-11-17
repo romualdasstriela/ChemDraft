@@ -356,7 +356,8 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - A charge put on a carbon (by any charge tool or hover key) keeps the carbon a bare
      vertex with the charge beside it; it is no longer relabelled "C" or "CH". Charged
      heteroatoms (N+, O-) keep their labels.
-   - Hovering an atom and pressing + or - adds the charge. The keys also work by physical
+   - Hovering an atom and pressing + or - adds a plain (uncircled) charge; pressing it again
+     raises the charge (2+, 3+...). The keys also work by physical
      key: Shift + the =/+ key, the -/_ key and the keypad + and -, so a layout that types a
      letter on the =/+ key (Lithuanian: z with caron) still charges the atom.
 

@@ -9,7 +9,12 @@ import {
   normalizeCommittedDocument,
   reconcileNativeChargeMarks
 } from "./documentWorkflow";
-import { hoverChargeKey, hoveredNativeTargetShortcutCommand } from "./MainWindow";
+import {
+  HOVER_KEY_NEGATIVE_CHARGE,
+  HOVER_KEY_POSITIVE_CHARGE,
+  hoverChargeKey,
+  hoveredNativeTargetShortcutCommand
+} from "./MainWindow";
 import { desktopToolsetRegistry } from "./toolsets";
 
 function ring(): { document: ChemDraftDocument; molecule: MoleculeObject } {
@@ -63,6 +68,18 @@ describe("charge tools", () => {
       .toBe("atom.addPositiveChargeToHoveredAtom");
     expect(hoveredNativeTargetShortcutCommand(atom, hoverChargeKey({ key: "-", code: "NumpadSubtract", shiftKey: false })))
       .toBe("atom.addNegativeChargeToHoveredAtom");
+  });
+
+  it("hover + and − keys place plain (uncircled) charges, and a second + on the same atom raises it", () => {
+    const { document, molecule } = ring();
+    const target = { objectId: molecule.id, kind: "atom" as const, atomId: molecule.atoms[0]!.id, distanceToPointer: 0 };
+    const plus = commit(applyChargeToolAtNativeAtom(document, HOVER_KEY_POSITIVE_CHARGE, target));
+    expect(plus.pages[0].objects.find((object) => object.type === "electron-mark")).toMatchObject({ charge: 1, chargeStyle: "plain" });
+    const minus = commit(applyChargeToolAtNativeAtom(document, HOVER_KEY_NEGATIVE_CHARGE, target));
+    expect(minus.pages[0].objects.find((object) => object.type === "electron-mark")).toMatchObject({ charge: -1, chargeStyle: "plain" });
+    const twice = commit(applyChargeToolAtNativeAtom(plus, HOVER_KEY_POSITIVE_CHARGE, target));
+    expect(moleculeOf(twice).atoms[0]!.formalCharge).toBe(2);
+    expect(planMoleculeAtomLabels(moleculeOf(twice)).map((plan) => plan.atom.id)).not.toContain(target.atomId);
   });
 
   it("shows the plain + and − tools with uncircled icons in the Charge drop-down", () => {
