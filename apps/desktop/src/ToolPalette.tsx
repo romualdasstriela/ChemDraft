@@ -4063,7 +4063,7 @@ function ToolbarItemTooltip({
  * icon, is active while it is, and a plain click re-arms it. Picking Double Bond from the bond
  * flyout leaves the button showing (and drawing) a double bond until another bond is picked.
  */
-const FLYOUT_OWNERS_FOLLOWING_SELECTION: ReadonlySet<string> = new Set(["tool.symbol", "tool.charge", "tool.bond", "tool.polymerBracket"]);
+const FLYOUT_OWNERS_FOLLOWING_SELECTION: ReadonlySet<string> = new Set(["tool.symbol", "tool.charge", "tool.bond", "tool.polymerBracket", "tool.art.rect"]);
 
 export function ToolbarItemIcon({
   item,

@@ -402,6 +402,14 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      base, not its side. The shaft ends deeper inside narrow heads so it never shows past
      their edges.
 
+17h. More shapes
+   - The Shape tool has Triangle, Star (five-pointed), Ball (a glossy shaded sphere) and
+     Cylinder, beside Rectangle, Rounded Rectangle, Circle and Ellipse. Triangle and star
+     are closed polygons whose corners can be edited; the cylinder keeps its top rim and
+     stretches with its box.
+   - Long press on the Main toolbar's Shape Tool now opens the shape choices (it had none),
+     and the button shows the shape last used.
+
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
      installer and publishes it as a pre-release on this fork's Releases page, with
@@ -476,3 +484,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Insert Artwork (SVG, EPS): place vector frames and logos as grouped shapes
 (next)  Align Middle / Align Center straighten slanted lines and arrows
 (next)  Arc arrowheads: added filled heads half-width, curved heads centred on the curve
+(next)  Shape tool: triangle, star, ball and cylinder; long press on the Main toolbar's Shape Tool

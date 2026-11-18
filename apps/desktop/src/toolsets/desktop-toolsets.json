@@ -946,10 +946,66 @@
                 "type": "command",
                 "commandId": "tool.art.rect"
               },
-              "submenu": null,
+              "submenu": {
+                "type": "command-grid",
+                "title": "Shapes",
+                "columns": 2,
+                "items": [
+                  {
+                    "commandId": "tool.art.rect",
+                    "label": "Rectangle",
+                    "icon": "bracket",
+                    "assetName": "Art_Rectangle"
+                  },
+                  {
+                    "commandId": "tool.art.roundedRect",
+                    "label": "Rounded Rectangle",
+                    "icon": "bracket",
+                    "assetName": "Art_Rounded_Rectangle"
+                  },
+                  {
+                    "commandId": "tool.art.circle",
+                    "label": "Circle",
+                    "icon": "bracket",
+                    "assetName": "Art_Circle"
+                  },
+                  {
+                    "commandId": "tool.art.ellipse",
+                    "label": "Ellipse",
+                    "icon": "bracket",
+                    "assetName": "Art_Ellipse"
+                  },
+                  {
+                    "commandId": "tool.art.triangle",
+                    "label": "Triangle",
+                    "icon": "bracket",
+                    "assetName": "Art_Triangle"
+                  },
+                  {
+                    "commandId": "tool.art.star",
+                    "label": "Star",
+                    "icon": "bracket",
+                    "assetName": "Art_Star"
+                  },
+                  {
+                    "commandId": "tool.art.ball",
+                    "label": "Ball",
+                    "icon": "bracket",
+                    "assetName": "Art_Ball"
+                  },
+                  {
+                    "commandId": "tool.art.cylinder",
+                    "label": "Cylinder",
+                    "icon": "bracket",
+                    "assetName": "Art_Cylinder"
+                  }
+                ],
+                "id": "shapes"
+              },
               "tooltip": {
                 "title": "Shape Tool",
-                "shortcut": null
+                "shortcut": null,
+                "description": "Draw a shape. Long-press for shape choices."
               },
               "layout": {
                 "colSpan": 1,
@@ -3048,10 +3104,66 @@
                 "type": "command",
                 "commandId": "tool.art.rect"
               },
-              "submenu": null,
+              "submenu": {
+                "type": "command-grid",
+                "title": "Shapes",
+                "columns": 2,
+                "items": [
+                  {
+                    "commandId": "tool.art.rect",
+                    "label": "Rectangle",
+                    "icon": "bracket",
+                    "assetName": "Art_Rectangle"
+                  },
+                  {
+                    "commandId": "tool.art.roundedRect",
+                    "label": "Rounded Rectangle",
+                    "icon": "bracket",
+                    "assetName": "Art_Rounded_Rectangle"
+                  },
+                  {
+                    "commandId": "tool.art.circle",
+                    "label": "Circle",
+                    "icon": "bracket",
+                    "assetName": "Art_Circle"
+                  },
+                  {
+                    "commandId": "tool.art.ellipse",
+                    "label": "Ellipse",
+                    "icon": "bracket",
+                    "assetName": "Art_Ellipse"
+                  },
+                  {
+                    "commandId": "tool.art.triangle",
+                    "label": "Triangle",
+                    "icon": "bracket",
+                    "assetName": "Art_Triangle"
+                  },
+                  {
+                    "commandId": "tool.art.star",
+                    "label": "Star",
+                    "icon": "bracket",
+                    "assetName": "Art_Star"
+                  },
+                  {
+                    "commandId": "tool.art.ball",
+                    "label": "Ball",
+                    "icon": "bracket",
+                    "assetName": "Art_Ball"
+                  },
+                  {
+                    "commandId": "tool.art.cylinder",
+                    "label": "Cylinder",
+                    "icon": "bracket",
+                    "assetName": "Art_Cylinder"
+                  }
+                ],
+                "id": "shapes"
+              },
               "tooltip": {
                 "title": "Shape Tool",
-                "shortcut": null
+                "shortcut": null,
+                "description": "Draw a shape. Long-press for shape choices."
               },
               "layout": {
                 "colSpan": 1,
@@ -3226,6 +3338,30 @@
                     "label": "Ellipse",
                     "icon": "bracket",
                     "assetName": "Art_Ellipse"
+                  },
+                  {
+                    "commandId": "tool.art.triangle",
+                    "label": "Triangle",
+                    "icon": "bracket",
+                    "assetName": "Art_Triangle"
+                  },
+                  {
+                    "commandId": "tool.art.star",
+                    "label": "Star",
+                    "icon": "bracket",
+                    "assetName": "Art_Star"
+                  },
+                  {
+                    "commandId": "tool.art.ball",
+                    "label": "Ball",
+                    "icon": "bracket",
+                    "assetName": "Art_Ball"
+                  },
+                  {
+                    "commandId": "tool.art.cylinder",
+                    "label": "Cylinder",
+                    "icon": "bracket",
+                    "assetName": "Art_Cylinder"
                   }
                 ],
                 "id": "shapes"

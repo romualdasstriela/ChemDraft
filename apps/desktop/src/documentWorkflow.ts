@@ -440,7 +440,11 @@ export type NativeArtToolId =
   | "lobe"
   | "shadedLobe"
   | "pOrbital"
-  | "sOrbital";
+  | "sOrbital"
+  | "triangle"
+  | "star"
+  | "ball"
+  | "cylinder";
 
 export interface NativeArtToolDefinition {
   id: NativeArtToolId;
@@ -671,8 +675,48 @@ export const nativeArtToolDefinitions: readonly NativeArtToolDefinition[] = [
       { point: { x: 34, y: 104 }, inControl: { x: 30, y: 116 }, outControl: { x: 38, y: 92 } }
     ]
   }, artOutlineStyle, "tool.pOrbital"),
-  artShapeTool("sOrbital", "s Orbital", "ellipse", 48, 48, {}, artGlossStyle, "tool.sOrbital")
+  artShapeTool("sOrbital", "s Orbital", "ellipse", 48, 48, {}, artGlossStyle, "tool.sOrbital"),
+  // Closed polygons ride the polyline path: node editing, fills and resizing all come with it.
+  artShapeTool("triangle", "Triangle", "path", 56, 48, {
+    artPathKind: "polyline",
+    pathClosed: true,
+    pathNodes: [{ point: { x: 28, y: 0 } }, { point: { x: 56, y: 48 } }, { point: { x: 0, y: 48 } }]
+  }, artOutlineStyle),
+  artShapeTool("star", "Star", "path", ...fivePointedStarFrame(), {
+    artPathKind: "polyline",
+    pathClosed: true,
+    pathNodes: fivePointedStarPoints().map((point) => ({ point }))
+  }, artOutlineStyle),
+  // A sphere: a circle with the glossy (lit, shaded) fill.
+  artShapeTool("ball", "Ball", "ellipse", 48, 48, {}, { ...artGlossStyle, fillColor: "#8a96a3", strokeColor: "#4a5560" }),
+  // A cylinder needs its top rim drawn across the body, which one node path cannot hold, so it is a
+  // stored outline (two subpaths) in its own coordinates that scales with its box.
+  artShapeTool("cylinder", "Cylinder", "path", 48, 64, { pathD: cylinderPathD(48, 64) }, artOutlineStyle)
 ];
+
+/** Outline of a standing cylinder in a w×h box: the full top ellipse, then the body (sides and the
+ *  front half of the bottom ellipse), closed back along the top. */
+function cylinderPathD(w: number, h: number): string {
+  const rx = w / 2, ry = Math.min(h / 4, w / 6);
+  return `M0 ${ry}A${rx} ${ry} 0 1 0 ${w} ${ry}A${rx} ${ry} 0 1 0 0 ${ry}Z` +
+    `M0 ${ry}L0 ${h - ry}A${rx} ${ry} 0 0 0 ${w} ${h - ry}L${w} ${ry}A${rx} ${ry} 0 0 0 0 ${ry}Z`;
+}
+
+/** A five-pointed star, point up, its corners on the frame edges (outer radius 26, inner 0.382 of it). */
+function fivePointedStarPoints(): PagePoint[] {
+  const r = 26, inner = 0.382, cx = r * Math.sin((72 * Math.PI) / 180);
+  const round = (value: number) => Math.round(value * 100) / 100;
+  return Array.from({ length: 10 }, (_, index) => {
+    const angle = (-90 + index * 36) * Math.PI / 180;
+    const radius = index % 2 === 0 ? r : r * inner;
+    return { x: round(cx + radius * Math.cos(angle)), y: round(r + radius * Math.sin(angle)) };
+  });
+}
+
+function fivePointedStarFrame(): [number, number] {
+  const points = fivePointedStarPoints();
+  return [Math.max(...points.map((p) => p.x)), Math.max(...points.map((p) => p.y))];
+}
 
 const nativeArtToolByCommandId = new Map(nativeArtToolDefinitions.map((tool) => [tool.commandId, tool]));
 
@@ -13929,9 +13973,10 @@ export function adjustArrangementSpacing(document:ChemDraftDocument,factor:numbe
 }
 
 /** Artwork placed with File ▸ Insert Artwork stays this far inside the page edge. */
-/** A shape placed by Insert Artwork: its stored outline is in its own (local) coordinates. */
-function isInsertedArtworkGraphic(object: GraphicObject): boolean {
-  return typeof object.compatibility?.unknown?.insertedArtwork === "string";
+/** A shape whose stored outline is in its own (local) coordinates and scales with its box: one placed
+ *  by Insert Artwork, or a Cylinder from the Shape tool. */
+function graphicOutlineScalesWithFrame(object: GraphicObject): boolean {
+  return typeof object.compatibility?.unknown?.insertedArtwork === "string" || object.data.artToolId === "cylinder";
 }
 
 export const insertedArtworkPageMarginPx = 36;
@@ -15185,7 +15230,7 @@ function transformOtherObjectAroundPointPatches(
     changes.anchor = { ...object.anchor, kind: "point", point: { x: newCenter.x, y: newCenter.y } };
   }
   if (object.type === "graphic") {
-    changes.data = resizeGraphicObjectDataForFrame(object.data, oldCenter, newCenter, scaleX, scaleY, isInsertedArtworkGraphic(object));
+    changes.data = resizeGraphicObjectDataForFrame(object.data, oldCenter, newCenter, scaleX, scaleY, graphicOutlineScalesWithFrame(object));
     // Stroke width scales with the arrow too, so a resized arrow keeps its proportions instead of
     // turning spindly as it grows. Arrow-family only: other art keeps its existing behaviour, where
     // a resized rectangle deliberately holds its stroke weight.

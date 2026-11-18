@@ -1107,6 +1107,24 @@ describe("ToolPalette arrange flyouts", () => {
     expect(onInvoke).toHaveBeenCalledWith("layout.ungroup");
   });
 
+  it("gives the Main toolbar's Shape Tool the shape choices on long press", () => {
+    act(() => {
+      root.render(createElement(ToolPalette, {
+        groups: getToolsetCommandGroups("core.main"),
+        itemGroups: getToolsetItemGroups("core.main"),
+        activeTool: "tool.art.star",
+        orientation: "horizontal",
+        onInvoke: vi.fn()
+      }));
+    });
+    const shapeButton = container.querySelector<HTMLButtonElement>('[data-command-flyout-button="shapes"]');
+    expect(shapeButton?.getAttribute("data-command-flyout-ids")).toBe(
+      "tool.art.rect tool.art.roundedRect tool.art.circle tool.art.ellipse tool.art.triangle tool.art.star tool.art.ball tool.art.cylinder"
+    );
+    // The button follows the shape in use, like the bond and bracket buttons.
+    expect(shapeButton?.getAttribute("data-active")).toBe("true");
+  });
+
   it("consolidates art shape tools behind one active flyout button", () => {
     const onInvoke = vi.fn();
     act(() => {
@@ -1124,7 +1142,9 @@ describe("ToolPalette arrange flyouts", () => {
       throw new Error("Expected shape flyout button.");
     }
     expect(shapeButton.getAttribute("data-toolbar-asset")).toBe("Art_Shapes");
-    expect(shapeButton.getAttribute("data-command-flyout-ids")).toBe("tool.art.rect tool.art.roundedRect tool.art.circle tool.art.ellipse");
+    expect(shapeButton.getAttribute("data-command-flyout-ids")).toBe(
+      "tool.art.rect tool.art.roundedRect tool.art.circle tool.art.ellipse tool.art.triangle tool.art.star tool.art.ball tool.art.cylinder"
+    );
     expect(shapeButton.getAttribute("data-active")).toBe("true");
     expect(shapeButton.getAttribute("aria-pressed")).toBe("true");
 
