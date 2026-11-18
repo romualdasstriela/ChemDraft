@@ -106,6 +106,13 @@ export function createQuickActions(
     ...createDocumentTabActions(availability.hasMultipleTabs === true),
     { id: "document.new", title: "New Document", icon: "new", shortcut: "Cmd+N", source: "core" },
     { id: "document.open", title: "Open Native Document", icon: "open", shortcut: "Cmd+O", source: "core" },
+    {
+      id: "document.insertArtwork",
+      title: "Insert Artwork (SVG, EPS)",
+      icon: "open",
+      source: "core",
+      description: "Place vector artwork from an SVG or EPS file on the page, such as a frame or a border"
+    },
     { id: "document.save", title: "Save Native Document", icon: "save", shortcut: "Cmd+S", source: "core" },
     { id: "document.saveAs", title: "Save Native Document As", icon: "save", shortcut: "Shift+Cmd+S", source: "core" },
     {

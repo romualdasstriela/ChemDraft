@@ -606,6 +606,7 @@ import {
   wrapProjectedPlaneTiltVectorRadians,
   alignSelectedDocumentObjects,
   cleanUpReactionLayout,
+  insertArtworkLayers,
   insertCompoundDataText,
   REACTION_CONDITIONS_FONT_SIZE_PX,
   distributeSelectedDocumentObjects,
@@ -809,6 +810,7 @@ import {
   type ToolbarPaletteGroupModel
 } from "./toolsets";
 import { MenuBar } from "./MenuBar";
+import { parseArtworkFile } from "./artworkImport";
 import {
   compoundBoilingPointFromRun,
   compoundDataLines,
@@ -1689,7 +1691,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.17.13.30-opus";
+const CURRENT_BUILD_STAMP = "11.17.15.40-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -9200,6 +9202,44 @@ export function MainWindow({
     return () => { disposed = true; unlisten?.(); };
   }, [openDroppedDocumentPaths]);
 
+  // File ▸ Insert Artwork: an SVG or EPS file's vector shapes placed on the page (one undo entry).
+  const artworkInputRef = useRef<HTMLInputElement>(null);
+  const placeArtworkBytes = useCallback((name: string, bytes: Uint8Array) => {
+    try {
+      const artwork = parseArtworkFile(name, bytes);
+      const changed = commitDocumentChange(
+        insertArtworkLayers(documentRef.current, artwork.layers, artwork.pxPerUnit, name),
+        "Insert Artwork"
+      );
+      const skipped = artwork.warnings.length > 0 ? ` (not included: ${artwork.warnings.join("; ")})` : "";
+      setStatus(changed ? `Inserted artwork from ${name}${skipped}` : `Nothing to insert from ${name}`);
+    } catch (error) {
+      setStatus(`Insert Artwork failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [commitDocumentChange]);
+  const insertArtworkFromPicker = useCallback(async () => {
+    if (!isDesktopRuntime()) {
+      artworkInputRef.current?.click();
+      return;
+    }
+    const { open } = await loadTauriDialogModule();
+    const selected = await open({
+      title: "Insert Artwork",
+      multiple: false,
+      fileAccessMode: "scoped",
+      filters: [{ name: "Vector artwork (SVG, EPS)", extensions: ["svg", "eps", "epsf", "ps"] }]
+    });
+    if (typeof selected !== "string") {
+      setStatus("Insert Artwork canceled");
+      return;
+    }
+    try {
+      placeArtworkBytes(nativePathBasename(selected), await readNativeBinaryFile(selected));
+    } catch (error) {
+      setStatus(`Insert Artwork failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [placeArtworkBytes]);
+
   const openDocumentFromNativePicker = useCallback(async () => {
     if (!isDesktopRuntime()) {
       fileInputRef.current?.click();
@@ -10390,6 +10430,9 @@ export function MainWindow({
         }
         if (action.id === "document.open") {
           await openDocumentFromNativePicker();
+        }
+        if (action.id === "document.insertArtwork") {
+          await insertArtworkFromPicker();
         }
         if (action.id === "document.save") {
           await saveCurrentDocument(false);
@@ -20497,6 +20540,18 @@ export function MainWindow({
         className="native-file-input"
         aria-label="Import Molecule Inspector template"
         onChange={handleMoleculeTemplateFile}
+      />
+      <input
+        ref={artworkInputRef}
+        type="file"
+        accept=".svg,.eps,.epsf,.ps,image/svg+xml,application/postscript"
+        className="native-file-input"
+        aria-label="Insert artwork from an SVG or EPS file"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void file.arrayBuffer().then((buffer) => placeArtworkBytes(file.name, new Uint8Array(buffer)));
+        }}
       />
 
       {showAppMenuBar ? <MenuBar sections={appMenuSections} onInvoke={invoke} /> : null}

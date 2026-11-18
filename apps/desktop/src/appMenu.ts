@@ -244,6 +244,7 @@ export function buildAppMenuModel(context: AppMenuContext): AppMenuSection[] {
         separator(),
         buildPageSetupSubmenu(),
         separator(),
+        command("document.insertArtwork", "Insert Artwork (SVG, EPS)…"),
         command("export.open", "Export…", { accelerator: chemDrawScheme ? "Ctrl+Cmd+E" : "Shift+Cmd+E" })
       ]
     },

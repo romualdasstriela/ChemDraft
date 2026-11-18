@@ -377,6 +377,17 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      brackets and charges. Empty page keeps the normal arrow; resize handles keep their
      resize pointers.
 
+17e. Insert Artwork
+   - File > Insert Artwork (SVG, EPS)... places a vector drawing (a frame, border, logo) on
+     the page as editable ChemDraft shapes: one shape per colour, grouped and selected.
+   - Artwork larger than the page is scaled down to fit inside a 0.5 inch margin and
+     centred; smaller artwork keeps its own size. Resizing a placed shape scales the
+     drawing inside it.
+   - SVG: paths, basic shapes, groups, transforms, <use>, CSS classes and colours. EPS
+     (including the binary-wrapped EPS that drawing programs save): fills, strokes,
+     colours and transforms. Text, embedded pictures and gradients are skipped, with a
+     note in the status bar.
+
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
      installer and publishes it as a pre-release on this fork's Releases page, with
@@ -447,3 +458,5 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Brackets stretch wider or taller from side handles
 (next)  Compound Data toolbox: formula, MW, m/z, predicted bp; Paste and Copy
 (next)  Charges: plain +/- icons, charged carbons stay bare vertices, +/- hover keys by physical key
+(next)  Four-way move pointer over anything a drag would move
+(next)  Insert Artwork (SVG, EPS): place vector frames and logos as grouped shapes

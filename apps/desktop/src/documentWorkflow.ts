@@ -30,6 +30,8 @@ import {
   mergeVisualEffectsByKind,
   planNativeArtVisual,
   planNativeArtBooleanOperation,
+  artworkPathBounds,
+  transformSvgPathToCurves,
   prepareGraphicPathForDirectEdit as prepareGraphicPathObjectForDirectEdit,
   visualEffectsForStyle,
   visualStyleWithEffects,
@@ -11829,7 +11831,8 @@ function resizeGraphicObjectDataForFrame(
   oldCenter: PagePoint,
   newCenter: PagePoint,
   scaleX: number,
-  scaleY: number
+  scaleY: number,
+  scalesStoredPath = false
 ): GraphicObjectData {
   const resizePoint = (point: PagePoint | undefined): PagePoint | undefined =>
     point
@@ -11850,6 +11853,19 @@ function resizeGraphicObjectDataForFrame(
   };
   delete nextData.cachedFreehandPathD;
   delete nextData.cachedFreehandPathRevision;
+  // Inserted artwork stores its outline in the object's own coordinates, so a resized box scales it
+  // by the same factors; without this the box changed and the drawing inside it did not. Other
+  // stored paths may be in page space and stay as they are. (Positive factors only: a mirror also
+  // has to move the outline back into its box, which this data-only step cannot see, so a flip
+  // keeps its existing handling.)
+  if (scalesStoredPath && typeof data.pathD === "string" && data.pathD.trim() && !data.artPathKind && scaleX > 0 && scaleY > 0 &&
+    (Math.abs(scaleX - 1) > 1e-9 || Math.abs(scaleY - 1) > 1e-9)) {
+    try {
+      nextData.pathD = transformSvgPathToCurves(data.pathD, [scaleX, 0, 0, scaleY, 0, 0]);
+    } catch {
+      // Unreadable path data stays as it was.
+    }
+  }
 
   if (typeof data.arcRadiusX === "number" && Number.isFinite(data.arcRadiusX)) {
     nextData.arcRadiusX = Math.max(1, data.arcRadiusX * Math.abs(scaleX));
@@ -13901,6 +13917,68 @@ export function adjustArrangementSpacing(document:ChemDraftDocument,factor:numbe
   return {document:result,ok:true,status:`Spacing adjusted to ${Math.round(factor*100)}%`};
 }
 
+/** Artwork placed with File ▸ Insert Artwork stays this far inside the page edge. */
+/** A shape placed by Insert Artwork: its stored outline is in its own (local) coordinates. */
+function isInsertedArtworkGraphic(object: GraphicObject): boolean {
+  return typeof object.compatibility?.unknown?.insertedArtwork === "string";
+}
+
+export const insertedArtworkPageMarginPx = 36;
+
+/**
+ * File ▸ Insert Artwork: each painted layer becomes one path object (filled outline, or a stroke of
+ * its width), several are grouped into one object, and the whole is centred on the page — scaled
+ * down to fit inside a 36 px (about 1 cm) margin when larger, never scaled up. Selected, one undo.
+ */
+export function insertArtworkLayers(
+  document: ChemDraftDocument,
+  layers: readonly { mode: "fill" | "stroke"; color: string; strokeWidth?: number; pathD: string }[],
+  pxPerUnit: number,
+  name: string
+): ChemDraftDocument {
+  const page = firstPage(document);
+  const boxes = layers.map((layer) => artworkPathBounds(layer.pathD));
+  const left = Math.min(...boxes.map((box) => box.x)), top = Math.min(...boxes.map((box) => box.y));
+  const right = Math.max(...boxes.map((box) => box.x + box.width)), bottom = Math.max(...boxes.map((box) => box.y + box.height));
+  const naturalWidth = (right - left) * pxPerUnit, naturalHeight = (bottom - top) * pxPerUnit;
+  if (!(naturalWidth > 0 || naturalHeight > 0)) return document;
+  const margin = insertedArtworkPageMarginPx;
+  const fit = Math.min(1,
+    naturalWidth > 0 ? (page.width - 2 * margin) / naturalWidth : 1,
+    naturalHeight > 0 ? (page.height - 2 * margin) / naturalHeight : 1);
+  const scale = pxPerUnit * fit;
+  const originX = (page.width - naturalWidth * fit) / 2, originY = (page.height - naturalHeight * fit) / 2;
+  const taken = new Set(page.objects.map((object) => object.id));
+  const objects: GraphicObject[] = layers.map((layer, index) => {
+    const box = boxes[index]!;
+    const x = originX + (box.x - left) * scale, y = originY + (box.y - top) * scale;
+    let id = nextObjectId(document, "art_artwork");
+    for (let n = 1; taken.has(id); n++) id = `${nextObjectId(document, "art_artwork")}_${n}`;
+    taken.add(id);
+    return {
+      id,
+      type: "graphic",
+      graphicKind: "path",
+      x,
+      y,
+      width: Math.max(1, box.width * scale),
+      height: Math.max(1, box.height * scale),
+      rotation: 0,
+      style: layer.mode === "fill"
+        ? { source: "chemdraft-native-art", fillColor: layer.color, strokeColor: "none", strokeWidth: 0.01 }
+        : { source: "chemdraft-native-art", strokeColor: layer.color, strokeWidth: Math.max(0.1, (layer.strokeWidth ?? 1) * scale), fillColor: "none" },
+      compatibility: { sourceFormat: "chemdraft-native", warnings: [], unknown: { insertedArtwork: name } },
+      // The path in the object's own coordinates, at the size it is drawn.
+      data: { pathD: transformSvgPathToCurves(layer.pathD, [scale, 0, 0, scale, -box.x * scale, -box.y * scale]) }
+    };
+  });
+  const added = applyPatches(document, [
+    ...objects.map((object) => ({ op: "addObject" as const, pageId: page.id, object })),
+    { op: "setSelection", pageId: page.id, objectIds: objects.map((object) => object.id) }
+  ], { now: phase4Timestamp });
+  return objects.length > 1 ? groupSelectedDocumentObjects(added) : added;
+}
+
 /**
  * Compound Data ▸ Paste: the ticked lines as one centred text object just under the structure's
  * drawn atoms and labels, the formula's counts as subscripts. The structure stays selected, so the
@@ -15043,7 +15121,7 @@ function transformOtherObjectAroundPointPatches(
     changes.anchor = { ...object.anchor, kind: "point", point: { x: newCenter.x, y: newCenter.y } };
   }
   if (object.type === "graphic") {
-    changes.data = resizeGraphicObjectDataForFrame(object.data, oldCenter, newCenter, scaleX, scaleY);
+    changes.data = resizeGraphicObjectDataForFrame(object.data, oldCenter, newCenter, scaleX, scaleY, isInsertedArtworkGraphic(object));
     // Stroke width scales with the arrow too, so a resized arrow keeps its proportions instead of
     // turning spindly as it grows. Arrow-family only: other art keeps its existing behaviour, where
     // a resized rectangle deliberately holds its stroke weight.

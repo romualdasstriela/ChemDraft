@@ -596,6 +596,7 @@ const MENU_COMMAND_IDS: &[&str] = &[
     "document.saveAs",
     "document.closeAndReturn",
     "export.open",
+    "document.insertArtwork",
     "page.setSize.letter",
     "page.setSize.legal",
     "page.setSize.a4",
@@ -6500,6 +6501,13 @@ fn create_app_menu_for_toolsets<R: Runtime>(
                     &PredefinedMenuItem::separator(app)?,
                     &page_setup_menu,
                     &PredefinedMenuItem::separator(app)?,
+                    &MenuItem::with_id(
+                        app,
+                        "document.insertArtwork",
+                        "Insert Artwork (SVG, EPS)...",
+                        true,
+                        None::<&str>,
+                    )?,
                     &MenuItem::with_id(
                         app,
                         "export.open",

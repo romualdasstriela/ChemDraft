@@ -3450,6 +3450,79 @@ function svgPathLooksClosed(pathD: string): boolean {
   return /[Zz]/.test(pathD);
 }
 
+/** An affine map [a, b, c, d, e, f]: x' = a·x + c·y + e, y' = b·x + d·y + f (SVG's matrix order). */
+export type ArtworkMatrix = readonly [number, number, number, number, number, number];
+
+export const IDENTITY_ARTWORK_MATRIX: ArtworkMatrix = [1, 0, 0, 1, 0, 0];
+
+export function multiplyArtworkMatrices(outer: ArtworkMatrix, inner: ArtworkMatrix): ArtworkMatrix {
+  const [a1, b1, c1, d1, e1, f1] = outer;
+  const [a2, b2, c2, d2, e2, f2] = inner;
+  return [
+    a1 * a2 + c1 * b2, b1 * a2 + d1 * b2,
+    a1 * c2 + c1 * d2, b1 * c2 + d1 * d2,
+    a1 * e2 + c1 * f2 + e1, b1 * e2 + d1 * f2 + f1
+  ];
+}
+
+/**
+ * Any SVG path `d` under an affine map, as absolute moves and cubic curves: arcs and quadratics
+ * become cubics, which an affine map carries exactly. Each sub-path that was closed keeps its Z,
+ * so a closed outline still fills. Numbers are rounded to 0.01.
+ */
+export function transformSvgPathToCurves(pathD: string, matrix: ArtworkMatrix = IDENTITY_ARTWORK_MATRIX): string {
+  const absolute = SVGPathCommander.pathToAbsolute(pathD);
+  const subpaths: { segments: (string | number)[][]; closed: boolean }[] = [];
+  let current: { segments: (string | number)[][]; closed: boolean } | undefined;
+  let lastPoint: [number, number] = [0, 0];
+  let start: [number, number] = [0, 0];
+  for (const segment of absolute as unknown as (string | number)[][]) {
+    const command = String(segment[0]).toUpperCase();
+    if (command === "M") {
+      current = { segments: [segment], closed: false };
+      subpaths.push(current);
+      start = [Number(segment[1]), Number(segment[2])];
+    } else if (command === "Z") {
+      if (current) current.closed = true;
+      // A drawing command right after Z starts from the sub-path's start point.
+      current = undefined;
+      lastPoint = start;
+      continue;
+    } else if (!current) {
+      current = { segments: [["M", lastPoint[0], lastPoint[1]], segment], closed: false };
+      subpaths.push(current);
+      start = lastPoint;
+    } else {
+      current.segments.push(segment);
+    }
+    const values = segment.slice(1).map(Number);
+    if (command === "H") lastPoint = [values[0]!, lastPoint[1]];
+    else if (command === "V") lastPoint = [lastPoint[0], values[0]!];
+    else if (values.length >= 2) lastPoint = [values[values.length - 2]!, values[values.length - 1]!];
+  }
+  const [a, b, c, d, e, f] = matrix;
+  const point = (x: number, y: number) => {
+    const px = a * x + c * y + e, py = b * x + d * y + f;
+    return `${Number(px.toFixed(2))} ${Number(py.toFixed(2))}`;
+  };
+  return subpaths.map((subpath) => {
+    const curves = SVGPathCommander.pathToCurve(subpath.segments.map((segment) => segment.join(" ")).join(" ")) as unknown as (string | number)[][];
+    const text = curves.map((segment) => {
+      const values = segment.slice(1).map(Number);
+      return segment[0] === "M"
+        ? `M${point(values[0]!, values[1]!)}`
+        : `C${point(values[0]!, values[1]!)} ${point(values[2]!, values[3]!)} ${point(values[4]!, values[5]!)}`;
+    }).join("");
+    return subpath.closed ? `${text}Z` : text;
+  }).join("");
+}
+
+/** The box around a path's drawn outline (curves included), in its own coordinates. */
+export function artworkPathBounds(pathD: string): { x: number; y: number; width: number; height: number } {
+  const box = SVGPathCommander.getPathBBox(pathD);
+  return { x: box.x, y: box.y, width: box.width, height: box.height };
+}
+
 function svgPathLooksCornered(pathD: string): boolean {
   return /[LlHhVv]/.test(pathD);
 }
