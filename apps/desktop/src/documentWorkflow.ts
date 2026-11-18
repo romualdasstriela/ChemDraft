@@ -10203,6 +10203,9 @@ export function graphicObjectSupportsMarkersWithPlan(
  * contract honest. Adding a head to a bare end seeds its size from the opposite head (falling back
  * to the 16px tool default) so the pair matches.
  */
+/** Base width (share of head size) of a filled arrowhead added to a line or arc: half, narrow. */
+export const addedFilledArrowWidthScale = 0.5;
+
 export function applyGraphicObjectMarkerKindToSelection(
   document: ChemDraftDocument,
   markerId: NativeArtMarkerHandleId,
@@ -10224,11 +10227,19 @@ export function applyGraphicObjectMarkerKindToSelection(
     }
     const otherId: NativeArtMarkerHandleId = markerId === "markerStart" ? "markerEnd" : "markerStart";
     const seedSizePx = current?.sizePx ?? object.data[otherId]?.sizePx ?? 16;
+    // A filled head keeps the base width this end already had, else matches a filled head at the
+    // other end, else gets the narrow half-width base of the default reaction arrow.
+    const widthScale = kind !== "filled-arrow"
+      ? undefined
+      : current?.kind === "filled-arrow" ? current.widthScale
+        : object.data[otherId]?.kind === "filled-arrow" ? object.data[otherId]?.widthScale
+          : addedFilledArrowWidthScale;
     return {
       ...object.data,
       [markerId]: {
         kind,
         sizePx: seedSizePx,
+        ...(widthScale !== undefined ? { widthScale } : {}),
         ...(current?.angleDegrees !== undefined ? { angleDegrees: current.angleDegrees } : {})
       }
     };

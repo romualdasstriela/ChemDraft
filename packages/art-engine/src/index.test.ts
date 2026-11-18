@@ -1211,6 +1211,48 @@ describe("art-engine native art planning", () => {
     expect(arcPlan.markerHandles.some((handle) => handle.id === "markerEnd")).toBe(true);
   });
 
+  it("aims arc arrowheads along the curve so the shaft meets the middle of the head's base", () => {
+    const center = { x: 100, y: 100 }, radius = 40, size = 16;
+    const arc = {
+      ...baseGraphic,
+      graphicKind: "path",
+      x: 60,
+      y: 60,
+      width: 80,
+      height: 80,
+      data: {
+        artPathKind: "arc",
+        arcCenter: center,
+        arcRadiusX: radius,
+        arcRadiusY: radius,
+        arcStartRadians: 0,
+        arcSweepRadians: Math.PI * 1.26,
+        markerStart: { kind: "filled-arrow", sizePx: size, widthScale: 0.5 },
+        markerEnd: { kind: "filled-arrow", sizePx: size, widthScale: 0.5 }
+      }
+    } satisfies GraphicObject;
+    const plan = planNativeArtVisual(arc, { coordinateSpace: "page" });
+    const visible = plan.visiblePathD;
+    expect(visible).toBeDefined();
+    const total = getTotalLength(visible!);
+    const shaftEnds = { start: getPointAtLength(visible!, 0), end: getPointAtLength(visible!, total) };
+    for (const which of ["start", "end"] as const) {
+      const terminal = which === "start" ? plan.markerStartTerminal! : plan.markerEndTerminal!;
+      const baseCenter = {
+        x: terminal.point.x - terminal.direction.x * size,
+        y: terminal.point.y - terminal.direction.y * size
+      };
+      // The base's middle sits on the arc (a tip tangent put it ~3 px outside a 40 px arc).
+      expect(Math.abs(Math.hypot(baseCenter.x - center.x, baseCenter.y - center.y) - radius)).toBeLessThan(0.6);
+      // The shaft's end, stroke width included, stays hidden inside the narrow head.
+      const shaft = shaftEnds[which];
+      const offAxis = Math.abs((shaft.x - terminal.point.x) * terminal.direction.y - (shaft.y - terminal.point.y) * terminal.direction.x);
+      const depth = (terminal.point.x - shaft.x) * terminal.direction.x + (terminal.point.y - shaft.y) * terminal.direction.y;
+      expect(depth).toBeLessThan(size);
+      expect(offAxis + 1).toBeLessThanOrEqual((depth / size) * (size / 2) * 0.5);
+    }
+  });
+
   it("plans the no-reaction cross at the shaft midpoint", () => {
     const noReaction = {
       ...baseGraphic,

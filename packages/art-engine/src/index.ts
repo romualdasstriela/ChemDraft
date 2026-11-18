@@ -442,7 +442,10 @@ export function planNativeArtVisual(
           end: { point: equilibrium.forward.end, direction: equilibrium.forward.direction }
         }
     : capabilities.isOpenStroke && rendersStroke
-      ? nativeArtOpenStrokeTerminals(line, pathD, pathPoints)
+      ? nativeArtOpenStrokeTerminals(line, pathD, pathPoints, {
+          start: nativeArtCurvedHeadSampleLength(markerStart),
+          end: nativeArtCurvedHeadSampleLength(markerEnd)
+        })
       : undefined;
   const visibleStroke = equilibrium ? undefined : nativeArtVisibleOpenStroke({
     line,
@@ -1048,7 +1051,10 @@ function nativeArtMarkerShaftInset(marker: NativeArtMarkerPlan, strokeWidth: num
     marker.kind === "chevron" ||
     marker.kind === "diamond"
   ) {
-    return Math.max(strokeWidth * 1.5, marker.sizePx * 0.42);
+    // A narrow head is thin near its tip, so the shaft stops deeper inside it, where the head is
+    // wide enough to cover the stroke (on a curve the shaft end also sits slightly off the axis).
+    const depth = (marker.widthScale ?? 1) < 1 ? 0.7 : 0.42;
+    return Math.max(strokeWidth * 1.5, marker.sizePx * depth);
   }
   if (marker.kind === "dot") {
     return marker.sizePx * 0.38;
@@ -1200,11 +1206,54 @@ function markerInwardDirection(terminal: NativeArtStrokeTerminalPlan): NativeArt
   return normalizedVector({ x: -terminal.direction.x, y: -terminal.direction.y });
 }
 
+/**
+ * How far back along a curved stroke a head's direction is sampled: the head's own length, so the
+ * head lies along the chord from its tip to where its base meets the curve and the shaft enters the
+ * middle of the base. (A tangent taken right at the tip leaves the base hanging off the curve's
+ * outside, the shaft joining it off-centre.) Undefined = no arrowhead there: the short tangent sample.
+ */
+function nativeArtCurvedHeadSampleLength(marker: NativeArtMarkerPlan | undefined): number | undefined {
+  if (!marker) return undefined;
+  return marker.kind === "filled-arrow" || marker.kind === "open-arrow" || marker.kind === "half-arrow" ||
+    marker.kind === "chevron" || marker.kind === "diamond"
+    ? marker.sizePx
+    : undefined;
+}
+
 function nativeArtOpenStrokeTerminals(
   line: NativeArtVisualPlan["line"],
   pathD: string | undefined,
-  pathPoints?: NativeArtPoint[]
+  pathPoints?: NativeArtPoint[],
+  headSampleLengths: { start?: number; end?: number } = {}
 ): { start: NativeArtStrokeTerminalPlan; end: NativeArtStrokeTerminalPlan } | undefined {
+  // The point each end's direction is taken from. With a head there: the point on the stroke a
+  // head-length from the tip in a straight line (that is where the head's base centre lands), found
+  // by a few secant steps along the stroke and kept within a third of it so a short arc still points
+  // the right way. Without one: a short tangent sample.
+  const samplePoints = (
+    length: number,
+    pointAt: (distance: number) => NativeArtPoint | undefined
+  ): { startNear?: NativeArtPoint; endNear?: NativeArtPoint } => {
+    const tangent = Math.min(length, Math.max(1, length * 0.02));
+    const near = (head: number | undefined, fromEnd: boolean) => {
+      const at = (distance: number) => pointAt(fromEnd ? Math.max(0, length - distance) : Math.min(length, distance));
+      if (head === undefined || !(head > 0)) return at(tangent);
+      const tip = at(0);
+      const limit = Math.max(tangent, length / 3);
+      let distance = Math.max(tangent, Math.min(head, limit));
+      let point = at(distance);
+      for (let step = 0; step < 6 && tip && point; step += 1) {
+        const chord = Math.hypot(point.x - tip.x, point.y - tip.y);
+        if (Math.abs(chord - head) < 0.02) break;
+        const next = Math.max(tangent, Math.min(limit, distance + (head - chord)));
+        if (Math.abs(next - distance) < 1e-6) break;
+        distance = next;
+        point = at(distance);
+      }
+      return point;
+    };
+    return { startNear: near(headSampleLengths.start, false), endNear: near(headSampleLengths.end, true) };
+  };
   if (line) {
     const start = { x: line.x1, y: line.y1 };
     const end = { x: line.x2, y: line.y2 };
@@ -1227,11 +1276,9 @@ function nativeArtOpenStrokeTerminals(
     if (!Number.isFinite(length) || length <= 0.001) {
       return undefined;
     }
-    const sampleOffset = Math.min(length, Math.max(1, length * 0.02));
     const start = pathPoints[0];
-    const startNear = nativeArtPolylinePointAtLength(pathPoints, sampleOffset);
     const end = pathPoints[pathPoints.length - 1];
-    const endNear = nativeArtPolylinePointAtLength(pathPoints, Math.max(0, length - sampleOffset));
+    const { startNear, endNear } = samplePoints(length, (distance) => nativeArtPolylinePointAtLength(pathPoints, distance));
     if (!startNear || !endNear) {
       return undefined;
     }
@@ -1254,11 +1301,9 @@ function nativeArtOpenStrokeTerminals(
       return undefined;
     }
 
-    const sampleOffset = Math.min(length, Math.max(1, length * 0.02));
     const start = finiteSvgPathPoint(getPointAtLength(pathD, 0));
-    const startNear = finiteSvgPathPoint(getPointAtLength(pathD, sampleOffset));
     const end = finiteSvgPathPoint(getPointAtLength(pathD, length));
-    const endNear = finiteSvgPathPoint(getPointAtLength(pathD, Math.max(0, length - sampleOffset)));
+    const { startNear, endNear } = samplePoints(length, (distance) => finiteSvgPathPoint(getPointAtLength(pathD, distance)));
     if (!start || !startNear || !end || !endNear) {
       return undefined;
     }

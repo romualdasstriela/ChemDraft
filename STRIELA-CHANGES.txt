@@ -394,6 +394,14 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      length and direction, then aligns as usual with the rest of the selection.
    - Works on a single selected line or arrow too. Curved and bent ones are left alone.
 
+17g. Arc arrowheads
+   - A filled arrowhead added to a line or arc has a narrow base, half its usual width
+     (the same head as the default reaction arrow). A head of the other end, if filled, is
+     matched instead.
+   - On arcs and other curved arrows the head is aimed so the curve meets the middle of its
+     base, not its side. The shaft ends deeper inside narrow heads so it never shows past
+     their edges.
+
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
      installer and publishes it as a pre-release on this fork's Releases page, with
@@ -467,3 +475,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Four-way move pointer over anything a drag would move
 (next)  Insert Artwork (SVG, EPS): place vector frames and logos as grouped shapes
 (next)  Align Middle / Align Center straighten slanted lines and arrows
+(next)  Arc arrowheads: added filled heads half-width, curved heads centred on the curve
