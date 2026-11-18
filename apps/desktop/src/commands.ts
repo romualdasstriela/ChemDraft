@@ -30,6 +30,7 @@ import {
   selectedGroupObjectIds,
   selectedArrangementObjectIds,
   selectedArtBooleanEligibleObjectIds,
+  selectionHasAlignStraightenableLine,
   type NativeHotkeyElement
 } from "./documentWorkflow";
 import {
@@ -2049,8 +2050,8 @@ export function createLayerActions(document: ChemDraftDocument, layoutsEnabled =
       shortcutLabel: "⌥⇧⌘C",
       source: "core",
       category: "layout",
-      enabled: hasMultiSelection,
-      disabledReason: "Select at least two objects",
+      enabled: hasMultiSelection || selectionHasAlignStraightenableLine(document, "center"),
+      disabledReason: "Select at least two objects, or a slanted line or arrow",
       description: "Align selected document objects to the horizontal center of the selection"
     },
     {
@@ -2088,8 +2089,8 @@ export function createLayerActions(document: ChemDraftDocument, layoutsEnabled =
       shortcutLabel: "⌥⇧⌘M",
       source: "core",
       category: "layout",
-      enabled: hasMultiSelection,
-      disabledReason: "Select at least two objects",
+      enabled: hasMultiSelection || selectionHasAlignStraightenableLine(document, "middle"),
+      disabledReason: "Select at least two objects, or a slanted line or arrow",
       description: "Align selected document objects to the vertical middle of the selection"
     },
     {

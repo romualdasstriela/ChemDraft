@@ -1691,7 +1691,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.17.15.40-opus";
+const CURRENT_BUILD_STAMP = "11.18.10.20-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -10706,7 +10706,9 @@ export function MainWindow({
         const alignMode = alignModeForCommandId(action.id);
         if (alignMode) {
           const changed = commitDocumentChange((current) => alignSelectedDocumentObjects(current, alignMode));
-          setStatus(changed ? action.title : "Select at least two objects");
+          setStatus(changed ? action.title : alignMode === "center" || alignMode === "middle"
+            ? "Select at least two objects, or a slanted line or arrow"
+            : "Select at least two objects");
           return;
         }
 

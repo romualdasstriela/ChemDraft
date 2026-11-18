@@ -388,6 +388,12 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      colours and transforms. Text, embedded pictures and gradients are skipped, with a
      note in the status bar.
 
+17f. Align straightens lines and arrows
+   - Align Middle turns a slightly slanted line or arrow fully horizontal; Align Center
+     turns a nearly vertical one fully vertical. It turns about its midpoint and keeps its
+     length and direction, then aligns as usual with the rest of the selection.
+   - Works on a single selected line or arrow too. Curved and bent ones are left alone.
+
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
      installer and publishes it as a pre-release on this fork's Releases page, with
@@ -460,3 +466,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Charges: plain +/- icons, charged carbons stay bare vertices, +/- hover keys by physical key
 (next)  Four-way move pointer over anything a drag would move
 (next)  Insert Artwork (SVG, EPS): place vector frames and logos as grouped shapes
+(next)  Align Middle / Align Center straighten slanted lines and arrows

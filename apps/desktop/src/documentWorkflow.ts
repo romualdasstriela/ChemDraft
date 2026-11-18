@@ -14409,7 +14409,60 @@ function arrangementItemInkBounds(pageObjects: readonly DocumentObject[], id: st
   return { x, y, width: Math.max(...boxes.map((b) => b.x + b.width)) - x, height: Math.max(...boxes.map((b) => b.y + b.height)) - y };
 }
 
+/**
+ * A selected straight line or arrow that Align Middle (`horizontal`) or Align Center (`vertical`)
+ * turns fully level or upright: drawn nearer that direction than the other, but not exactly on it.
+ * Returns the straightened object, turned about its midpoint with its length and direction kept.
+ * Curved, bent and rotated-frame graphics are left alone.
+ */
+function straightenedAlignLine(object: DocumentObject, axis: "horizontal" | "vertical"): GraphicObject | undefined {
+  if (object.type !== "graphic" || Math.abs(object.rotation ?? 0) > 1e-9) return undefined;
+  const points = graphicPathEditPoints(object);
+  if (!points || (points.pathKind !== "line" && points.pathKind !== "wavy")) return undefined;
+  const { start, end } = points;
+  const dx = end.x - start.x, dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-6) return undefined;
+  const along = axis === "horizontal" ? dx : dy, across = axis === "horizontal" ? dy : dx;
+  if (Math.abs(across) < 1e-6 || Math.abs(across) > Math.abs(along)) return undefined;
+  const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+  const half = (along >= 0 ? 1 : -1) * length / 2;
+  const nextStart = axis === "horizontal" ? { x: mid.x - half, y: mid.y } : { x: mid.x, y: mid.y - half };
+  const nextEnd = axis === "horizontal" ? { x: mid.x + half, y: mid.y } : { x: mid.x, y: mid.y + half };
+  const moved = editGraphicPathGeometry(object, "start", nextStart);
+  return moved ? editGraphicPathGeometry(moved, "end", nextEnd) : undefined;
+}
+
+function alignStraightenAxis(mode: DocumentAlignMode): "horizontal" | "vertical" | undefined {
+  return mode === "middle" ? "horizontal" : mode === "center" ? "vertical" : undefined;
+}
+
+/** Whether Align Middle / Align Center has a line or arrow in the selection to straighten. */
+export function selectionHasAlignStraightenableLine(document: ChemDraftDocument, mode: DocumentAlignMode): boolean {
+  const axis = alignStraightenAxis(mode);
+  return axis !== undefined && selectionLayoutObjects(document).some((object) => straightenedAlignLine(object, axis) !== undefined);
+}
+
 export function alignSelectedDocumentObjects(
+  document: ChemDraftDocument,
+  mode: DocumentAlignMode
+): ChemDraftDocument {
+  // Align Middle levels nearly-horizontal lines and arrows, Align Center stands nearly-vertical
+  // ones upright, before anything moves; with only lines selected, that straightening is the result.
+  const axis = alignStraightenAxis(mode);
+  if (axis) {
+    const patches: DocumentPatch[] = selectionLayoutObjects(document).flatMap((object) => {
+      const straightened = straightenedAlignLine(object, axis);
+      return straightened ? [{ op: "updateObject" as const, objectId: object.id, changes: straightened }] : [];
+    });
+    if (patches.length > 0) {
+      document = applyPatches(document, patches, { now: phase4Timestamp });
+    }
+  }
+  return alignSelectedDocumentObjectPositions(document, mode);
+}
+
+function alignSelectedDocumentObjectPositions(
   document: ChemDraftDocument,
   mode: DocumentAlignMode
 ): ChemDraftDocument {
