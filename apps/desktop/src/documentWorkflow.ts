@@ -676,16 +676,11 @@ export const nativeArtToolDefinitions: readonly NativeArtToolDefinition[] = [
     ]
   }, artOutlineStyle, "tool.pOrbital"),
   artShapeTool("sOrbital", "s Orbital", "ellipse", 48, 48, {}, artGlossStyle, "tool.sOrbital"),
-  // Closed polygons ride the polyline path: node editing, fills and resizing all come with it.
-  artShapeTool("triangle", "Triangle", "path", 56, 48, {
-    artPathKind: "polyline",
-    pathClosed: true,
-    pathNodes: [{ point: { x: 28, y: 0 } }, { point: { x: 56, y: 48 } }, { point: { x: 0, y: 48 } }]
-  }, artOutlineStyle),
+  // Triangle and star are whole outlines in their own coordinates (like the cylinder), so they
+  // select, resize and stretch as one object rather than as editable corner nodes.
+  artShapeTool("triangle", "Triangle", "path", 56, 48, { pathD: "M28 0L56 48L0 48Z" }, artOutlineStyle),
   artShapeTool("star", "Star", "path", ...fivePointedStarFrame(), {
-    artPathKind: "polyline",
-    pathClosed: true,
-    pathNodes: fivePointedStarPoints().map((point) => ({ point }))
+    pathD: `M${fivePointedStarPoints().map((point) => `${point.x} ${point.y}`).join("L")}Z`
   }, artOutlineStyle),
   // A sphere: a circle with the glossy (lit, shaded) fill.
   artShapeTool("ball", "Ball", "ellipse", 48, 48, {}, { ...artGlossStyle, fillColor: "#8a96a3", strokeColor: "#4a5560" }),
@@ -13973,10 +13968,15 @@ export function adjustArrangementSpacing(document:ChemDraftDocument,factor:numbe
 }
 
 /** Artwork placed with File ▸ Insert Artwork stays this far inside the page edge. */
+/** Shape tools whose outline is stored whole, in the object's own coordinates. */
+const outlineShapeToolIds: ReadonlySet<string> = new Set(["triangle", "star", "cylinder"]);
+
 /** A shape whose stored outline is in its own (local) coordinates and scales with its box: one placed
- *  by Insert Artwork, or a Cylinder from the Shape tool. */
+ *  by Insert Artwork, or a Triangle, Star or Cylinder from the Shape tool. */
 function graphicOutlineScalesWithFrame(object: GraphicObject): boolean {
-  return typeof object.compatibility?.unknown?.insertedArtwork === "string" || object.data.artToolId === "cylinder";
+  return typeof object.compatibility?.unknown?.insertedArtwork === "string" ||
+    (typeof object.data.artToolId === "string" && outlineShapeToolIds.has(object.data.artToolId) &&
+      typeof object.data.pathD === "string" && !object.data.pathNodes);
 }
 
 export const insertedArtworkPageMarginPx = 36;

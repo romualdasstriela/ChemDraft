@@ -404,9 +404,9 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
 
 17h. More shapes
    - The Shape tool has Triangle, Star (five-pointed), Ball (a glossy shaded sphere) and
-     Cylinder, beside Rectangle, Rounded Rectangle, Circle and Ellipse. Triangle and star
-     are closed polygons whose corners can be edited; the cylinder keeps its top rim and
-     stretches with its box.
+     Cylinder, beside Rectangle, Rounded Rectangle, Circle and Ellipse. Triangle, star and
+     cylinder are whole outlines: they select, resize and stretch as one object, like the
+     other shapes (the cylinder keeps its top rim).
    - Long press on the Main toolbar's Shape Tool now opens the shape choices (it had none),
      and the button shows the shape last used.
 
@@ -485,3 +485,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Align Middle / Align Center straighten slanted lines and arrows
 (next)  Arc arrowheads: added filled heads half-width, curved heads centred on the curve
 (next)  Shape tool: triangle, star, ball and cylinder; long press on the Main toolbar's Shape Tool
+(next)  Star and triangle resize as whole shapes

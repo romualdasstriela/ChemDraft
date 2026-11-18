@@ -11,26 +11,48 @@ function placed(commandId: string): { document: ChemDraftDocument; object: Graph
 }
 
 describe("Shape tool: triangle, star, ball, cylinder", () => {
-  it("places a closed triangle whose corners touch its frame", () => {
+  function corners(pathD: string): { x: number; y: number }[] {
+    const numbers = pathD.match(/-?[\d.]+/g)!.map(Number);
+    return Array.from({ length: numbers.length / 2 }, (_, index) => ({ x: numbers[index * 2]!, y: numbers[index * 2 + 1]! }));
+  }
+
+  function resized(commandId: string, scaleX: number, scaleY: number) {
+    const { document, object } = placed(commandId);
+    const center = { x: object.x + object.width / 2, y: object.y + object.height / 2 };
+    const next = scaleDocumentObjectsAroundPoint(document, [object.id], center, scaleX, scaleY);
+    return { before: object, after: next.pages[0]!.objects.find((candidate): candidate is GraphicObject => candidate.id === object.id)! };
+  }
+
+  it("places a triangle as one whole outline filling its frame", () => {
     const { object } = placed("tool.art.triangle");
-    expect(object.data).toMatchObject({ artPathKind: "polyline", pathClosed: true, artToolId: "triangle" });
-    const nodes = object.data.pathNodes!.map((node) => node.point);
-    expect(nodes).toHaveLength(3);
-    expect(Math.min(...nodes.map((p) => p.x))).toBeCloseTo(object.x, 6);
-    expect(Math.max(...nodes.map((p) => p.x))).toBeCloseTo(object.x + object.width, 6);
-    expect(Math.min(...nodes.map((p) => p.y))).toBeCloseTo(object.y, 6);
-    expect(Math.max(...nodes.map((p) => p.y))).toBeCloseTo(object.y + object.height, 6);
+    expect(object.data.pathNodes).toBeUndefined();
+    expect(object.data.artToolId).toBe("triangle");
+    expect(corners(String(object.data.pathD))).toEqual([{ x: 28, y: 0 }, { x: 56, y: 48 }, { x: 0, y: 48 }]);
+    expect(artworkPathBounds(String(object.data.pathD))).toMatchObject({ x: 0, y: 0, width: object.width, height: object.height });
   });
 
-  it("places a five-pointed star: ten corners alternating out and in, point up", () => {
+  it("places a five-pointed star as one whole outline: ten corners alternating out and in, point up", () => {
     const { object } = placed("tool.art.star");
-    const nodes = object.data.pathNodes!.map((node) => node.point);
-    expect(nodes).toHaveLength(10);
-    const center = { x: object.x + object.width / 2, y: nodes[0]!.y + 26 };
-    const radii = nodes.map((p) => Math.hypot(p.x - center.x, p.y - center.y));
-    radii.forEach((radius, index) => expect(radius).toBeCloseTo(index % 2 === 0 ? 26 : 26 * 0.382, 1));
-    expect(nodes[0]!.y).toBeCloseTo(object.y, 6);
-    expect(nodes[0]!.x).toBeCloseTo(center.x, 1);
+    expect(object.data.pathNodes).toBeUndefined();
+    const points = corners(String(object.data.pathD));
+    expect(points).toHaveLength(10);
+    const center = { x: object.width / 2, y: 26 };
+    points.forEach((p, index) => expect(Math.hypot(p.x - center.x, p.y - center.y)).toBeCloseTo(index % 2 === 0 ? 26 : 26 * 0.382, 1));
+    expect(points[0]).toEqual({ x: expect.closeTo(center.x, 1), y: 0 });
+    const bounds = artworkPathBounds(String(object.data.pathD));
+    expect(bounds.width).toBeCloseTo(object.width, 6);
+    expect(bounds.height).toBeCloseTo(object.height, 6);
+  });
+
+  it("resizes the star and the triangle as whole objects, the drawing stretching with the box", () => {
+    for (const commandId of ["tool.art.star", "tool.art.triangle"]) {
+      const { before, after } = resized(commandId, 2, 1.5);
+      expect(after.width).toBeCloseTo(before.width * 2, 6);
+      expect(after.height).toBeCloseTo(before.height * 1.5, 6);
+      const bounds = artworkPathBounds(String(after.data.pathD));
+      expect(bounds.width).toBeCloseTo(after.width, 1);
+      expect(bounds.height).toBeCloseTo(after.height, 1);
+    }
   });
 
   it("places a ball as a glossy circle", () => {
