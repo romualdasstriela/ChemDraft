@@ -557,24 +557,22 @@ mod tests {
         let mut decoder =
             tiff::decoder::Decoder::new(Cursor::new(response.bytes)).expect("TIFF should decode");
         assert_eq!(decoder.dimensions().expect("dimensions"), (400, 200));
-        let rational = |tag| match decoder_tag(&mut decoder, tag) {
-            tiff::decoder::ifd::Value::Rational(n, d) => f64::from(n) / f64::from(d),
-            other => panic!("expected a rational resolution, got {other:?}"),
-        };
-        assert!((rational(tiff::tags::Tag::XResolution) - 600.0).abs() < 0.01);
-        assert!((rational(tiff::tags::Tag::YResolution) - 600.0).abs() < 0.01);
+        for tag in [tiff::tags::Tag::XResolution, tiff::tags::Tag::YResolution] {
+            match decoder.get_tag(tag).expect("resolution tag present") {
+                tiff::decoder::ifd::Value::Rational(n, d) => {
+                    assert!((f64::from(n) / f64::from(d) - 600.0).abs() < 0.01);
+                }
+                other => panic!("expected a rational resolution, got {other:?}"),
+            }
+        }
+        // ResolutionUnit 2 = inch.
         assert_eq!(
-            decoder_tag(&mut decoder, tiff::tags::Tag::ResolutionUnit),
-            tiff::decoder::ifd::Value::Short(2)
+            decoder
+                .get_tag_u32(tiff::tags::Tag::ResolutionUnit)
+                .expect("resolution unit present"),
+            2
         );
         assert!(decoder.read_image().is_ok(), "pixel data must decode");
-    }
-
-    fn decoder_tag(
-        decoder: &mut tiff::decoder::Decoder<Cursor<Vec<u8>>>,
-        tag: tiff::tags::Tag,
-    ) -> tiff::decoder::ifd::Value {
-        decoder.get_tag(tag).expect("tag present")
     }
 
     #[test]
