@@ -27,6 +27,8 @@ export type RasterDialogExportOptions = {
   background: "white" | "transparent";
   jpegQuality: number;
   maxDimensionPx: number;
+  /** TIFF only: the resolution to render at and record in the file, 100-1000 (absent = 600). */
+  dpi?: number;
 };
 export type CdxmlDialogExportOptions = {
   creationProgram: string;

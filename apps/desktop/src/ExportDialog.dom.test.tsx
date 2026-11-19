@@ -57,7 +57,7 @@ function tallDocument() {
 }
 async function mount(document: ChemDraftDocument, format: "png" | "svg" | "pdf" | "bmp" | "gif" | "tiff" = "png", crop: "page" | "content" = "page") {
   const frame = exportDialogFrame(document);
-  const initial: ExportDialogState & { presentation: NonNullable<ExportDialogState["presentation"]> } = { ...createDefaultExportDialogState(document), format, presentation: { ...defaultExportPresentation(frame.page), crop } };
+  const initial: ExportDialogState & { presentation: NonNullable<ExportDialogState["presentation"]> } = { ...createDefaultExportDialogState(document), format, presentation: { ...defaultExportPresentation(frame.page, format), crop } };
   let selected = initial;
   const submitted = vi.fn();
   let changeBusy!: (busy: boolean) => void;

@@ -861,6 +861,7 @@ import type { ExportDialogState, ExportOptions, ExportPreviewResult, ExportFrame
 import { exportOptions } from "./dialogs/exportOptionsValidation";
 import type { ExportDialogResult } from "./dialogs/dialogProtocol";
 import { exportDialogHeight, exportDialogSizeError } from "./dialogs/exportPresentation";
+import { DRAWING_PX_PER_INCH, tiffDpi } from "./dialogs/tiffResolution";
 import { DialogCoordinator } from "./dialogs/DialogCoordinator";
 import { nativeDialogTransport } from "./dialogs/dialogTransport";
 import { PageSizeForm, formatPageSizeFieldValue, pageSizeUnitShortLabel, type PageSizeDraft } from "./dialogs/PageSizeForm";
@@ -1691,7 +1692,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.18.16.40-opus";
+const CURRENT_BUILD_STAMP = "11.19.12.00-opus";
 /** The style the app draws new structures in: the ACS Document 1996 journal style. */
 export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
 
@@ -32209,9 +32210,14 @@ export async function createDialogExportResult(
       includeWarnings: true,
       background: transparent ? "transparent" : "#ffffff"
     });
+    // Without the size section, a TIFF renders at its chosen resolution (600 DPI unless set from
+    // 100 to 1000) and records it; other formats use the 1x-4x scale.
+    const unsizedTiff = rasterFormat === "tiff" && !sized && !preview;
     const rasterResult = await rasterizeSvgNative(svgResult.contents, rasterFormat, {
-      scale: sized || preview ? 1 : sanitizedDialogNumber(state.raster.scale, 1, 1, 4),
-      ...(sized || preview ? { cssPxPerInch: dpi } : {}),
+      scale: sized || preview ? 1
+        : unsizedTiff ? tiffDpi(state.raster) / DRAWING_PX_PER_INCH
+          : sanitizedDialogNumber(state.raster.scale, 1, 1, 4),
+      ...(sized || preview ? { cssPxPerInch: dpi } : unsizedTiff ? { cssPxPerInch: DRAWING_PX_PER_INCH } : {}),
       background: transparent ? "transparent" : "#ffffff",
       jpegQuality: sanitizedDialogNumber(state.raster.jpegQuality, 90, 1, 100),
       maxDimensionPx: sanitizedDialogNumber(state.raster.maxDimensionPx, 8192, 1, 8192)

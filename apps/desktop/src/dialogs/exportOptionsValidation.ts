@@ -1,5 +1,6 @@
 import { exportFormatDescriptors } from "@chemdraft/export-engine";
 import type { ExportDialogState, ExportOptions } from "./exportOptions";
+import { validTiffDpi } from "./tiffResolution";
 
 export const exportOptions = ({ busy: _busy, ...options }: ExportDialogState): ExportOptions => options;
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -17,7 +18,9 @@ export function validExportOptions(v: unknown): v is ExportOptions {
     fields(v.svg, ["includeWarnings", "includePageGuides"]) && typeof v.svg.includeWarnings === "boolean" && typeof v.svg.includePageGuides === "boolean" &&
     fields(v.pdf, ["compress", "includePageGuides", "page", "pdfType", "background"]) && typeof v.pdf.compress === "boolean" &&
     typeof v.pdf.includePageGuides === "boolean" && v.pdf.page === "current" && v.pdf.pdfType === "vector" && v.pdf.background === "white" &&
-    fields(v.raster, ["scale", "background", "jpegQuality", "maxDimensionPx"]) && number(v.raster.scale, 1, 4) &&
+    record(v.raster) && ["scale", "background", "jpegQuality", "maxDimensionPx"].every(k => Object.hasOwn(v.raster as object, k)) &&
+    Object.keys(v.raster).every(k => ["scale", "background", "jpegQuality", "maxDimensionPx", "dpi"].includes(k)) &&
+    (v.raster.dpi === undefined || validTiffDpi(v.raster.dpi)) && number(v.raster.scale, 1, 4) &&
     typeof v.raster.background === "string" && ["white", "transparent"].includes(v.raster.background) && number(v.raster.jpegQuality, 1, 100) && number(v.raster.maxDimensionPx, 1, 8192) &&
     (v.presentation === undefined || validPresentation(v.presentation)) &&
     fields(v.cdxml, ["creationProgram"]) && text(v.cdxml.creationProgram, 256);

@@ -461,6 +461,8 @@ struct RasterOptions {
     background: String,
     jpeg_quality: f64,
     max_dimension_px: f64,
+    /// TIFF only: the resolution to render at and record, 100-1000 DPI (absent = 600).
+    dpi: Option<f64>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -555,6 +557,10 @@ impl ExportOptions {
             && (1.0..=100.0).contains(&self.raster.jpeg_quality)
             && self.raster.max_dimension_px.is_finite()
             && (1.0..=8192.0).contains(&self.raster.max_dimension_px)
+            && self
+                .raster
+                .dpi
+                .is_none_or(|dpi| dpi.is_finite() && (100.0..=1000.0).contains(&dpi))
             && bounded_text(&self.cdxml.creation_program, 256)
     }
 }
@@ -564,7 +570,9 @@ fn valid_export_optionals(data: &Value) -> bool {
             && p.get("height").is_none_or(Value::is_number)
             && p.get("linked").is_none_or(Value::is_boolean)
             && p.get("preset").is_none_or(Value::is_string)
-    })
+    }) && data
+        .get("raster")
+        .is_none_or(|r| r.get("dpi").is_none_or(Value::is_number))
 }
 fn optional_string_fields(data: &Value, names: &[&str]) -> bool {
     names

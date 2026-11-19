@@ -410,6 +410,14 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - Long press on the Main toolbar's Shape Tool now opens the shape choices (it had none),
      and the button shows the shape last used.
 
+17i. TIFF resolution
+   - TIFF export is set by resolution: 600 DPI by default, any value from 100 to 1000.
+     Without the export preview it is a "Resolution (DPI)" box in place of the 1x-4x scale;
+     with the preview on, the size section's DPI box starts at 600 and allows 100-1000,
+     the pixel size following the page's real size at that resolution.
+   - The DPI is written into the TIFF file, so it places at its drawn size; the file is
+     LZW-compressed (lossless). The longest side is still limited to 8192 pixels.
+
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
      installer and publishes it as a pre-release on this fork's Releases page, with
@@ -486,3 +494,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Arc arrowheads: added filled heads half-width, curved heads centred on the curve
 (next)  Shape tool: triangle, star, ball and cylinder; long press on the Main toolbar's Shape Tool
 (next)  Star and triangle resize as whole shapes
+(next)  TIFF export: 600 DPI by default, 100-1000 DPI, resolution written into the file

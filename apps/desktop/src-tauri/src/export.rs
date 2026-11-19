@@ -260,19 +260,46 @@ fn encode_raster(
                 .map_err(|error| format!("Could not encode GIF export: {error}"))?;
         }
         RasterExportFormat::Tiff => {
-            let image = image::RgbImage::from_raw(
-                width,
-                height,
-                flatten_to_rgb(pixmap.data(), background.unwrap_or([255, 255, 255])),
-            )
-            .ok_or("Could not prepare TIFF raster export data.")?;
-            DynamicImage::ImageRgb8(image)
-                .write_to(&mut cursor, ImageFormat::Tiff)
-                .map_err(|error| format!("Could not encode TIFF export: {error}"))?;
+            let rgb = flatten_to_rgb(pixmap.data(), background.unwrap_or([255, 255, 255]));
+            write_tiff(&mut cursor, width, height, &rgb, pixels_per_inch)?;
         }
     }
 
     Ok((cursor.into_inner(), warnings))
+}
+
+/// An RGB TIFF, LZW-compressed (lossless, read everywhere), recording its resolution in pixels per
+/// inch when known so the image places at its drawn size.
+fn write_tiff(
+    cursor: &mut Cursor<Vec<u8>>,
+    width: u32,
+    height: u32,
+    rgb: &[u8],
+    pixels_per_inch: Option<f64>,
+) -> Result<(), String> {
+    let encode_error = |error: tiff::TiffError| format!("Could not encode TIFF export: {error}");
+    let mut encoder = tiff::encoder::TiffEncoder::new(cursor)
+        .map_err(encode_error)?
+        .with_compression(tiff::encoder::Compression::Lzw)
+        .with_predictor(tiff::encoder::Predictor::Horizontal);
+    let mut image = encoder
+        .new_image::<tiff::encoder::colortype::RGB8>(width, height)
+        .map_err(encode_error)?;
+    if let Some(pixels_per_inch) = pixels_per_inch.filter(|ppi| ppi.is_finite() && *ppi > 0.0) {
+        // Hundredths keep a fractional density (an exact 600, or 600 after rounding the pixel
+        // size) without overflowing the 32-bit numerator.
+        let hundredths = (pixels_per_inch * 100.0)
+            .round()
+            .clamp(1.0, f64::from(u32::MAX)) as u32;
+        image.resolution(
+            tiff::tags::ResolutionUnit::Inch,
+            tiff::encoder::Rational {
+                n: hundredths,
+                d: 100,
+            },
+        );
+    }
+    image.write_data(rgb).map_err(encode_error)
 }
 
 fn straight_rgba(data: &[u8]) -> Vec<u8> {
@@ -514,6 +541,40 @@ mod tests {
             max_dimension_px: None,
             css_px_per_inch: None,
         }
+    }
+
+    #[test]
+    fn tiff_records_the_resolution_it_was_rendered_at() {
+        // 600 DPI on a 96 css-px/inch source: scale 6.25, and 600 pixels per inch in the file.
+        let response = rasterize_svg_impl(RasterExportRequest {
+            scale: Some(600.0 / 96.0),
+            css_px_per_inch: Some(96.0),
+            ..request(RasterExportFormat::Tiff)
+        })
+        .expect("TIFF export should encode");
+        assert_eq!((response.width, response.height), (400, 200));
+
+        let mut decoder =
+            tiff::decoder::Decoder::new(Cursor::new(response.bytes)).expect("TIFF should decode");
+        assert_eq!(decoder.dimensions().expect("dimensions"), (400, 200));
+        let rational = |tag| match decoder_tag(&mut decoder, tag) {
+            tiff::decoder::ifd::Value::Rational(n, d) => f64::from(n) / f64::from(d),
+            other => panic!("expected a rational resolution, got {other:?}"),
+        };
+        assert!((rational(tiff::tags::Tag::XResolution) - 600.0).abs() < 0.01);
+        assert!((rational(tiff::tags::Tag::YResolution) - 600.0).abs() < 0.01);
+        assert_eq!(
+            decoder_tag(&mut decoder, tiff::tags::Tag::ResolutionUnit),
+            tiff::decoder::ifd::Value::Short(2)
+        );
+        assert!(decoder.read_image().is_ok(), "pixel data must decode");
+    }
+
+    fn decoder_tag(
+        decoder: &mut tiff::decoder::Decoder<Cursor<Vec<u8>>>,
+        tag: tiff::tags::Tag,
+    ) -> tiff::decoder::ifd::Value {
+        decoder.get_tag(tag).expect("tag present")
     }
 
     #[test]

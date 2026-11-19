@@ -7,6 +7,27 @@ import type { ExportOptions, ExportFrame, ExportPreviewResult, ExportDialogState
 import { exportOptions, validExportOptions } from "./exportOptionsValidation";
 import { detectDialogPlatform, type DialogPlatform } from "./dialogProtocol";
 import { defaultExportPresentation, exportDialogHeight, exportDialogSizeError } from "./exportPresentation";
+import { presentationDpiRange, TIFF_DEFAULT_DPI, TIFF_MAX_DPI, TIFF_MIN_DPI, tiffDpi, tiffDpiRangeMessage, validTiffDpi } from "./tiffResolution";
+
+/** TIFF resolution box. Only a value in range is applied; anything else stays in the box with a note,
+ *  so the export options never carry an out-of-range DPI. */
+function TiffDpiInput({ value, disabled, onChange }: { value: number; disabled: boolean; onChange: (dpi: number) => void }) {
+  const [draft, setDraft] = useState<string | undefined>();
+  const shown = draft ?? String(value);
+  const invalid = draft !== undefined && !validTiffDpi(Number(draft));
+  return <>
+    <label style={exportDialogLabelStyle} htmlFor="chemdraft-export-tiff-dpi">Resolution (DPI, {TIFF_MIN_DPI}-{TIFF_MAX_DPI})</label>
+    <input id="chemdraft-export-tiff-dpi" disabled={disabled} type="number" min={TIFF_MIN_DPI} max={TIFF_MAX_DPI} step={1}
+      value={shown} style={exportDialogInputStyle} aria-invalid={invalid || undefined}
+      onChange={(event) => {
+        const text = event.currentTarget.value;
+        const dpi = Number(text);
+        if (text.trim() !== "" && validTiffDpi(dpi)) { setDraft(undefined); onChange(dpi); } else setDraft(text);
+      }}
+      onBlur={() => setDraft(undefined)} />
+    {invalid ? <p role="alert" style={exportDialogWarningStyle}>{tiffDpiRangeMessage}</p> : null}
+  </>;
+}
 const rasterExportFormatsByFormatId: Partial<Record<ExportFormatId, NativeRasterExportFormat>> = {
   png: "png",
   jpeg: "jpeg",
@@ -73,7 +94,8 @@ function ExportFormBody({
   }, [onCancel, platform]);
   const feedback = useRef<HTMLParagraphElement>(null);
   useEffect(() => { if (error || notice) feedback.current?.scrollIntoView?.({ block: "nearest" }); }, [error, notice]);
-  const defaultPresentation = useMemo(() => defaultExportPresentation(frame?.page ?? { width: 800, height: 600 }), [frame?.page.width, frame?.page.height]);
+  const defaultPresentation = useMemo(() => defaultExportPresentation(frame?.page ?? { width: 800, height: 600 }, state.format), [frame?.page.width, frame?.page.height, state.format]);
+  const dpiRange = presentationDpiRange(state.format);
   const presentation = state.presentation ?? defaultPresentation;
   const visual = state.format === "svg" || state.format === "pdf" || rasterExportFormatForDialogFormat(state.format) !== undefined;
   const dimensions = frame?.[presentation.crop] ?? frame?.page ?? { width: 800, height: 600 };
@@ -232,7 +254,7 @@ function ExportFormBody({
           <label style={exportDialogLabelStyle}><input type="checkbox" disabled={state.busy} checked={presentation.linked !== false} onChange={(event) => changePresentation({ linked: event.currentTarget.checked, height: event.currentTarget.checked ? undefined : height })} />Link width and height</label>
           <label style={exportDialogLabelStyle}>Width (px)<input disabled={state.busy} type="number" min={1} max={8192} value={numberValue(width)} onChange={(event) => changePresentation({ width: readNumber(event.currentTarget.value) })} /></label>
           <label style={exportDialogLabelStyle}>Height (px){presentation.linked !== false ? " (aspect ratio linked)" : ""}<input disabled={state.busy} type="number" min={1} max={8192} value={numberValue(height)} onChange={(event) => changePresentation(presentation.linked === false ? { height: readNumber(event.currentTarget.value) } : { height: readNumber(event.currentTarget.value), width: Math.round(readNumber(event.currentTarget.value) / ratio) })} /></label>
-          <label style={exportDialogLabelStyle}>DPI<input disabled={state.busy} type="number" min={36} max={1200} step="any" value={numberValue(dpi)} onChange={(event) => changePresentation({ dpi: readNumber(event.currentTarget.value) })} /></label>
+          <label style={exportDialogLabelStyle}>DPI{state.format === "tiff" ? ` (${dpiRange.min}-${dpiRange.max})` : ""}<input disabled={state.busy} type="number" min={dpiRange.min} max={dpiRange.max} step="any" value={numberValue(dpi)} onChange={(event) => changePresentation({ dpi: readNumber(event.currentTarget.value) })} /></label>
           <label style={exportDialogLabelStyle}>Physical width (mm)<input disabled={state.busy} type="text" inputMode="decimal" value={physicalDraft?.axis === "width" ? physicalDraft.value : numberValue(Number((width / dpi * 25.4).toFixed(2)))} onBlur={() => setPhysicalDraft(undefined)} onChange={(event) => {
             const value = event.currentTarget.value;
             setPhysicalDraft({ axis: "width", value });
@@ -366,7 +388,10 @@ function ExportFormBody({
         {rasterFormat ? (
           <fieldset style={exportDialogFieldsetStyle}>
             <legend style={exportDialogLegendStyle}>{descriptor.menuLabel}</legend>
-            {!previewEnabled ? <>
+            {!previewEnabled && rasterFormat === "tiff" ? (
+              <TiffDpiInput disabled={state.busy} value={tiffDpi(state.raster)} onChange={(dpi) => onRasterOptionsChange({ dpi })} />
+            ) : null}
+            {!previewEnabled && rasterFormat !== "tiff" ? <>
             <label style={exportDialogLabelStyle} htmlFor="chemdraft-export-raster-scale">
               Scale
             </label>
@@ -498,7 +523,7 @@ export function ExportForm({ state: ownerState, onChange: publish, onReady, ...p
   };
   useEffect(() => { onReady?.(); }, [onReady]);
   return <ExportFormBody {...props} state={state} previewEnabled={previewEnabled}
-    onPresentationChange={presentation => onChange({ ...state, presentation: { ...(state.presentation ?? defaultExportPresentation(props.frame?.page ?? { width: 800, height: 600 })), ...presentation }, ...(presentation.preset && presentation.preset !== "custom" ? { raster: { ...state.raster, background: "white", maxDimensionPx: 8192, jpegQuality: 90 } } : {}) })}
+    onPresentationChange={presentation => onChange({ ...state, presentation: { ...(state.presentation ?? defaultExportPresentation(props.frame?.page ?? { width: 800, height: 600 }, state.format)), ...presentation }, ...(presentation.preset && presentation.preset !== "custom" ? { raster: { ...state.raster, background: "white", maxDimensionPx: 8192, jpegQuality: 90 } } : {}) })}
     onFilenameChange={filename => onChange({ ...state, filename, destinationPath: undefined })}
     onFormatChange={format => {
       const visual = format === "svg" || format === "pdf" || rasterExportFormatForDialogFormat(format) !== undefined;
@@ -515,10 +540,23 @@ export function updateExportDialogFormat(state: ExportDialogState, format: Expor
   const descriptor = getExportFormatDescriptor(format);
   const rasterFormat = rasterExportFormatForDialogFormat(format);
   const filename = replaceExportFileExtension(state.filename, descriptor);
+  // A size set up for another format with a DPI TIFF does not allow moves to 600 DPI, keeping its
+  // physical size (the pixel width grows with the resolution, up to 8192 px).
+  const presentation = format === "tiff" && state.presentation && !validTiffDpi(state.presentation.dpi)
+    ? {
+        ...state.presentation,
+        dpi: TIFF_DEFAULT_DPI,
+        width: Math.min(8192, Math.max(1, Math.round(state.presentation.width * TIFF_DEFAULT_DPI / state.presentation.dpi))),
+        height: state.presentation.height === undefined ? undefined
+          : Math.min(8192, Math.max(1, Math.round(state.presentation.height * TIFF_DEFAULT_DPI / state.presentation.dpi))),
+        preset: "custom" as const
+      }
+    : state.presentation;
   return {
     ...state,
     format,
     filename,
+    presentation,
     destinationPath: undefined,
     raster: {
       ...state.raster,

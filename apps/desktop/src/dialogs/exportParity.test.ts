@@ -47,7 +47,10 @@ describe("Export form preserves the existing export pipeline", () => {
     const result = await createDialogExportResult(document, { ...exportFixture(), format, busy: false, raster });
     const transparent = format === "png";
     const svg = exportPhase4Svg(document, { includeWarnings: true, background: transparent ? "transparent" : "#ffffff" });
-    expect(rasterizeSvgNative).toHaveBeenLastCalledWith(svg.contents, format, { scale: 3, background: transparent ? "transparent" : "#ffffff", jpegQuality: 83, maxDimensionPx: 4096 });
+    // TIFF renders at its resolution (600 DPI by default: 6.25x the drawing's 96 px/in) and records
+    // it; the other formats keep the chosen scale.
+    const sizing = format === "tiff" ? { scale: 600 / 96, cssPxPerInch: 96 } : { scale: 3 };
+    expect(rasterizeSvgNative).toHaveBeenLastCalledWith(svg.contents, format, { ...sizing, background: transparent ? "transparent" : "#ffffff", jpegQuality: 83, maxDimensionPx: 4096 });
     expect(result.kind === "binary" && result.bytes).toEqual(new Uint8Array([1, 2, 3]));
     expect(result.warnings).toEqual([...svg.warnings, { message: "Raster warning" }]);
   });
