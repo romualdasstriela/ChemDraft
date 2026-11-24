@@ -417,6 +417,8 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      the pixel size following the page's real size at that resolution.
    - The DPI is written into the TIFF file, so it places at its drawn size; the file is
      LZW-compressed (lossless). The longest side is still limited to 8192 pixels.
+   - Subscripts and superscripts in text no longer gain a space on each side in TIFF, PNG,
+     JPEG, BMP and GIF exports ("PCl 3" now reads PCl3, as on the canvas).
 
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
@@ -495,3 +497,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Shape tool: triangle, star, ball and cylinder; long press on the Main toolbar's Shape Tool
 (next)  Star and triangle resize as whole shapes
 (next)  TIFF export: 600 DPI by default, 100-1000 DPI, resolution written into the file
+(next)  Picture exports: no spaces around subscripts and superscripts in text

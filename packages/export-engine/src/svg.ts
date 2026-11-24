@@ -110,12 +110,20 @@ function serializeSvgFragment(fragment: PageSvgFragment, indent: number): string
   }
 
   const attrs = serializeSvgAttributes(fragment.attrs);
-  const children = fragment.children
-    .map((child) => serializeSvgFragment(child, indent + 2))
-    .filter((child) => child.length > 0);
   if (fragment.children.length === 0) {
     return `${pad}<${fragment.tag}${attrs} />`;
   }
+
+  // Inside text, whitespace between runs is content: a line break and indentation between two
+  // <tspan>s reads as a space, so "PCl" + subscript "3" rendered as "PCl 3" in every rasterized
+  // export. Keep a text element's content on one line, its runs touching.
+  if (fragment.tag === "text" || fragment.tag === "tspan") {
+    return `${pad}${serializeSvgInlineFragment(fragment)}`;
+  }
+
+  const children = fragment.children
+    .map((child) => serializeSvgFragment(child, indent + 2))
+    .filter((child) => child.length > 0);
 
   if (fragment.children.every((child) => child.kind === "text")) {
     return `${pad}<${fragment.tag}${attrs}>${fragment.children.map((child) => child.kind === "text" ? escapeXml(child.text) : "").join("")}</${fragment.tag}>`;
@@ -126,6 +134,21 @@ function serializeSvgFragment(fragment: PageSvgFragment, indent: number): string
     ...children,
     `${pad}</${fragment.tag}>`
   ].join("\n");
+}
+
+/** A fragment and its children with no whitespace added between them (text content). */
+function serializeSvgInlineFragment(fragment: PageSvgFragment): string {
+  if (fragment.kind === "text") {
+    return escapeXml(fragment.text);
+  }
+  if (shouldSkipExportFragment(fragment)) {
+    return "";
+  }
+  const attrs = serializeSvgAttributes(fragment.attrs);
+  if (fragment.children.length === 0) {
+    return `<${fragment.tag}${attrs} />`;
+  }
+  return `<${fragment.tag}${attrs}>${fragment.children.map(serializeSvgInlineFragment).join("")}</${fragment.tag}>`;
 }
 
 function serializeSvgAttributes(attrs: Record<string, PageSvgAttributeValue>): string {

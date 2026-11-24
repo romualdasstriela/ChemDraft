@@ -346,6 +346,12 @@ describe("exportDocumentToSvg", () => {
     expect(result.contents).toContain(">H</tspan>");
     expect(result.contents).toContain(">2</tspan>");
     expect(result.contents).toContain(">O</tspan>");
+    // No whitespace between the runs: renderers read a line break there as a space ("H 2 O").
+    const text = /<text[^>]*data-object-id="text_script_export_001"[^>]*>([\s\S]*?)<\/text>/.exec(result.contents)?.[1];
+    expect(text).toBeDefined();
+    expect(text).not.toMatch(/>\s+</);
+    expect(text).not.toMatch(/^\s|\s$/);
+    expect(text!.replace(/<[^>]+>/g, "")).toBe("H2O");
   });
 
   it("exports condensed atom labels with numeric subscripts", () => {
