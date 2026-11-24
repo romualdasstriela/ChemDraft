@@ -340,7 +340,11 @@ describe("exportDocumentToSvg", () => {
 
     expect(result.warnings).toEqual([]);
     expect(result.contents).toContain('data-object-id="text_script_export_001"');
-    expect(result.contents).toContain('baseline-shift="sub"');
+    // The subscript drops 0.34 of the 20 px text size (as atom labels do), and the run after it
+    // climbs back to the baseline.
+    expect(result.contents).toMatch(/<tspan dy="6\.8"[^>]*font-size="72%"[^>]*>2<\/tspan>/);
+    expect(result.contents).toMatch(/<tspan dy="-6\.8"[^>]*>O<\/tspan>/);
+    expect(result.contents).not.toContain('baseline-shift="sub"');
     expect(result.contents).toContain('font-size="72%"');
     expect(result.contents).toContain('fill="#1f5fbf"');
     expect(result.contents).toContain(">H</tspan>");
@@ -352,6 +356,17 @@ describe("exportDocumentToSvg", () => {
     expect(text).not.toMatch(/>\s+</);
     expect(text).not.toMatch(/^\s|\s$/);
     expect(text!.replace(/<[^>]+>/g, "")).toBe("H2O");
+
+    // A line ending in a subscript: the next line starts one line-advance (20 x 1.2 = 24) below the
+    // true baseline, its step reduced by the subscript drop still in effect.
+    const twoLines = applyPatch(
+      createEmptyDocument({ title: "Text Script Lines", now: timestamp }),
+      { op: "addObject", pageId: "page_001", object: { ...textObject, id: "text_script_lines_001", text: "CH4\nNext",
+        spans: [{ text: "CH", script: "normal", style: {} }, { text: "4", script: "subscript", style: {} }, { text: "\nNext", script: "normal", style: {} }] } },
+      { now: timestamp }
+    );
+    const lines = exportDocumentToSvg(twoLines).contents;
+    expect(lines).toMatch(/<tspan dy="6\.8"[^>]*>4<\/tspan><tspan x="[\d.]+" dy="17\.2"[^>]*>Next<\/tspan>/);
   });
 
   it("exports condensed atom labels with numeric subscripts", () => {

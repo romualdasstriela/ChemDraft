@@ -3543,8 +3543,9 @@ function planTextObjectSvg(object: TextObject, layerIndex: number): PageSvgEleme
     : textStyle.textAlign === "right" ? object.x + object.width : object.x;
   const y = object.y + textStyle.fontSizePx;
   const lineAdvance = textStyle.fontSizePx * textStyle.lineHeight + textStyle.paragraphSpacingPx;
+  const baseline = { drop: 0 };
   const lineFragments = lines.length > 0
-    ? lines.flatMap((line, lineIndex) => textSpanLineFragments(line, lineIndex, x, lineAdvance))
+    ? lines.flatMap((line, lineIndex) => textSpanLineFragments(line, lineIndex, x, lineAdvance, textStyle.fontSizePx, baseline))
     : [elementFragment("tspan", `text-empty-${object.id}`, { x }, [])];
 
   return elementFragment("text", `object-${object.id}`, objectAttributes(object, layerIndex, {
@@ -3562,26 +3563,44 @@ function planTextObjectSvg(object: TextObject, layerIndex: number): PageSvgEleme
   }), lineFragments);
 }
 
+/** How far a subscript in text drops below the baseline, as a share of the text size: the same drop
+ *  atom labels use (`atomLabelScriptOffsetY`), so CH2 in a caption matches CH2 on a structure. */
+export const TEXT_SUBSCRIPT_DROP_EM = 0.34;
+
 function textSpanLineFragments(
   line: TextSpan[],
   lineIndex: number,
   x: number,
-  lineAdvancePx: number
+  lineAdvancePx: number,
+  fontSizePx: number,
+  baseline: { drop: number }
 ): PageSvgElementFragment[] {
+  // A subscript drops by an explicit `dy` rather than `baseline-shift="sub"`, whose depth each
+  // renderer picks for itself (the raster exporter barely lowered it). `dy` accumulates — across
+  // lines too — so each run moves by the difference from the run before it: the run after a
+  // subscript climbs back, and a line after one ending in a subscript starts from the true baseline.
   if (line.length === 0) {
+    const dy = (lineIndex === 0 ? 0 : lineAdvancePx) - baseline.drop;
+    baseline.drop = 0;
     return [
       elementFragment("tspan", `text-line-empty-${lineIndex}`, {
         x,
-        dy: lineIndex === 0 ? undefined : lineAdvancePx
+        dy: Math.abs(dy) > 1e-9 ? formatNumber(dy) : undefined
       })
     ];
   }
 
-  return line.map((span, spanIndex) =>
-    elementFragment("tspan", `text-line-${lineIndex}-${spanIndex}-${span.text}`, {
+  const drop = fontSizePx * TEXT_SUBSCRIPT_DROP_EM;
+  return line.map((span, spanIndex) => {
+    const previousDrop = baseline.drop;
+    const spanDrop = span.script === "subscript" ? drop : 0;
+    const lineStep = spanIndex === 0 && lineIndex > 0 ? lineAdvancePx : 0;
+    const dy = lineStep + spanDrop - previousDrop;
+    baseline.drop = spanDrop;
+    return elementFragment("tspan", `text-line-${lineIndex}-${spanIndex}-${span.text}`, {
       x: spanIndex === 0 ? x : undefined,
-      dy: spanIndex === 0 && lineIndex > 0 ? lineAdvancePx : undefined,
-      "baseline-shift": span.script === "normal" ? undefined : span.script === "superscript" ? "super" : "sub",
+      dy: Math.abs(dy) > 1e-9 ? formatNumber(dy) : undefined,
+      "baseline-shift": span.script === "superscript" ? "super" : undefined,
       "font-size": span.script === "normal" ? metadataNumber(span.style.fontSizePx) : "72%",
       fill: metadataString(span.style.color),
       "font-family": metadataString(span.style.fontFamily),
@@ -3589,8 +3608,8 @@ function textSpanLineFragments(
       "font-style": metadataFontStyle(span.style.fontStyle),
       "text-decoration": metadataString(span.style.textDecoration),
       "letter-spacing": metadataNumber(span.style.letterSpacingPx)
-    }, [textFragment(`text-line-${lineIndex}-${spanIndex}-text`, span.text)])
-  );
+    }, [textFragment(`text-line-${lineIndex}-${spanIndex}-text`, span.text)]);
+  });
 }
 
 function textObjectSpanLines(object: TextObject): TextSpan[][] {

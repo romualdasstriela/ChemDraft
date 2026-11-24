@@ -6062,8 +6062,10 @@ textarea:focus-visible,
   line-height: 0;
 }
 
+/* The drawn text's subscript drop (layout-engine TEXT_SUBSCRIPT_DROP_EM, 0.34 of the text size), in
+   the run's own 0.72em size: 0.34 / 0.72 = 0.472em, so editing shows what the page and exports draw. */
 .text-object-run[data-text-script="subscript"] {
-  vertical-align: sub;
+  vertical-align: -0.472em;
 }
 
 .text-object-run[data-text-script="superscript"] {
