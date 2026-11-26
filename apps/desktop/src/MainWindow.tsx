@@ -97,10 +97,9 @@ import {
   type NativeTextStyle,
   type ObjectReorderPlacement,
   type TextObject,
-  type TextSpan,
-  AcsDocument1996StylePreset,
-  AcsDocument1996TextStyle
+  type TextSpan
 } from "@chemdraft/chem-core";
+import { APP_NEW_STRUCTURE_STYLE_PRESET, APP_NEW_TEXT_STYLE } from "./appStyle";
 import { abbreviationDefinitionFromNickname, nicknameGraphFromDrawing, tryNativeSingleBondGraphSmiles } from "@chemdraft/document-workflow-core";
 import { atomLabelDraftDocumentUnchanged, createAtomLabelDraftRollback, documentOwnsAtomLabelDraft, recordAtomLabelDraftRollback, restoreAtomLabelDraft, type AtomLabelDraftState } from "./atomLabelDraft";
 import type { EditorSaveResult } from "@chemdraft/editor-adapter";
@@ -1693,11 +1692,8 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.26.12.10-opus";
-/** The style the app draws new structures in: the ACS Document 1996 journal style. */
-export const APP_NEW_STRUCTURE_STYLE_PRESET = AcsDocument1996StylePreset;
-/** The style new text starts with: the same journal style's Arial 10 pt. */
-export const APP_NEW_TEXT_STYLE: NativeTextStyle = { ...DefaultNativeTextStyle, ...AcsDocument1996TextStyle };
+const CURRENT_BUILD_STAMP = "11.26.15.20-opus";
+export { APP_NEW_STRUCTURE_STYLE_PRESET, APP_NEW_TEXT_STYLE };
 
 /** Called once when the app's document window loads (App.tsx), before anything is drawn. */
 export function applyAppNewStructureStyle(): void {

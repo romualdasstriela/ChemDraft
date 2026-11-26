@@ -20,6 +20,8 @@ import { broadcastCompoundLayoutSettings, broadcastKeybindingSettings, broadcast
 import { CHOOSE_NICKNAME_FOLDER_COMMAND_ID } from "./commands";
 import { saveNicknameSettings } from "./nicknames/nicknameSettings";
 import { useUserNicknames } from "./nicknames/userNicknames";
+import { APP_NEW_STRUCTURE_STYLE_PRESET, APP_NEW_TEXT_STYLE } from "./appStyle";
+import { CM_UNIT, PT_UNIT, formatStyleLength } from "./styleUnits";
 
 interface RadioOption<T extends string> {
   value: T;
@@ -93,6 +95,52 @@ function PreferenceRadioGroup<T extends string>({ legend, hint, name, options, v
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/**
+ * Preferences ▸ Style: the drawing style new structures and new text start in, with its settings in
+ * centimetres (the units a journal's style sheet gives). Existing drawings keep their own style;
+ * Drawn Structure Settings changes the selected structure.
+ */
+function StyleSection() {
+  const preset = APP_NEW_STRUCTURE_STYLE_PRESET;
+  const drawing = preset.drawing;
+  const cm = (px: number) => formatStyleLength(px, CM_UNIT);
+  const pt = (px: number) => formatStyleLength(px, PT_UNIT);
+  const fontName = (family: string) => family.split(",")[0]?.trim() ?? family;
+  const spacing = drawing.bondSpacingMode === "percent"
+    ? `${drawing.bondSpacingPercent}% of bond length`
+    : cm(drawing.multipleBondGapPx);
+  const rows: Array<[string, string]> = [
+    ["Bond length", cm(drawing.bondLengthPx)],
+    ["Line width", cm(drawing.bondStrokeWidthPx)],
+    ["Bold width", cm(drawing.bondBoldWidthPx)],
+    ["Double-bond spacing", spacing],
+    ["Margin width", cm(drawing.bondMarginWidthPx)],
+    ["Hash spacing", cm(drawing.bondHashSpacingPx)],
+    ["Chain angle", `${drawing.chainAngleDegrees}°`],
+    ["Atom labels", `${fontName(drawing.atomLabelFontFamily)} ${pt(drawing.atomLabelFontSizePx)}`],
+    ["Text captions", `${fontName(APP_NEW_TEXT_STYLE.fontFamily)} ${pt(APP_NEW_TEXT_STYLE.fontSizePx)}, flush left`]
+  ];
+  return (
+    <section className="preferences-section" aria-labelledby="drawing-style">
+      <h2 id="drawing-style">Style</h2>
+      <p className="preferences-section-hint">
+        New structures and new text start in this style. Drawings already on the page keep their own
+        style; change a selected structure with Drawn Structure Settings.
+      </p>
+      <p className="preferences-style-name" data-style-preset-id={preset.id}>
+        Default style: <strong>{preset.name}</strong> (ACS journal style)
+      </p>
+      <table className="preferences-style-table" aria-label="Default style settings">
+        <tbody>
+          {rows.map(([name, value]) => (
+            <tr key={name}><th scope="row">{name}</th><td>{value}</td></tr>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }
@@ -192,6 +240,8 @@ export function PreferencesWindow() {
       <header className="preferences-header">
         <h1>Preferences</h1>
       </header>
+
+      <StyleSection />
 
       <section className="preferences-section" aria-labelledby="compound-layout-tools">
         <h2 id="compound-layout-tools">Compound layout tools</h2>

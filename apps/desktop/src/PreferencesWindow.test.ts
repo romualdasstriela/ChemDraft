@@ -26,6 +26,26 @@ const selected = (name: string, value: string) =>
   new RegExp(`data-selected="true"><input[^>]*name="${name}"[^>]*value="${value}"`);
 
 describe("PreferencesWindow", () => {
+  it("shows the default style, ACS Document 1996, with its settings in centimetres", () => {
+    const markup = renderToStaticMarkup(createElement(PreferencesWindow));
+    expect(markup).toContain(">Style</h2>");
+    expect(markup).toContain('data-style-preset-id="chemdraft.acs-document-1996"');
+    expect(markup).toContain("<strong>ACS Document 1996</strong>");
+    for (const [name, value] of [
+      ["Bond length", "0.508 cm"],
+      ["Line width", "0.021 cm"],
+      ["Bold width", "0.071 cm"],
+      ["Double-bond spacing", "18% of bond length"],
+      ["Margin width", "0.056 cm"],
+      ["Hash spacing", "0.088 cm"],
+      ["Chain angle", "120°"],
+      ["Atom labels", "Arial 10 pt"],
+      ["Text captions", "Arial 10 pt, flush left"]
+    ]) {
+      expect(markup).toContain(`<th scope="row">${name}</th><td>${value}</td>`);
+    }
+  });
+
   it("offers export preview off by default and reflects the saved opt-in", () => {
     let markup = renderToStaticMarkup(createElement(PreferencesWindow));
     expect(markup).toContain("Export preview and size presets");

@@ -139,16 +139,18 @@ describe("PaletteWindow molecule inspector bridge", () => {
     if (expectedBondLength === null) {
       throw new Error("Fixture should yield a single (non-mixed) bond length.");
     }
-    expect(Math.round(Number(bondLengthInput.value))).toBe(Math.round(expectedBondLength));
+    // The field shows centimetres (page px are 96 to the inch).
+    expect(Number(bondLengthInput.value)).toBeCloseTo(expectedBondLength * 2.54 / 96, 2);
 
     // Forward path: editing the field COMMITS the command out through the palette bridge (Enter ->
     // onMoleculeInspectorCommit -> sendPaletteCommandCommit -> COMMIT channel) so the main window
     // applies it to the document. A preview-only regression would leave this channel empty.
     act(() => {
-      bondLengthInput.value = "20";
+      bondLengthInput.value = "0.508";
       bondLengthInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
-    expect(commandsByChannel.get(PALETTE_COMMAND_COMMIT_EVENT)).toContain(moleculeStructureBondLengthCommandId(20));
+    // 0.508 cm, sent on as 19.2 page px.
+    expect(commandsByChannel.get(PALETTE_COMMAND_COMMIT_EVENT)).toContain(moleculeStructureBondLengthCommandId(19.2));
   });
 
   it("commits Left/Center/Right for a multi-bond selection and explains disabled state", async () => {

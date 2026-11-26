@@ -274,6 +274,26 @@ body.preferences-window-body #root {
   color: var(--cd-text-secondary);
 }
 
+.preferences-style-name {
+  margin: 0 0 var(--cd-space-2);
+}
+
+.preferences-style-table {
+  border-collapse: collapse;
+}
+
+.preferences-style-table th,
+.preferences-style-table td {
+  padding: 2px var(--cd-space-4) 2px 0;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.preferences-style-table th {
+  font-weight: 400;
+  color: var(--cd-text-secondary);
+}
+
 .preferences-folder-row {
   display: flex;
   gap: var(--cd-space-2);

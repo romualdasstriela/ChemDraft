@@ -16,6 +16,7 @@ import { SortableContext, rectSortingStrategy, useSortable } from "@dnd-kit/sort
 import { CSS } from "@dnd-kit/utilities";
 import type { ToolsetGridLayout } from "@chemdraft/toolset-registry";
 import type { CommandSpec } from "./commands";
+import { CM_UNIT, PT_UNIT, displayToPx, pxToDisplay, type StyleDisplayUnit } from "./styleUnits";
 import { OfficeColorPalette } from "./toolbars/OfficeColorPalette";
 import {
   ToolbarWidgetStateContext,
@@ -1051,14 +1052,23 @@ function MoleculeInspectorControls({ ringOnly = false }: { ringOnly?: boolean })
   };
 
   const valueOrFallback = (value: number | null | undefined, fallback: number) => value ?? fallback;
+  // Lengths are stored in page pixels; with a display unit the field shows and takes that unit
+  // (centimetres, points) and converts back to pixels for the style command.
   const numericControl = (
     label: string,
-    value: number | null | undefined,
+    pxValue: number | null | undefined,
     mixed: boolean | undefined,
-    range: { min: number; max: number; step: number },
-    commandId: (value: number) => string,
-    disabled: boolean
+    pxRange: { min: number; max: number; step: number },
+    pxCommandId: (value: number) => string,
+    disabled: boolean,
+    unit?: StyleDisplayUnit
   ) => {
+    const value = unit && pxValue !== null && pxValue !== undefined ? pxToDisplay(pxValue, unit) : pxValue;
+    const range = unit
+      ? { min: pxToDisplay(pxRange.min, unit), max: pxToDisplay(pxRange.max, unit), step: unit.step }
+      : pxRange;
+    const commandId = unit ? (display: number) => pxCommandId(displayToPx(display, unit)) : pxCommandId;
+    const shownLabel = unit ? `${label} (${unit.label})` : label;
     const effectiveValue = valueOrFallback(value, range.min);
     const parseInputValue = (rawValue: string): number | undefined => {
       const trimmed = rawValue.trim();
@@ -1077,8 +1087,8 @@ function MoleculeInspectorControls({ ringOnly = false }: { ringOnly?: boolean })
       }
     };
     return (
-      <label className="molecule-inspector-field molecule-inspector-number-field">
-        <span>{label}</span>
+      <label className="molecule-inspector-field molecule-inspector-number-field" data-style-unit={unit?.label}>
+        <span>{shownLabel}</span>
         <input
           type="number"
           min={range.min}
@@ -1307,9 +1317,9 @@ function MoleculeInspectorControls({ ringOnly = false }: { ringOnly?: boolean })
       </div>
       {structureDisabled ? <p className="molecule-inspector-empty-message">Select a molecule, atom, bond, or ring to edit its parent molecule.</p> : null}
       {numericControl("Chain angle", structure?.values.chainAngleDegrees.value, structure?.values.chainAngleDegrees.mixed, moleculeStructureNumberRanges.chainAngleDegrees, moleculeStructureChainAngleCommandId, structureDisabled)}
-      {numericControl("Target bond length", structure?.values.bondLengthPx.value, structure?.values.bondLengthPx.mixed, moleculeStructureNumberRanges.bondLengthPx, moleculeStructureBondLengthCommandId, structureDisabled)}
-      {numericControl("Line width", structure?.values.bondStrokeWidthPx.value, structure?.values.bondStrokeWidthPx.mixed, moleculeStructureNumberRanges.bondStrokeWidthPx, moleculeStructureBondStrokeWidthCommandId, structureDisabled)}
-      {numericControl("Bold width", structure?.values.bondBoldWidthPx.value, structure?.values.bondBoldWidthPx.mixed, moleculeStructureNumberRanges.bondBoldWidthPx, moleculeStructureBondBoldWidthCommandId, structureDisabled)}
+      {numericControl("Target bond length", structure?.values.bondLengthPx.value, structure?.values.bondLengthPx.mixed, moleculeStructureNumberRanges.bondLengthPx, moleculeStructureBondLengthCommandId, structureDisabled, CM_UNIT)}
+      {numericControl("Line width", structure?.values.bondStrokeWidthPx.value, structure?.values.bondStrokeWidthPx.mixed, moleculeStructureNumberRanges.bondStrokeWidthPx, moleculeStructureBondStrokeWidthCommandId, structureDisabled, CM_UNIT)}
+      {numericControl("Bold width", structure?.values.bondBoldWidthPx.value, structure?.values.bondBoldWidthPx.mixed, moleculeStructureNumberRanges.bondBoldWidthPx, moleculeStructureBondBoldWidthCommandId, structureDisabled, CM_UNIT)}
       {colorControl("Bond color", structure?.values.bondColor.value, structure?.values.bondColor.mixed, moleculeStructureBondColorCommandId, structureDisabled)}
       <label className="molecule-inspector-field molecule-inspector-select-field">
         <span>Bond spacing</span>
@@ -1331,10 +1341,10 @@ function MoleculeInspectorControls({ ringOnly = false }: { ringOnly?: boolean })
         </select>
       </label>
       {numericControl("Spacing %", structure?.values.bondSpacingPercent.value, structure?.values.bondSpacingPercent.mixed, moleculeStructureNumberRanges.bondSpacingPercent, moleculeStructureBondSpacingPercentCommandId, structureDisabled)}
-      {numericControl("Spacing abs.", structure?.values.multipleBondGapPx.value, structure?.values.multipleBondGapPx.mixed, moleculeStructureNumberRanges.multipleBondGapPx, moleculeStructureMultipleBondGapCommandId, structureDisabled)}
-      {numericControl("Margin width", structure?.values.bondMarginWidthPx.value, structure?.values.bondMarginWidthPx.mixed, moleculeStructureNumberRanges.bondMarginWidthPx, moleculeStructureBondMarginWidthCommandId, structureDisabled)}
-      {numericControl("Hash spacing", structure?.values.bondHashSpacingPx.value, structure?.values.bondHashSpacingPx.mixed, moleculeStructureNumberRanges.bondHashSpacingPx, moleculeStructureBondHashSpacingCommandId, structureDisabled)}
-      {numericControl("Double-bond inset", structure?.values.doubleBondInsetPx.value, structure?.values.doubleBondInsetPx.mixed, moleculeStructureNumberRanges.doubleBondInsetPx, moleculeStructureDoubleBondInsetCommandId, structureDisabled)}
+      {numericControl("Spacing abs.", structure?.values.multipleBondGapPx.value, structure?.values.multipleBondGapPx.mixed, moleculeStructureNumberRanges.multipleBondGapPx, moleculeStructureMultipleBondGapCommandId, structureDisabled, CM_UNIT)}
+      {numericControl("Margin width", structure?.values.bondMarginWidthPx.value, structure?.values.bondMarginWidthPx.mixed, moleculeStructureNumberRanges.bondMarginWidthPx, moleculeStructureBondMarginWidthCommandId, structureDisabled, CM_UNIT)}
+      {numericControl("Hash spacing", structure?.values.bondHashSpacingPx.value, structure?.values.bondHashSpacingPx.mixed, moleculeStructureNumberRanges.bondHashSpacingPx, moleculeStructureBondHashSpacingCommandId, structureDisabled, CM_UNIT)}
+      {numericControl("Double-bond inset", structure?.values.doubleBondInsetPx.value, structure?.values.doubleBondInsetPx.mixed, moleculeStructureNumberRanges.doubleBondInsetPx, moleculeStructureDoubleBondInsetCommandId, structureDisabled, CM_UNIT)}
       <label className="molecule-inspector-field molecule-inspector-select-field">
         <span>Double-bond position</span>
         <select
@@ -1355,7 +1365,7 @@ function MoleculeInspectorControls({ ringOnly = false }: { ringOnly?: boolean })
           <option value="right">Right</option>
         </select>
       </label>
-      {numericControl("Overlap clearance", structure?.values.bondOverlapClearancePx.value, structure?.values.bondOverlapClearancePx.mixed, moleculeStructureNumberRanges.bondOverlapClearancePx, moleculeStructureOverlapClearanceCommandId, structureDisabled)}
+      {numericControl("Overlap clearance", structure?.values.bondOverlapClearancePx.value, structure?.values.bondOverlapClearancePx.mixed, moleculeStructureNumberRanges.bondOverlapClearancePx, moleculeStructureOverlapClearanceCommandId, structureDisabled, CM_UNIT)}
       <label className="molecule-inspector-field molecule-inspector-select-field">
         <span>Line cap</span>
         <select
@@ -1510,7 +1520,7 @@ function MoleculeInspectorControls({ ringOnly = false }: { ringOnly?: boolean })
           ))}
         </select>
       </label>
-      {numericControl("Size", atomLabels?.values.fontSizePx.value, atomLabels?.values.fontSizePx.mixed, moleculeAtomLabelNumberRanges.fontSizePx, moleculeAtomLabelFontSizeCommandId, atomLabelsDisabled)}
+      {numericControl("Size", atomLabels?.values.fontSizePx.value, atomLabels?.values.fontSizePx.mixed, moleculeAtomLabelNumberRanges.fontSizePx, moleculeAtomLabelFontSizeCommandId, atomLabelsDisabled, PT_UNIT)}
       {colorControl("Label color", atomLabels?.values.color.value, atomLabels?.values.color.mixed, moleculeAtomLabelColorCommandId, atomLabelsDisabled)}
       <label className="molecule-inspector-field molecule-inspector-background-field">
         <span>Background</span>
@@ -1555,8 +1565,8 @@ function MoleculeInspectorControls({ ringOnly = false }: { ringOnly?: boolean })
             </span>
           : null}
       </label>
-      {numericControl("Padding", atomLabels?.values.paddingPx.value, atomLabels?.values.paddingPx.mixed, moleculeAtomLabelNumberRanges.paddingPx, moleculeAtomLabelPaddingCommandId, atomLabelsDisabled)}
-      {numericControl("Bond clearance", atomLabels?.values.bondClearancePx.value, atomLabels?.values.bondClearancePx.mixed, moleculeAtomLabelNumberRanges.bondClearancePx, moleculeAtomLabelBondClearanceCommandId, atomLabelsDisabled)}
+      {numericControl("Padding", atomLabels?.values.paddingPx.value, atomLabels?.values.paddingPx.mixed, moleculeAtomLabelNumberRanges.paddingPx, moleculeAtomLabelPaddingCommandId, atomLabelsDisabled, CM_UNIT)}
+      {numericControl("Bond clearance", atomLabels?.values.bondClearancePx.value, atomLabels?.values.bondClearancePx.mixed, moleculeAtomLabelNumberRanges.bondClearancePx, moleculeAtomLabelBondClearanceCommandId, atomLabelsDisabled, CM_UNIT)}
       <label className="molecule-inspector-field">
         <span>Alignment</span>
         <select

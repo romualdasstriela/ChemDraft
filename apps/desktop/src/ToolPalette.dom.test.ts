@@ -709,12 +709,38 @@ describe("ToolPalette molecule inspector font controls", () => {
     });
     expect(onInvoke).not.toHaveBeenCalled();
 
-    // A real numeric edit still commits.
+    // A real numeric edit still commits. The field is in centimetres: 0.508 cm is 19.2 page px.
+    expect(bondLengthInput.closest("label")?.textContent).toContain("Target bond length (cm)");
     act(() => {
-      bondLengthInput.value = "20";
+      bondLengthInput.value = "0.508";
       bondLengthInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
-    expect(onInvoke).toHaveBeenCalledWith(moleculeStructureBondLengthCommandId(20));
+    expect(onInvoke).toHaveBeenCalledWith(moleculeStructureBondLengthCommandId(19.2));
+  });
+
+  it("shows structure lengths in centimetres and label size in points", async () => {
+    const model = createMoleculeInspectorModel(moleculeInspectorDocument(), { selectedObjectIds: ["mol_font"] });
+    await act(async () => {
+      root.render(createElement(ToolPalette, {
+        itemGroups: widgetOnlyItemGroups("core.drawnStructureSettings"),
+        activeTool: "tool.select",
+        orientation: "horizontal",
+        onInvoke: vi.fn(),
+        widgetState: { currentMoleculeInspector: model, onInvoke: vi.fn() }
+      }));
+    });
+    act(() => {
+      container.querySelector<HTMLButtonElement>("#molecule-inspector-tab-structure")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const field = (name: string) => container.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)!;
+    const bondLengthPx = model.structure!.values.bondLengthPx.value!;
+    expect(Number(field("Target bond length").value)).toBeCloseTo(bondLengthPx * 2.54 / 96, 2);
+    for (const name of ["Target bond length", "Line width", "Bold width", "Spacing abs.", "Margin width", "Hash spacing", "Double-bond inset", "Overlap clearance"]) {
+      expect(field(name).closest("label")?.getAttribute("data-style-unit")).toBe("cm");
+    }
+    // Angle and percentage keep their own units.
+    expect(field("Chain angle").closest("label")?.getAttribute("data-style-unit")).toBeNull();
+    expect(field("Spacing %").closest("label")?.getAttribute("data-style-unit")).toBeNull();
   });
 
   it("renders a Templates tab that routes import and export commands", async () => {
