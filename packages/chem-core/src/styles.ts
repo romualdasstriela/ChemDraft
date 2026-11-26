@@ -109,12 +109,21 @@ export const ChemDraftSyntheticStylePreset = {
   }
 } as const satisfies ChemDraftStylePreset;
 
+/** Page pixels (96 to the inch, the unit pages and exports are measured in) per typographic point. */
+const PAGE_PX_PER_PT = 96 / 72;
+const pagePxFromPt = (points: number) => points * PAGE_PX_PER_PT;
+/** The ACS Document 1996 bond length, 0.508 cm (14.4 pt), and its ratio to the synthetic preset's. */
+const ACS_BOND_LENGTH_PX = pagePxFromPt(14.4);
+const ACS_TO_SYNTHETIC = ACS_BOND_LENGTH_PX / ChemDraftSyntheticStylePreset.drawing.bondLengthPx;
+const ACS_LABEL_FONT_SIZE_PX = pagePxFromPt(10);
+const ACS_TO_SYNTHETIC_LABEL = ACS_LABEL_FONT_SIZE_PX / ChemDraftSyntheticStylePreset.drawing.atomLabelFontSizePx;
+
 /**
- * The ACS Document 1996 journal style: 14.4 pt bonds at 120°, 0.6 pt lines, 2.0 pt bold bonds,
- * double-bond spacing 18% of the bond length, 1.6 pt margins, 2.5 pt hash spacing, Arial 10 pt
- * labels. The values are what style-compat's style-sheet importer produces for that style sheet,
- * so a structure drawn with this preset matches one restyled by importing the sheet. Only the
- * line widths and the spacing mode differ from the synthetic preset.
+ * The ACS Document 1996 journal style, at its printed size on the page: 0.508 cm (14.4 pt) bonds at
+ * 120°, 0.021 cm (0.6 pt) lines, 0.071 cm (2.0 pt) bold bonds, double-bond spacing 18% of the bond
+ * length, 0.056 cm (1.6 pt) margins, 0.088 cm (2.5 pt) hash spacing, Arial 10 pt labels — the
+ * values its journal style sheet sets. Spacings with no style-sheet field (ring double-bond inset,
+ * crossing clearance) scale with the bond length, label clearances with the label size.
  */
 export const AcsDocument1996StylePreset = {
   id: "chemdraft.acs-document-1996",
@@ -123,12 +132,27 @@ export const AcsDocument1996StylePreset = {
   drawing: {
     ...ChemDraftSyntheticStylePreset.drawing,
     stylePresetId: "chemdraft.acs-document-1996",
-    bondStrokeWidthPx: 1.058,
-    bondBoldWidthPx: 4.233,
+    bondLengthPx: ACS_BOND_LENGTH_PX,
+    bondStrokeWidthPx: pagePxFromPt(0.6),
+    bondBoldWidthPx: pagePxFromPt(2),
     bondSpacingMode: "percent",
-    bondSpacingPercent: 18
+    bondSpacingPercent: 18,
+    multipleBondGapPx: ACS_BOND_LENGTH_PX * 0.18,
+    doubleBondInsetPx: ChemDraftSyntheticStylePreset.drawing.doubleBondInsetPx * ACS_TO_SYNTHETIC,
+    bondMarginWidthPx: pagePxFromPt(1.6),
+    bondHashSpacingPx: pagePxFromPt(2.5),
+    bondOverlapClearancePx: ChemDraftSyntheticStylePreset.drawing.bondOverlapClearancePx * ACS_TO_SYNTHETIC,
+    atomLabelFontSizePx: ACS_LABEL_FONT_SIZE_PX,
+    atomLabelPaddingPx: ChemDraftSyntheticStylePreset.drawing.atomLabelPaddingPx * ACS_TO_SYNTHETIC_LABEL,
+    atomLabelBondClearancePx: ChemDraftSyntheticStylePreset.drawing.atomLabelBondClearancePx * ACS_TO_SYNTHETIC_LABEL
   }
 } as const satisfies ChemDraftStylePreset;
+
+/** New text in the ACS Document 1996 style: Arial 10 pt, flush left. */
+export const AcsDocument1996TextStyle = {
+  fontFamily: "Arial, Helvetica, sans-serif",
+  fontSizePx: ACS_LABEL_FONT_SIZE_PX
+} as const satisfies Partial<NativeTextStyle>;
 
 /** Native drawing units per point for the fixed document preset. `DocumentStyleScale`
  * in layout-engine is its inverse, converting native coordinates to physical points. */

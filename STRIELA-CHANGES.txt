@@ -93,9 +93,15 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      now starts in the ACS Document 1996 journal style: 0.6 pt lines, 2.0 pt bold bonds,
      double-bond spacing 18% of the bond length, 14.4 pt bonds at 120 degrees, Arial 10 pt
      labels. Existing drawings and opened files keep their own style.
-   - The values are what ChemDraft's own .cds importer reads from "ACS Document 1996.cds";
-     the .cds file itself is not part of the repository. Structures the AI assistant and
-     the command-line tools build still use the original ChemDraft style.
+   - These are the printed sizes, as the journal style sets them: bonds 0.508 cm, lines
+     0.021 cm, bold bonds 0.071 cm, margins 0.056 cm, hash spacing 0.088 cm, labels Arial
+     10 pt. Templates, the first bond, and SMILES pasted into the drawing use the same bond
+     length; a ring added at one atom of an older structure takes that structure's length.
+     (Before, the style was about 15% larger with heavier lines and wider hashes.)
+   - New text starts in Arial 10 pt (was 13.5 pt).
+   - Importing a .cds style sheet still scales its values to the original ChemDraft style, so
+     an imported ACS sheet comes out larger than this default. Structures the AI assistant
+     and the command-line tools build still use the original ChemDraft style.
 
 7. Page zoom buttons
    - Zoom In and Zoom Out buttons at the right end of the Main toolbar. They, and Ctrl++ /
@@ -502,3 +508,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  TIFF export: 600 DPI by default, 100-1000 DPI, resolution written into the file
 (next)  Picture exports: no spaces around subscripts and superscripts in text
 (next)  Text subscripts drop as low as atom-label subscripts
+(next)  ACS default style at its printed size; new text Arial 10 pt

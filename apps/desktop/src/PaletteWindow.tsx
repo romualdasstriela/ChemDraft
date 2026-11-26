@@ -1,7 +1,7 @@
 import type { AnalysisReport } from "@chemdraft/analysis-core";
 import type { CompoundDataModel } from "./compoundData";
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent } from "react";
-import { DefaultNativeTextStyle, type NativeTextStyle, type TextSpan } from "@chemdraft/chem-core";
+import { AcsDocument1996TextStyle, DefaultNativeTextStyle, type NativeTextStyle, type TextSpan } from "@chemdraft/chem-core";
 import {
   APPENDABLE_TOOLBAR_WIDGETS,
   PALETTE_TOOLTIP_DOM_EVENT,
@@ -167,7 +167,8 @@ export function PaletteWindow({
   commandSpecsRef.current = commandSpecs;
   const [activeTool, setActiveTool] = useState("tool.select");
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
-  const [currentTextStyle, setCurrentTextStyle] = useState<NativeTextStyle>(DefaultNativeTextStyle);
+  // Until the document window sends its text style, show the one it starts with (ACS Arial 10 pt).
+  const [currentTextStyle, setCurrentTextStyle] = useState<NativeTextStyle>({ ...DefaultNativeTextStyle, ...AcsDocument1996TextStyle });
   const [currentTextScript, setCurrentTextScript] = useState<TextSpan["script"]>("normal");
   const [currentArtStyle, setCurrentArtStyle] = useState<ToolsetArtStylePayload | undefined>();
   const [currentArtStyleTarget, setCurrentArtStyleTarget] = useState<ToolsetArtPaintTarget>("fill");

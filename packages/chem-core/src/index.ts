@@ -169,6 +169,7 @@ export {
 
 export {
   AcsDocument1996StylePreset,
+  AcsDocument1996TextStyle,
   ChemDraftSyntheticStylePreset,
   DOCUMENT_STYLE_UNITS_PER_PT,
   DocumentMoleculeSizeStyle,

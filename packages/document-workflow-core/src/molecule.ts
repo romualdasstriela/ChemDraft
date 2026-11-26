@@ -48,6 +48,17 @@ export const nativeBondLengthPx = ChemDraftSyntheticStylePreset.drawing.bondLeng
 // same open proportions users expect from a chemical depiction engine.
 export const smilesPasteBondLengthPx = 28;
 
+/**
+ * The bond length a SMILES structure is built at: the caller's, else its journal style's own (a
+ * structure pasted into an ACS drawing matches the structures drawn beside it), else the paste
+ * default for the synthetic style.
+ */
+function smilesMoleculeBondLengthPx(source: SmilesMoleculeSource): number {
+  if (source.bondLengthPx !== undefined) return source.bondLengthPx;
+  const preset = source.stylePreset;
+  return preset && preset.id !== ChemDraftSyntheticStylePreset.id ? preset.drawing.bondLengthPx : smilesPasteBondLengthPx;
+}
+
 const nativeMoleculePadding = 8;
 
 /** A 2D depiction (atoms + wedge-aware bonds) produced from a SMILES by the OCL
@@ -126,7 +137,7 @@ export interface SmilesMoleculeSource {
   reservedObjectIds?: Set<string>;
   /** The drawing style the molecule starts with; the synthetic preset when omitted. */
   stylePreset?: ChemDraftStylePreset;
-  /** The bond length to draw at; SMILES paste's own larger default when omitted. */
+  /** The bond length to draw at; when omitted, a journal style's own, else SMILES paste's larger default. */
   bondLengthPx?: number;
 }
 
@@ -183,7 +194,7 @@ export function createSmilesMolecule(
     pseudoGraph,
     point,
     page,
-    source.bondLengthPx ?? smilesPasteBondLengthPx
+    smilesMoleculeBondLengthPx(source)
   ).map((atom) => ({
     id: atom.id,
     element: atom.element,
@@ -249,7 +260,7 @@ export function createSmilesMolecule(
     transform: defaultNativeMoleculeTransform,
     style: {
       ...stylePresetToObjectStyle(source.stylePreset ?? ChemDraftSyntheticStylePreset),
-      bondLengthPx: source.bondLengthPx ?? smilesPasteBondLengthPx,
+      bondLengthPx: smilesMoleculeBondLengthPx(source),
       source: source.styleSource
     },
     compatibility: {

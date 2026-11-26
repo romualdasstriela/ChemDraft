@@ -869,6 +869,11 @@ export const nativeChargeAssociationRadiusPx = nativeBondLengthPx * 1.15;
 export const nativeChargeMarkMaxMagnitude = 9;
 
 const nativeBondLength = nativeBondLengthPx;
+
+/** The bond length a structure is drawn at (its style's), for atoms and rings added to it. */
+function moleculeBondLength(molecule: MoleculeObject): number {
+  return nativeDrawingStyleFromObjectStyle(molecule.style).bondLengthPx;
+}
 const nativeCarbonSingleBondLengthAngstrom = 1.56;
 const atomHitRadius = nativeAtomHitRadiusPx;
 const bondHitRadius = 4;
@@ -1017,8 +1022,10 @@ export function createNativeSingleBondMolecule(
   // derives the same half-angle from its targetBondAngleDegrees).
   const chainAngleDegrees = nativeDrawingStyleFromObjectStyle(objectStyle).chainAngleDegrees;
   const firstBondHalfAngleRadians = degreesToRadians((180 - clamp(chainAngleDegrees, 1, 179)) / 2);
-  const halfDx = (nativeBondLength / 2) * Math.cos(firstBondHalfAngleRadians);
-  const halfDy = (nativeBondLength / 2) * Math.sin(firstBondHalfAngleRadians);
+  // The bond is as long as the style it is drawn in says (0.508 cm in the ACS style).
+  const bondLength = nativeDrawingStyleFromObjectStyle(objectStyle).bondLengthPx;
+  const halfDx = (bondLength / 2) * Math.cos(firstBondHalfAngleRadians);
+  const halfDy = (bondLength / 2) * Math.sin(firstBondHalfAngleRadians);
   const center = {
     x: clamp(point.x, halfDx, page.width - halfDx),
     y: clamp(point.y, halfDy, page.height - halfDy)
@@ -3116,7 +3123,7 @@ export function createNativeTemplateMolecule(
     x: clamp(point.x, nativeBondLength, page.width - nativeBondLength),
     y: clamp(point.y, nativeBondLength, page.height - nativeBondLength)
   };
-  const geometry = nativeTemplateGeometry(center, templateId);
+  const geometry = nativeTemplateGeometry(center, templateId, newNativeMoleculeStylePreset.drawing.bondLengthPx);
   const atoms = geometry.atoms;
   const bonds = geometry.bonds;
   const moleculeGeometry = moleculeGeometryFromAtoms(atoms);
@@ -3483,7 +3490,8 @@ export function applyNativeTemplateToolAtTarget(
 
 function nativeTemplateGeometry(
   center: PagePoint,
-  templateId: NativeMoleculeTemplateId
+  templateId: NativeMoleculeTemplateId,
+  bondLength: number = nativeBondLength
 ): { atoms: MoleculeAtom[]; bonds: MoleculeBond[] } {
   if (
     templateId === "cyclopropane" ||
@@ -3492,7 +3500,7 @@ function nativeTemplateGeometry(
     templateId === "cycloheptane" ||
     templateId === "cyclooctane"
   ) {
-    const atoms = regularNativeRingAtoms(center, nativeTemplateRingSize(templateId), -Math.PI / 2);
+    const atoms = regularNativeRingAtoms(center, nativeTemplateRingSize(templateId), -Math.PI / 2, bondLength);
     return { atoms, bonds: nativeRingBonds(atoms, () => ({ order: "single" })) };
   }
 
@@ -3500,12 +3508,12 @@ function nativeTemplateGeometry(
     // Vertex at the top (flat left/right sides) — the orientation ChemDraw stamps and the one
     // journals draw, so hotkey sprouts from the top/bottom vertices head vertically and the
     // side-vertex sprouts head out diagonally.
-    const atoms = regularNativeRingAtoms(center, 6, -Math.PI / 2);
+    const atoms = regularNativeRingAtoms(center, 6, -Math.PI / 2, bondLength);
     return { atoms, bonds: nativeRingBonds(atoms, () => ({ order: "single" })) };
   }
 
   if (templateId === "benzene") {
-    const atoms = regularNativeRingAtoms(center, 6, -Math.PI / 2);
+    const atoms = regularNativeRingAtoms(center, 6, -Math.PI / 2, bondLength);
     return {
       atoms,
       bonds: nativeRingBonds(atoms, (index, fromAtom, toAtom) => {
@@ -3521,11 +3529,11 @@ function nativeTemplateGeometry(
     };
   }
 
-  return nativeChairCyclohexaneGeometry(center, templateId === "chairCyclohexaneB");
+  return nativeChairCyclohexaneGeometry(center, templateId === "chairCyclohexaneB", bondLength);
 }
 
-function regularNativeRingAtoms(center: PagePoint, size: number, rotation: number): MoleculeAtom[] {
-  const radius = nativeBondLength / (2 * Math.sin(Math.PI / size));
+function regularNativeRingAtoms(center: PagePoint, size: number, rotation: number, bondLength: number = nativeBondLength): MoleculeAtom[] {
+  const radius = bondLength / (2 * Math.sin(Math.PI / size));
   return Array.from({ length: size }, (_, index) => {
     const angle = rotation + index * Math.PI * 2 / size;
     return {
@@ -3540,9 +3548,10 @@ function regularNativeRingAtoms(center: PagePoint, size: number, rotation: numbe
 
 function nativeChairCyclohexaneGeometry(
   center: PagePoint,
-  reflected: boolean
+  reflected: boolean,
+  bondLength: number = nativeBondLength
 ): { atoms: MoleculeAtom[]; bonds: MoleculeBond[] } {
-  const atoms = nativeChairCyclohexaneBasePoints(reflected).map((point, index) => ({
+  const atoms = nativeChairCyclohexaneBasePoints(reflected, bondLength).map((point, index) => ({
     id: `atom_${String(index + 1).padStart(3, "0")}`,
     element: "C",
     ...offsetPoint(center, point),
@@ -3552,15 +3561,15 @@ function nativeChairCyclohexaneGeometry(
   return { atoms, bonds: nativeRingBonds(atoms, () => ({ order: "single" })) };
 }
 
-function nativeChairCyclohexaneBasePoints(reflected: boolean): PagePoint[] {
+function nativeChairCyclohexaneBasePoints(reflected: boolean, bondLength: number = nativeBondLength): PagePoint[] {
   const points: PagePoint[] = [{ x: 0, y: 0 }];
 
   nativeChairCyclohexaneDirections(reflected).slice(0, -1).forEach((degrees) => {
     const previous = points[points.length - 1] ?? { x: 0, y: 0 };
     const radians = degrees * Math.PI / 180;
     points.push({
-      x: previous.x + Math.cos(radians) * nativeBondLength,
-      y: previous.y + Math.sin(radians) * nativeBondLength
+      x: previous.x + Math.cos(radians) * bondLength,
+      y: previous.y + Math.sin(radians) * bondLength
     });
   });
 
@@ -4011,7 +4020,7 @@ function attachNativeChairTemplateToAtom(
   point: PagePoint,
   reflected: boolean
 ): MoleculeObject | undefined {
-  const basePoints = nativeChairCyclohexaneBasePoints(reflected);
+  const basePoints = nativeChairCyclohexaneBasePoints(reflected, moleculeBondLength(molecule));
   const desiredDirection = nativeTemplateDirectionForAtom(molecule, sharedAtom, point);
   const candidates = basePoints.map((basePoint, sharedIndex) => {
     const centerVector = { x: -basePoint.x, y: -basePoint.y };
@@ -4607,7 +4616,8 @@ function nativeRingVerticesForSharedAtom(
   point: PagePoint,
   size: number
 ): PagePoint[] | undefined {
-  const radius = nativeBondLength / (2 * Math.sin(Math.PI / size));
+  // A ring sharing one atom takes the bond length of the structure it joins.
+  const radius = moleculeBondLength(molecule) / (2 * Math.sin(Math.PI / size));
   const centerDirection = nativeTemplateDirectionForAtom(molecule, sharedAtom, point);
   const center = {
     x: sharedAtom.x + Math.cos(centerDirection) * radius,
@@ -4683,7 +4693,7 @@ function nativeTemplateSpiroCrowding(
   size: number,
   direction: 1 | -1
 ): number {
-  const radius = nativeBondLength / (2 * Math.sin(Math.PI / size));
+  const radius = moleculeBondLength(molecule) / (2 * Math.sin(Math.PI / size));
   const step = Math.PI * 2 / size;
   const candidatePoints = Array.from({ length: size - 1 }, (_, index) => ({
     x: center.x + Math.cos(sharedAngle + direction * step * (index + 1)) * radius,
@@ -20052,9 +20062,10 @@ function carbonylOxygenPointForAtom(
   const angle = direction
     ? Math.atan2(direction.y, direction.x)
     : largestOpenAngle(neighborAnglesForAtom(molecule, atomId)) ?? -Math.PI / 2;
+  const bondLength = moleculeBondLength(molecule);
   const point = {
-    x: atom.x + Math.cos(angle) * nativeBondLength,
-    y: atom.y + Math.sin(angle) * nativeBondLength
+    x: atom.x + Math.cos(angle) * bondLength,
+    y: atom.y + Math.sin(angle) * bondLength
   };
 
   return {

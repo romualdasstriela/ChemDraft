@@ -25,10 +25,22 @@ function acsStyleSheetBytes(): Uint8Array {
 }
 
 describe("ACS Document 1996 preset", () => {
-  it("is exactly what the style-sheet importer makes of the ACS 1996 settings", () => {
+  it("draws the ACS 1996 style-sheet settings at their printed size", () => {
+    // The sheet's settings, as the importer reads them (angle and spacing need no unit change).
     const imported = importChemDrawStyleSheet(acsStyleSheetBytes()).preset.drawing;
-    const { stylePresetId: _importedId, ...importedDrawing } = imported;
-    const { stylePresetId: _presetId, ...presetDrawing } = AcsDocument1996StylePreset.drawing;
-    expect(presetDrawing).toEqual(importedDrawing);
+    const preset = AcsDocument1996StylePreset.drawing;
+    expect(preset.chainAngleDegrees).toBe(imported.chainAngleDegrees);
+    expect(preset.bondSpacingMode).toBe(imported.bondSpacingMode);
+    expect(preset.bondSpacingPercent).toBe(imported.bondSpacingPercent);
+    // Point sizes at 96 page px to the inch: what the sheet sets is what the page measures.
+    const px = (points: number) => points * 96 / 72;
+    expect(preset.bondLengthPx).toBeCloseTo(px(14.4), 6);
+    expect(preset.bondStrokeWidthPx).toBeCloseTo(px(0.6), 6);
+    expect(preset.bondBoldWidthPx).toBeCloseTo(px(2.0), 6);
+    expect(preset.bondMarginWidthPx).toBeCloseTo(px(1.6), 6);
+    expect(preset.bondHashSpacingPx).toBeCloseTo(px(2.5), 6);
+    expect(preset.multipleBondGapPx).toBeCloseTo(px(14.4) * 0.18, 6);
+    expect(preset.atomLabelFontSizePx).toBeCloseTo(px(10), 6);
+    expect(preset.atomLabelFontFamily).toBe("Arial, Helvetica, sans-serif");
   });
 });
