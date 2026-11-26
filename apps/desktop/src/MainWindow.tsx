@@ -100,6 +100,7 @@ import {
   type TextSpan
 } from "@chemdraft/chem-core";
 import { APP_NEW_STRUCTURE_STYLE_PRESET, APP_NEW_TEXT_STYLE } from "./appStyle";
+import { DEFAULT_STYLE_STORAGE_KEY, STYLE_LIBRARY_STORAGE_KEY, resolveDefaultStylePreset, saveStyleToLibrary } from "./styleLibrary";
 import { abbreviationDefinitionFromNickname, nicknameGraphFromDrawing, tryNativeSingleBondGraphSmiles } from "@chemdraft/document-workflow-core";
 import { atomLabelDraftDocumentUnchanged, createAtomLabelDraftRollback, documentOwnsAtomLabelDraft, recordAtomLabelDraftRollback, restoreAtomLabelDraft, type AtomLabelDraftState } from "./atomLabelDraft";
 import type { EditorSaveResult } from "@chemdraft/editor-adapter";
@@ -322,6 +323,7 @@ import {
   toggleRingInspectorCommandId,
   drawnStructureSettingsTemplateExportCommandId,
   drawnStructureSettingsTemplateImportCommandId,
+  styleNameFromSaveCommandId,
   moleculeRingEffectColorForCommand,
   moleculeRingEffectDisableForCommand,
   moleculeRingEffectForCommand,
@@ -785,6 +787,8 @@ import {
   arrangeToolsetWindowsTopToBottom,
   broadcastNicknameSettings,
   broadcastNicknameSignal,
+  broadcastStyleSettings,
+  listenForStyleSettings,
   NICKNAME_DEFINE_REQUEST_EVENT,
   type ToolsetWindowGeometry,
   type ToolsetArtPaintTarget
@@ -1692,12 +1696,13 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.26.15.20-opus";
+const CURRENT_BUILD_STAMP = "11.26.18.00-opus";
 export { APP_NEW_STRUCTURE_STYLE_PRESET, APP_NEW_TEXT_STYLE };
 
 /** Called once when the app's document window loads (App.tsx), before anything is drawn. */
 export function applyAppNewStructureStyle(): void {
-  setNewNativeMoleculeStylePreset(APP_NEW_STRUCTURE_STYLE_PRESET);
+  // The style chosen in Preferences ▸ Style, or the built-in ACS default.
+  setNewNativeMoleculeStylePreset(resolveDefaultStylePreset());
 }
 
 /** Starts in the background for the document webview under the existing probe gate. */
@@ -2487,6 +2492,15 @@ export function MainWindow({
   const cancelledAtomLabelEditRef = useRef<AtomLabelEditState | undefined>(undefined);
   const finalizedAtomLabelEditRef = useRef<AtomLabelEditState | undefined>(undefined);
   const [textStyleDefaults, setTextStyleDefaults] = useState<NativeTextStyle>(APP_NEW_TEXT_STYLE);
+  // Preferences ▸ Style chose another default (or a saved style changed): new structures follow it.
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listenForStyleSettings(() => applyAppNewStructureStyle(), [STYLE_LIBRARY_STORAGE_KEY, DEFAULT_STYLE_STORAGE_KEY])
+      .then((stop) => { if (disposed) stop(); else unlisten = stop; })
+      .catch(() => undefined);
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
   const [activeToolState, setActiveToolState] = useState(() => createActiveToolState(initialActiveToolCommandId));
   const compoundLayoutsEnabled = useCompoundLayoutTools();
   // The user's nicknames (Preferences ▸ Nicknames), registered with the label grammar.
@@ -8565,6 +8579,31 @@ export function MainWindow({
     }
   }, [applyMoleculeInspectorTemplateBytes]);
 
+  // Drawn Structure Settings ▸ Save Style…: keep the selected structure's style under a name, so
+  // Preferences ▸ Style can offer it as the style new structures start in.
+  const saveSelectedStructureStyle = useCallback((name: string) => {
+    const moleculeObjectIds = currentMoleculeInspector.targets.moleculeObjectIds;
+    const currentDocument = documentRef.current;
+    const firstTarget = moleculeObjectIds
+      .map((objectId) => findDocumentObject(currentDocument, objectId))
+      .find((object): object is MoleculeObject => object?.type === "molecule");
+    if (!firstTarget) {
+      setStatus("Select a structure before saving its style");
+      return;
+    }
+    cancelMoleculeInspectorPreview();
+    try {
+      const saved = saveStyleToLibrary(name, {
+        ...nativeDrawingStyleFromObjectStyle(firstTarget.style),
+        bondLengthPx: representativeMoleculeBondLengthPx(firstTarget)
+      });
+      void broadcastStyleSettings().catch(() => undefined);
+      setStatus(`Saved style "${saved.name}". Choose it in View ▸ Preferences ▸ Style.`);
+    } catch (error) {
+      setStatus(`Style not saved: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [cancelMoleculeInspectorPreview, currentMoleculeInspector.targets.moleculeObjectIds]);
+
   const exportMoleculeInspectorTemplate = useCallback(async () => {
     const moleculeObjectIds = currentMoleculeInspector.targets.moleculeObjectIds;
     if (moleculeObjectIds.length === 0) {
@@ -11811,6 +11850,12 @@ export function MainWindow({
       return;
     }
 
+    const styleNameToSave = styleNameFromSaveCommandId(commandId);
+    if (styleNameToSave !== undefined) {
+      saveSelectedStructureStyle(styleNameToSave);
+      return;
+    }
+
     if (applyTextStyleCommand(commandId)) {
       return;
     }
@@ -11954,6 +11999,7 @@ export function MainWindow({
     applyTextStyleCommand,
     clearAnalyzerNoticeFor,
     exportMoleculeInspectorTemplate,
+    saveSelectedStructureStyle,
     importMoleculeInspectorTemplate,
     invokePluginCommand,
     pluginCommandExists,

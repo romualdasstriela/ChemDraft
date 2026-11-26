@@ -181,6 +181,22 @@ export const artToolsetId = "core.art";
 export const textToolsetId = "core.text";
 export const drawnStructureSettingsTemplateImportCommandId = "drawnStructureSettings.template.import";
 export const drawnStructureSettingsTemplateExportCommandId = "drawnStructureSettings.template.export";
+/** Save the selected structure's style under a name (value-encoded: the name, URI-encoded). */
+export const drawnStructureSettingsStyleSaveCommandPrefix = "drawnStructureSettings.style.save:";
+
+export function drawnStructureSettingsStyleSaveCommandId(name: string): string {
+  return `${drawnStructureSettingsStyleSaveCommandPrefix}${encodeURIComponent(name)}`;
+}
+
+/** The style name a Save Style command carries, or undefined for any other command. */
+export function styleNameFromSaveCommandId(commandId: string): string | undefined {
+  if (!commandId.startsWith(drawnStructureSettingsStyleSaveCommandPrefix)) return undefined;
+  try {
+    return decodeURIComponent(commandId.slice(drawnStructureSettingsStyleSaveCommandPrefix.length));
+  } catch {
+    return undefined;
+  }
+}
 export const artBooleanOperationCommandIds = {
   union: "art.boolean.union",
   subtract: "art.boolean.subtract",

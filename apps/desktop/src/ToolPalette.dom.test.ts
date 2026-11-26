@@ -18,6 +18,7 @@ import {
   drawnStructureSettingsTemplateExportCommandId,
   drawnStructureSettingsTemplateImportCommandId,
   moleculeStructureBondLengthCommandId,
+  drawnStructureSettingsStyleSaveCommandId,
   type CommandSpec
 } from "./commands";
 import { getToolsetCommandGroups, getToolsetItemGroups, type ToolbarPaletteGroupModel, type ToolbarPaletteItemModel } from "./toolsets";
@@ -716,6 +717,33 @@ describe("ToolPalette molecule inspector font controls", () => {
       bondLengthInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
     expect(onInvoke).toHaveBeenCalledWith(moleculeStructureBondLengthCommandId(19.2));
+  });
+
+  it("names and saves the structure's style from Save Style…", async () => {
+    const onInvoke = vi.fn();
+    const model = createMoleculeInspectorModel(moleculeInspectorDocument(), { selectedObjectIds: ["mol_font"] });
+    await act(async () => {
+      root.render(createElement(ToolPalette, {
+        itemGroups: widgetOnlyItemGroups("core.drawnStructureSettings"),
+        activeTool: "tool.select",
+        orientation: "horizontal",
+        onInvoke,
+        widgetState: { currentMoleculeInspector: model, onInvoke }
+      }));
+    });
+    const openButton = [...container.querySelectorAll("button")].find((button) => button.textContent === "Save Style…")!;
+    expect(openButton.disabled).toBe(false);
+    act(() => openButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const nameInput = container.querySelector<HTMLInputElement>('input[aria-label="Style name"]')!;
+    expect(container.querySelector('[role="dialog"][aria-label="Save style"]')).not.toBeNull();
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(nameInput, "My journal");
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => nameInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    expect(onInvoke).toHaveBeenCalledWith(drawnStructureSettingsStyleSaveCommandId("My journal"));
+    // The naming box closes again.
+    expect(container.querySelector('input[aria-label="Style name"]')).toBeNull();
   });
 
   it("shows structure lengths in centimetres and label size in points", async () => {

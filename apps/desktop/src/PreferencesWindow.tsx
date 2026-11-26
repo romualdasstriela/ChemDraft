@@ -16,11 +16,19 @@ import {
   type KeybindingSettings
 } from "./keybindingSettings";
 import { loadCompoundLayoutSettings, saveCompoundLayoutSettings } from "./compoundLayoutSettings";
-import { broadcastCompoundLayoutSettings, broadcastKeybindingSettings, broadcastNicknameSettings, broadcastSpin3dSettings, broadcastQuitSettings, broadcastExportPreviewSettings, routeToolsetCommand } from "./window-manager";
+import { broadcastCompoundLayoutSettings, broadcastKeybindingSettings, broadcastNicknameSettings, broadcastSpin3dSettings, broadcastQuitSettings, broadcastExportPreviewSettings, broadcastStyleSettings, listenForStyleSettings, routeToolsetCommand } from "./window-manager";
 import { CHOOSE_NICKNAME_FOLDER_COMMAND_ID } from "./commands";
 import { saveNicknameSettings } from "./nicknames/nicknameSettings";
 import { useUserNicknames } from "./nicknames/userNicknames";
 import { APP_NEW_STRUCTURE_STYLE_PRESET, APP_NEW_TEXT_STYLE } from "./appStyle";
+import {
+  DEFAULT_STYLE_STORAGE_KEY,
+  STYLE_LIBRARY_STORAGE_KEY,
+  availableStylePresets,
+  deleteSavedStyle,
+  resolveDefaultStylePreset,
+  saveDefaultStyleId
+} from "./styleLibrary";
 import { CM_UNIT, PT_UNIT, formatStyleLength } from "./styleUnits";
 
 interface RadioOption<T extends string> {
@@ -105,7 +113,35 @@ function PreferenceRadioGroup<T extends string>({ legend, hint, name, options, v
  * Drawn Structure Settings changes the selected structure.
  */
 function StyleSection() {
-  const preset = APP_NEW_STRUCTURE_STYLE_PRESET;
+  const [styles, setStyles] = useState(() => availableStylePresets());
+  const [selectedId, setSelectedId] = useState(() => resolveDefaultStylePreset().id);
+  // A style saved from Drawn Structure Settings while Preferences is open appears in the list.
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const refresh = () => {
+      setStyles(availableStylePresets());
+      setSelectedId(resolveDefaultStylePreset().id);
+    };
+    void listenForStyleSettings(refresh, [STYLE_LIBRARY_STORAGE_KEY, DEFAULT_STYLE_STORAGE_KEY])
+      .then((stop) => { if (disposed) stop(); else unlisten = stop; })
+      .catch(() => undefined);
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
+  const preset = styles.find((candidate) => candidate.id === selectedId) ?? APP_NEW_STRUCTURE_STYLE_PRESET;
+  const choose = (id: string) => {
+    setSelectedId(id);
+    saveDefaultStyleId(id);
+    void broadcastStyleSettings().catch(() => undefined);
+  };
+  const remove = () => {
+    if (preset.id === APP_NEW_STRUCTURE_STYLE_PRESET.id) return;
+    deleteSavedStyle(preset.id);
+    setStyles(availableStylePresets());
+    setSelectedId(resolveDefaultStylePreset().id);
+    void broadcastStyleSettings().catch(() => undefined);
+  };
+  const builtIn = preset.id === APP_NEW_STRUCTURE_STYLE_PRESET.id;
   const drawing = preset.drawing;
   const cm = (px: number) => formatStyleLength(px, CM_UNIT);
   const pt = (px: number) => formatStyleLength(px, PT_UNIT);
@@ -128,12 +164,21 @@ function StyleSection() {
     <section className="preferences-section" aria-labelledby="drawing-style">
       <h2 id="drawing-style">Style</h2>
       <p className="preferences-section-hint">
-        New structures and new text start in this style. Drawings already on the page keep their own
-        style; change a selected structure with Drawn Structure Settings.
+        New structures start in the style chosen here. Drawings already on the page keep their own
+        style. To add a style, select a structure, set it up in Drawn Structure Settings and use
+        Save Style… there.
       </p>
-      <p className="preferences-style-name" data-style-preset-id={preset.id}>
-        Default style: <strong>{preset.name}</strong> (ACS journal style)
-      </p>
+      <div className="preferences-folder-row preferences-style-name" data-style-preset-id={preset.id}>
+        <label htmlFor="preferences-default-style">Default style</label>
+        <select id="preferences-default-style" value={preset.id} onChange={(event) => choose(event.currentTarget.value)}>
+          {styles.map((style) => (
+            <option key={style.id} value={style.id}>
+              {style.id === APP_NEW_STRUCTURE_STYLE_PRESET.id ? `${style.name} (ACS journal style, built in)` : style.name}
+            </option>
+          ))}
+        </select>
+        {builtIn ? null : <button type="button" onClick={remove}>Delete</button>}
+      </div>
       <table className="preferences-style-table" aria-label="Default style settings">
         <tbody>
           {rows.map(([name, value]) => (

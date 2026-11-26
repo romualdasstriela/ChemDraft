@@ -1629,6 +1629,40 @@ export async function listenForNicknameSignal(eventName: string, storageKey: str
   };
 }
 
+export const STYLE_SETTINGS_EVENT = "chemdraft://style-settings";
+
+/** A style was saved, or Preferences ▸ Style chose another default: every window re-reads them. */
+export async function broadcastStyleSettings(): Promise<void> {
+  dispatchDomToolsetEvent(STYLE_SETTINGS_EVENT, {});
+  if (!isDesktopRuntime()) {
+    return;
+  }
+  const { emit } = await import("@tauri-apps/api/event");
+  await emit(STYLE_SETTINGS_EVENT, {});
+}
+
+/** Calls `handler` when the saved styles or the default style change, in this or another window. */
+export async function listenForStyleSettings(
+  handler: () => void,
+  storageKeys: readonly string[]
+): Promise<Unlisten> {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === null || storageKeys.includes(event.key)) handler();
+  };
+  globalThis.addEventListener?.("storage", onStorage);
+  const removeStorage = () => globalThis.removeEventListener?.("storage", onStorage);
+  const unlistenDom = listenForDomToolsetEvent(STYLE_SETTINGS_EVENT, () => handler());
+  if (!isDesktopRuntime()) {
+    return () => { unlistenDom(); removeStorage(); };
+  }
+  const unlistenTauri = await listenTauriEvent(STYLE_SETTINGS_EVENT, () => handler());
+  return () => {
+    removeStorage();
+    unlistenDom();
+    unlistenTauri();
+  };
+}
+
 export const NICKNAME_SETTINGS_EVENT = "chemdraft://nickname-settings";
 
 /** Preferences ▸ Nicknames changed the folder: every window reloads its nicknames. */

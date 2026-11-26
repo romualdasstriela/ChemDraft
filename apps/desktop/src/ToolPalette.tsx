@@ -125,6 +125,7 @@ import {
 	  moleculeAtomLabelHideImplicitHydrogensCommandId,
 	  moleculeAtomLabelNumberRanges,
 	  drawnStructureSettingsTemplateExportCommandId,
+	  drawnStructureSettingsStyleSaveCommandId,
 	  drawnStructureSettingsTemplateImportCommandId,
 	  structureCleanupCommandId,
 	  textCustomColorCommandId,
@@ -1664,6 +1665,12 @@ function MoleculeInspectorControls({ ringOnly = false }: { ringOnly?: boolean })
       </div>
     </div>
   );
+  const saveStylePanel = (
+    <SaveStyleControl
+      disabled={templatesDisabled}
+      onSave={(name) => onInvoke(drawnStructureSettingsStyleSaveCommandId(name))}
+    />
+  );
 
   return (
     <div
@@ -1704,6 +1711,87 @@ function MoleculeInspectorControls({ ringOnly = false }: { ringOnly?: boolean })
         {activeTab === "structure"
           ? structurePanel
           : activeTab === "atom-labels" ? atomLabelsPanel : templatesPanel}
+        {saveStylePanel}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Drawn Structure Settings ▸ Save Style…: a small naming box in the settings window. Save keeps the
+ * selected structure's style under that name (the document window does the saving); the saved style
+ * then appears in Preferences ▸ Style.
+ */
+function SaveStyleControl({ disabled, onSave }: { disabled: boolean; onSave: (name: string) => void }) {
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (naming) inputRef.current?.focus(); }, [naming]);
+  const close = () => { setNaming(false); setName(""); };
+  const trimmed = name.trim();
+  const save = () => {
+    if (!trimmed) return;
+    onSave(trimmed);
+    close();
+  };
+  if (!naming) {
+    return (
+      <div className="molecule-inspector-save-style">
+        <button
+          type="button"
+          className="toolbar-text-button molecule-inspector-template-button"
+          disabled={disabled}
+          title={disabled ? "Select a structure to save its style" : "Save these settings as a named style"}
+          data-palette-control="true"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => setNaming(true)}
+        >
+          Save Style…
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="molecule-inspector-save-style" role="dialog" aria-label="Save style" data-palette-control="true">
+      <label className="molecule-inspector-field">
+        <span>Style name</span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={name}
+          maxLength={60}
+          placeholder="e.g. My journal style"
+          aria-label="Style name"
+          data-palette-control="true"
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => setName(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+            if (event.key === "Enter") save();
+            if (event.key === "Escape") close();
+          }}
+        />
+      </label>
+      <div className="molecule-inspector-template-actions">
+        <button
+          type="button"
+          className="toolbar-text-button molecule-inspector-template-button"
+          disabled={!trimmed || disabled}
+          data-palette-control="true"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={save}
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          className="toolbar-text-button molecule-inspector-template-button"
+          data-palette-control="true"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={close}
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );

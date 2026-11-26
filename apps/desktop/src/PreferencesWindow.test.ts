@@ -5,6 +5,8 @@ import { PreferencesWindow } from "./PreferencesWindow";
 import { MemoryStorage } from "./testSupport/memoryStorage";
 import { saveExportPreviewEnabled } from "./exportPreviewSettings";
 import { saveAskToSaveBeforeQuit } from "./quitSettings";
+import { AcsDocument1996StylePreset } from "@chemdraft/chem-core";
+import { saveDefaultStyleId, saveStyleToLibrary } from "./styleLibrary";
 
 const STORAGE_KEY = "chemdraft.spin3d.settings.v1";
 const KEYBINDINGS_STORAGE_KEY = "chemdraft.keybindings.v1";
@@ -26,11 +28,25 @@ const selected = (name: string, value: string) =>
   new RegExp(`data-selected="true"><input[^>]*name="${name}"[^>]*value="${value}"`);
 
 describe("PreferencesWindow", () => {
+  it("lists saved styles in the Style menu and shows the chosen one's settings", () => {
+    saveStyleToLibrary("Thesis", { ...AcsDocument1996StylePreset.drawing, bondLengthPx: 0.6 / 2.54 * 96 });
+    let markup = renderToStaticMarkup(createElement(PreferencesWindow));
+    expect(markup).toMatch(/<option value="chemdraft.acs-document-1996" selected="">ACS Document 1996 \(ACS journal style, built in\)<\/option>/);
+    expect(markup).toContain('<option value="user-style.thesis">Thesis</option>');
+    // No Delete for the built-in style.
+    expect(markup).not.toContain(">Delete</button>");
+    saveDefaultStyleId("user-style.thesis");
+    markup = renderToStaticMarkup(createElement(PreferencesWindow));
+    expect(markup).toContain('<option value="user-style.thesis" selected="">Thesis</option>');
+    expect(markup).toContain('<th scope="row">Bond length</th><td>0.6 cm</td>');
+    expect(markup).toContain(">Delete</button>");
+  });
+
   it("shows the default style, ACS Document 1996, with its settings in centimetres", () => {
     const markup = renderToStaticMarkup(createElement(PreferencesWindow));
     expect(markup).toContain(">Style</h2>");
     expect(markup).toContain('data-style-preset-id="chemdraft.acs-document-1996"');
-    expect(markup).toContain("<strong>ACS Document 1996</strong>");
+    expect(markup).toContain("ACS Document 1996 (ACS journal style, built in)");
     for (const [name, value] of [
       ["Bond length", "0.508 cm"],
       ["Line width", "0.021 cm"],
