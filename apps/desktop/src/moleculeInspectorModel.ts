@@ -25,7 +25,7 @@ import type {
   ArtInspectorEffectValue,
   ArtInspectorMixedValue
 } from "./artInspectorModel";
-import { normalizeNativeAtomElementLabel } from "./documentWorkflow";
+import { getNewNativeMoleculeStylePreset, normalizeNativeAtomElementLabel } from "./documentWorkflow";
 
 export type MoleculeInspectorTabId = "structure" | "atom-labels" | "templates";
 export type MoleculeInspectorContext = "none" | "molecule" | "ring" | "bond" | "atom";
@@ -381,7 +381,8 @@ function createStructureModel(
   const targetCount = targetKind === "bond"
     ? bondEntries.length
     : targetKind === "atom" ? atomEntries.length : moleculeEntries.length;
-  const fallback = DefaultNativeDrawingStyle;
+  // With nothing selected, show the style new structures start in (Preferences ▸ Style).
+  const fallback = getNewNativeMoleculeStylePreset().drawing;
   const doubleBonds = positionTargets.flatMap((target) => {
     const bond = objectById.get(target.objectId)?.bonds.find((candidate) => candidate.id === target.bondId);
     return bond?.order === "double" ? [bond] : [];
@@ -472,7 +473,8 @@ function createAtomLabelsModel(
   const entries = atomEntries.length > 0
     ? atomEntries
     : targetObjects.map((object) => nativeDrawingStyleFromObjectStyle(object.style));
-  const fallback = DefaultNativeDrawingStyle;
+  // With nothing selected, show the style new structures start in (Preferences ▸ Style).
+  const fallback = getNewNativeMoleculeStylePreset().drawing;
 
   return {
     enabled: entries.length > 0,

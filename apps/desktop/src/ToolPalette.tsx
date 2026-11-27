@@ -1701,6 +1701,7 @@ function MoleculeInspectorControls({ ringOnly = false }: { ringOnly?: boolean })
             {label}
           </button>
         ))}
+        {saveStylePanel}
       </div>
       <div
         className="molecule-inspector-tab-panel"
@@ -1711,7 +1712,6 @@ function MoleculeInspectorControls({ ringOnly = false }: { ringOnly?: boolean })
         {activeTab === "structure"
           ? structurePanel
           : activeTab === "atom-labels" ? atomLabelsPanel : templatesPanel}
-        {saveStylePanel}
       </div>
     </div>
   );

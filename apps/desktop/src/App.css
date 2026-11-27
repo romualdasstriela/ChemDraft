@@ -1600,13 +1600,45 @@ textarea:focus-visible,
   gap: 6px;
 }
 
-/* Save Style… sits under every tab of Drawn Structure Settings, set off from the fields above. */
+/* Save Style… sits in the tab rail under the tabs, so it is there on every tab and never pushed
+   out of the fixed-height settings panel. */
 .molecule-inspector-save-style {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px solid var(--cd-border-subtle, rgba(0, 0, 0, 0.12));
+  min-width: 0;
+}
+
+.molecule-inspector-save-style .molecule-inspector-template-button {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.molecule-inspector-save-style .molecule-inspector-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+}
+
+.molecule-inspector-save-style input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.molecule-inspector-save-style .molecule-inspector-template-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.molecule-inspector-save-style .molecule-inspector-template-actions .molecule-inspector-template-button {
+  min-width: 0;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .molecule-inspector-template-button {

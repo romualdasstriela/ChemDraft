@@ -105,12 +105,15 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
    - Drawn Structure Settings shows and takes lengths in centimetres (bond length, line and
      bold width, absolute spacing, margin, hash spacing, double-bond inset, overlap
      clearance, label padding and bond clearance) and the label size in points.
-   - Drawn Structure Settings > Save Style... names the selected structure's settings and
+   - Drawn Structure Settings > Save Style... (in the left column, under the tabs) names the
+     selected structure's settings and
      keeps them as a style on this computer (in ChemDraft's own settings). Saving under a
      name already used replaces that style.
    - Preferences > Style has a Default style menu listing the built-in ACS Document 1996
      style and every saved style. The chosen style is what new structures start in, at once
      and after restarting; Delete removes a saved style (ACS then becomes the default again).
+   - With no structure selected, Drawn Structure Settings shows the default style's values
+     (it showed the old original-style values).
    - Importing a .cds style sheet still scales its values to the original ChemDraft style, so
      an imported ACS sheet comes out larger than this default. Structures the AI assistant
      and the command-line tools build still use the original ChemDraft style.
@@ -523,3 +526,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  ACS default style at its printed size; new text Arial 10 pt
 (next)  Preferences > Style shows the default style in cm; Drawn Structure Settings in cm and pt
 (next)  Save Style... in Drawn Structure Settings; Default style menu in Preferences > Style
+(next)  Drawn Structure Settings: Save Style in the tab column; default values with nothing selected
