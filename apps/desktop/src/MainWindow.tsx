@@ -1699,7 +1699,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.27.16.20-opus";
+const CURRENT_BUILD_STAMP = "11.27.18.10-opus";
 export { APP_NEW_STRUCTURE_STYLE_PRESET, APP_NEW_TEXT_STYLE };
 
 /** Called once when the app's document window loads (App.tsx), before anything is drawn. */

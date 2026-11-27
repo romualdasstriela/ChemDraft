@@ -3,7 +3,9 @@ import { applyPatches, type ChemDraftDocument, type GraphicObject } from "@chemd
 import {
   applyNativeArtLineToolAtPoint,
   createNewDrawingDocument,
+  insertNativeArtGraphicObject,
   moveDocumentObjects,
+  scaleDocumentObjectsAroundPoint,
   nativeArtEndpointSnap,
   nativeArtMoveMagnet
 } from "./documentWorkflow";
@@ -74,6 +76,39 @@ describe("joining line and arrow ends", () => {
     const magnet = nativeArtMoveMagnet(second.document, [second.id], 197 - 400, 102 - 400, 6)!;
     expect(magnet.join).toEqual({ x: 200, y: 100 });
     expect(nativeArtMoveMagnet(second.document, [second.id], 0, 0, 6)).toBeUndefined();
+  });
+
+  it("snaps lines and shapes onto a triangle's corners and sides", () => {
+    // Triangle placed with its centre at (300,300): 56 x 48 frame, corners (300,276), (328,324), (272,324).
+    const withTriangle = insertNativeArtGraphicObject(createNewDrawingDocument(), { x: 300, y: 300 }, "tool.art.triangle");
+    const triangle = withTriangle.pages[0]!.objects.find((object): object is GraphicObject => object.type === "graphic")!;
+    const corner = { x: triangle.x + 28, y: triangle.y };
+    // Drawing a line to near the top corner joins it.
+    expect(nativeArtEndpointSnap(withTriangle, { x: corner.x + 3, y: corner.y - 2 }, 6)).toEqual(corner);
+    // A line moved so its end sits 3 px below the middle of the base lands on the base.
+    const line = withLine(withTriangle, { x: 300, y: 400 }, { x: 300, y: 500 });
+    const baseY = triangle.y + 48;
+    const onBase = nativeArtMoveMagnet(line.document, [line.id], 0, baseY + 3 - 400, 6)!;
+    expect(onBase.join.y).toBeCloseTo(baseY, 6);
+    expect(onBase.offset.y).toBeCloseTo(-3, 6);
+    // Moving the triangle so its top corner comes within 4 px of the line's start: corner meets end.
+    const toLineStart = nativeArtMoveMagnet(line.document, [triangle.id], 300 - corner.x + 4, 400 - corner.y - 2, 6)!;
+    expect(toLineStart.join).toEqual({ x: 300, y: 400 });
+  });
+
+  it("keeps working after the triangle is resized, and snaps square rectangles but not rounded ones", () => {
+    const withTriangle = insertNativeArtGraphicObject(createNewDrawingDocument(), { x: 300, y: 300 }, "tool.art.triangle");
+    const triangle = withTriangle.pages[0]!.objects.find((object): object is GraphicObject => object.type === "graphic")!;
+    const resized = scaleDocumentObjectsAroundPoint(withTriangle, [triangle.id], { x: triangle.x, y: triangle.y }, 2, 2);
+    const big = resized.pages[0]!.objects.find((object): object is GraphicObject => object.id === triangle.id)!;
+    // The outline is now cubic segments; its corners still snap (top corner at x + 56, y).
+    expect(nativeArtEndpointSnap(resized, { x: big.x + 57, y: big.y + 1 }, 6)).toEqual({ x: big.x + 56, y: big.y });
+    const withRect = insertNativeArtGraphicObject(createNewDrawingDocument(), { x: 300, y: 300 }, "tool.art.rect");
+    const rect = withRect.pages[0]!.objects.find((object): object is GraphicObject => object.type === "graphic")!;
+    expect(nativeArtEndpointSnap(withRect, { x: rect.x + 2, y: rect.y + 2 }, 6)).toEqual({ x: rect.x, y: rect.y });
+    const withRounded = insertNativeArtGraphicObject(createNewDrawingDocument(), { x: 300, y: 300 }, "tool.art.roundedRect");
+    const rounded = withRounded.pages[0]!.objects.find((object): object is GraphicObject => object.type === "graphic")!;
+    expect(nativeArtEndpointSnap(withRounded, { x: rounded.x + 1, y: rounded.y + 1 }, 6)).toBeUndefined();
   });
 
   it("draws a new line from a snapped end so the two touch exactly", () => {

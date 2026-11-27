@@ -2525,10 +2525,9 @@ export function nativeArtEndpointSnap(
 ): PagePoint | undefined {
   let best: { point: PagePoint; distance: number } | undefined;
   for (const object of selectionPage(document).objects) {
-    if (object.type !== "graphic" || excludeObjectIds.has(object.id) || Math.abs(object.rotation ?? 0) > 1e-9) continue;
-    const points = graphicPathEditPoints(object);
-    if (!points) continue;
-    for (const end of [points.start, points.end]) {
+    if (excludeObjectIds.has(object.id)) continue;
+    // Line, arrow and arc ends, and the corners of sharp-edged shapes (triangle, star, rectangle).
+    for (const end of artJoinGeometry(object)?.points ?? []) {
       const gap = Math.hypot(end.x - point.x, end.y - point.y);
       if (gap <= tolerance && (!best || gap < best.distance)) {
         best = { point: { x: end.x, y: end.y }, distance: gap };
@@ -2538,12 +2537,72 @@ export function nativeArtEndpointSnap(
   return best?.point;
 }
 
-/** A line-family graphic's join geometry: its two ends, and whether the path between is straight. */
-function artJoinGeometry(object: DocumentObject): { start: PagePoint; end: PagePoint; straight: boolean } | undefined {
+/** Where things join on a graphic: points (line ends, shape corners) and straight edges. */
+interface ArtJoinGeometry {
+  points: PagePoint[];
+  segments: Array<readonly [PagePoint, PagePoint]>;
+}
+
+/** Shape tools drawn as straight-sided outlines: their corners and sides join like line ends and lines. */
+const sharpOutlineShapeToolIds: ReadonlySet<string> = new Set(["triangle", "star"]);
+
+/**
+ * The join geometry of an unrotated graphic: a line, arrow or arc gives its two ends (and its body
+ * when straight); a sharp-edged shape — triangle, star, square-cornered rectangle — gives its corners
+ * and sides. Rounded and curved shapes, rotated graphics and everything else give none.
+ */
+function artJoinGeometry(object: DocumentObject): ArtJoinGeometry | undefined {
   if (object.type !== "graphic" || Math.abs(object.rotation ?? 0) > 1e-9) return undefined;
+  const polygon = sharpShapeCorners(object);
+  if (polygon) {
+    return { points: polygon, segments: polygon.map((corner, index) => [corner, polygon[(index + 1) % polygon.length]!] as const) };
+  }
   const points = graphicPathEditPoints(object);
   if (!points) return undefined;
-  return { start: points.start, end: points.end, straight: points.pathKind === "line" || points.pathKind === "wavy" };
+  const straight = points.pathKind === "line" || points.pathKind === "wavy";
+  return { points: [points.start, points.end], segments: straight ? [[points.start, points.end]] : [] };
+}
+
+/** Page-space corners of a sharp-edged shape, in outline order; undefined for any other graphic. */
+function sharpShapeCorners(object: GraphicObject): PagePoint[] | undefined {
+  if (object.graphicKind === "rect") {
+    const cornerRadius = object.data.cornerRadiusPx;
+    if (typeof cornerRadius === "number" && cornerRadius > 0.01) return undefined;
+    const { x, y, width, height } = object;
+    return [{ x, y }, { x: x + width, y }, { x: x + width, y: y + height }, { x, y: y + height }];
+  }
+  if (object.graphicKind !== "path" || typeof object.data.artToolId !== "string" ||
+    !sharpOutlineShapeToolIds.has(object.data.artToolId) || typeof object.data.pathD !== "string") {
+    return undefined;
+  }
+  const corners = outlineCornersFromPathD(object.data.pathD);
+  return corners?.map((corner) => ({ x: object.x + corner.x, y: object.y + corner.y }));
+}
+
+/**
+ * The corners of a straight-sided outline: each M/L point, and each C segment's end (a resized
+ * outline is stored as straight cubic segments). Absolute commands only; undefined otherwise.
+ */
+function outlineCornersFromPathD(pathD: string): PagePoint[] | undefined {
+  const tokens = pathD.match(/[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? [];
+  const corners: PagePoint[] = [];
+  let index = 0;
+  const number = () => Number(tokens[index++]);
+  while (index < tokens.length) {
+    const command = tokens[index++]!;
+    if (command === "Z") break;
+    if (command === "M" || command === "L") {
+      corners.push({ x: number(), y: number() });
+    } else if (command === "C") {
+      index += 4;
+      corners.push({ x: number(), y: number() });
+    } else {
+      return undefined;
+    }
+  }
+  const last = corners[corners.length - 1], first = corners[0];
+  if (corners.length > 1 && last && first && Math.hypot(last.x - first.x, last.y - first.y) < 0.01) corners.pop();
+  return corners.length >= 3 && corners.every((corner) => Number.isFinite(corner.x) && Number.isFinite(corner.y)) ? corners : undefined;
 }
 
 function nearestPointOnSegment(point: PagePoint, a: PagePoint, b: PagePoint): PagePoint {
@@ -2561,11 +2620,12 @@ export interface NativeArtMoveMagnet {
 }
 
 /**
- * Lines and arrows being moved attract like magnets: when an end of a moved line comes within
- * `tolerance` of another line, arrow or arc — its end or anywhere along a straight one — or an end
- * of another comes that close to a moved straight line, the move is nudged so they touch exactly.
- * The objects stay separate; only the move changes. End-to-end joins are preferred over landing on
- * a line's side when both are in reach. `dx`/`dy` is the move so far; undefined when nothing is close.
+ * Lines, arrows and sharp-edged shapes being moved attract like magnets: when a moved point (a
+ * line's end, a shape's corner) comes within `tolerance` of another graphic's point or anywhere
+ * along its straight edges (a straight line, a shape's side), or another graphic's point comes that
+ * close to a moved edge, the move is nudged so they touch exactly. The objects stay separate; only
+ * the move changes. Point-to-point joins are preferred over landing on a side when both are in
+ * reach. `dx`/`dy` is the move so far; undefined when nothing is close.
  */
 export function nativeArtMoveMagnet(
   document: ChemDraftDocument,
@@ -2579,7 +2639,10 @@ export function nativeArtMoveMagnet(
   const shift = (point: PagePoint) => ({ x: point.x + dx, y: point.y + dy });
   const moved = objects.filter((object) => moving.has(object.id)).flatMap((object) => {
     const geometry = artJoinGeometry(object);
-    return geometry ? [{ ...geometry, start: shift(geometry.start), end: shift(geometry.end) }] : [];
+    return geometry ? [{
+      points: geometry.points.map(shift),
+      segments: geometry.segments.map(([a, b]) => [shift(a), shift(b)] as const)
+    }] : [];
   });
   if (moved.length === 0) return undefined;
   const others = objects.filter((object) => !moving.has(object.id)).flatMap((object) => artJoinGeometry(object) ?? []);
@@ -2594,22 +2657,19 @@ export function nativeArtMoveMagnet(
       best = { offset: { x: to.x - from.x, y: to.y - from.y }, join: { x: to.x, y: to.y }, score };
     }
   };
-  for (const line of moved) {
-    for (const end of [line.start, line.end]) {
+  for (const piece of moved) {
+    for (const point of piece.points) {
       for (const other of others) {
-        consider(end, other.start, true);
-        consider(end, other.end, true);
-        if (other.straight) consider(end, nearestPointOnSegment(end, other.start, other.end), false);
+        for (const target of other.points) consider(point, target, true);
+        for (const [a, b] of other.segments) consider(point, nearestPointOnSegment(point, a, b), false);
       }
     }
   }
-  // Another line's end landing on the side of a moved straight line.
+  // Another graphic's point landing on a moved straight edge.
   for (const other of others) {
-    for (const end of [other.start, other.end]) {
-      for (const line of moved) {
-        if (!line.straight) continue;
-        const onMoved = nearestPointOnSegment(end, line.start, line.end);
-        consider(onMoved, end, false);
+    for (const point of other.points) {
+      for (const piece of moved) {
+        for (const [a, b] of piece.segments) consider(nearestPointOnSegment(point, a, b), point, false);
       }
     }
   }

@@ -455,6 +455,10 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      one), or another line's end comes that close to the moved line, the move is nudged so
      they touch exactly, with the same small circle at the join. End-to-end joins win over
      landing on a side. They stay separate objects.
+   - Sharp-edged shapes join the same way: a triangle's or star's corners and sides, and a
+     square-cornered rectangle's corners and sides, attract line ends and other shapes'
+     corners, whether the shape or the line is moved, and line ends drawn or dragged near a
+     corner snap onto it. Rounded rectangles, circles and other curved shapes do not.
 
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
@@ -541,3 +545,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Drawn Structure Settings: Save Style in the tab column; default values with nothing selected
 (next)  Line and arrow ends snap to other ends, with a circle marking the join
 (next)  Moved lines and arrows snap onto nearby lines like magnets
+(next)  Magnet joins for triangle, star and square rectangle corners and sides
