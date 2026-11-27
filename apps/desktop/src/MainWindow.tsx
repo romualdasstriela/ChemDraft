@@ -101,7 +101,7 @@ import {
 } from "@chemdraft/chem-core";
 import { APP_NEW_STRUCTURE_STYLE_PRESET, APP_NEW_TEXT_STYLE } from "./appStyle";
 import { DEFAULT_STYLE_STORAGE_KEY, STYLE_LIBRARY_STORAGE_KEY, resolveDefaultStylePreset, saveStyleToLibrary } from "./styleLibrary";
-import { ART_ENDPOINT_SNAP_SCREEN_PX, nativeArtEndpointSnap } from "./documentWorkflow";
+import { ART_ENDPOINT_SNAP_SCREEN_PX, nativeArtEndpointSnap, nativeArtMoveMagnet } from "./documentWorkflow";
 import { abbreviationDefinitionFromNickname, nicknameGraphFromDrawing, tryNativeSingleBondGraphSmiles } from "@chemdraft/document-workflow-core";
 import { atomLabelDraftDocumentUnchanged, createAtomLabelDraftRollback, documentOwnsAtomLabelDraft, recordAtomLabelDraftRollback, restoreAtomLabelDraft, type AtomLabelDraftState } from "./atomLabelDraft";
 import type { EditorSaveResult } from "@chemdraft/editor-adapter";
@@ -1699,7 +1699,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.27.13.50-opus";
+const CURRENT_BUILD_STAMP = "11.27.16.20-opus";
 export { APP_NEW_STRUCTURE_STYLE_PRESET, APP_NEW_TEXT_STYLE };
 
 /** Called once when the app's document window loads (App.tsx), before anything is drawn. */
@@ -2623,6 +2623,16 @@ export function MainWindow({
   // Where a line or arrow being drawn or edited joins another's end exactly: a small circle shows
   // each such point while the pointer is down.
   const [artEndpointSnapMarks, setArtEndpointSnapMarks] = useState<readonly ClientPoint[]>([]);
+  // Set the join marks only when they change: a move preview runs every frame and must not
+  // re-render the window for an unchanged mark.
+  const artEndpointSnapMarksRef = useRef<readonly ClientPoint[]>([]);
+  const showArtJoinMarks = useCallback((marks: readonly ClientPoint[]) => {
+    const current = artEndpointSnapMarksRef.current;
+    const same = current.length === marks.length && current.every((mark, index) => mark.x === marks[index]!.x && mark.y === marks[index]!.y);
+    if (same) return;
+    artEndpointSnapMarksRef.current = marks;
+    setArtEndpointSnapMarks(marks);
+  }, []);
   const [objectRotateReadout, setObjectRotateReadout] = useState<ObjectRotateReadoutState | undefined>();
   const [projectedPlaneTiltReadout, setProjectedPlaneTiltReadout] = useState<ProjectedPlaneTiltReadoutState | undefined>();
   const [rotationInput, setRotationInput] = useState<RotationInputState | undefined>();
@@ -12839,7 +12849,7 @@ export function MainWindow({
       return;
     }
     nativePlacementDragRef.current = null;
-    setArtEndpointSnapMarks([]);
+    showArtJoinMarks([]);
     releaseGesturePointer(drag.pointerId);
     replacePresentDocument(drag.startDocument);
   }, [releaseGesturePointer, replacePresentDocument]);
@@ -14453,7 +14463,7 @@ export function MainWindow({
     const drag = nativePlacementDragRef.current;
     if (drag?.pointerId === event.pointerId) {
       nativePlacementDragRef.current = null;
-      setArtEndpointSnapMarks([]);
+      showArtJoinMarks([]);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
@@ -14532,13 +14542,13 @@ export function MainWindow({
     if (drag.kind === "art-line") {
       // Mark each end that joins another line exactly: the tail (snapped on press) and the head.
       const head = snapArtEndpoint(drag.startDocument, point);
-      setArtEndpointSnapMarks([...(drag.artLineStartSnapped ? [drag.startPoint] : []), ...(head.snapped ? [head.point] : [])]);
+      showArtJoinMarks([...(drag.artLineStartSnapped ? [drag.startPoint] : []), ...(head.snapped ? [head.point] : [])]);
     }
     replacePresentDocument(nativePlacementDocumentFromDrag(drag, point));
-  }, [nativePlacementDocumentFromDrag, replacePresentDocument, snapArtEndpoint]);
+  }, [nativePlacementDocumentFromDrag, replacePresentDocument, showArtJoinMarks, snapArtEndpoint]);
 
   const commitNativePlacementDrag = useCallback((drag: NativePlacementDragState, releasePoint: ClientPoint): boolean => {
-    setArtEndpointSnapMarks([]);
+    showArtJoinMarks([]);
     const point = drag.kind === "arrow" || drag.kind === "art-line" ? releasePoint : drag.latestPoint;
     const placed = drag.dragging
       ? nativePlacementDocumentFromDrag(drag, point, { preview: false })
@@ -14679,7 +14689,17 @@ export function MainWindow({
     return true;
   }, [commitDocumentHistoryFrom, replacePresentDocument]);
 
-  const objectDragDocument = useCallback((drag: ObjectDragState, point: ClientPoint): ChemDraftDocument => {
+  // Lines and arrows being moved snap onto a nearby line like magnets (they stay separate objects):
+  // the pointer is nudged so the move ends with the two touching exactly.
+  const objectDragMagnet = useCallback((drag: ObjectDragState, point: ClientPoint): { point: ClientPoint; join?: ClientPoint } => {
+    const movingIds = drag.groupObjectIds && drag.groupObjectIds.length > 1 ? drag.groupObjectIds : [drag.objectId];
+    const tolerance = ART_ENDPOINT_SNAP_SCREEN_PX / Math.max(0.05, viewportRef.current.scale);
+    const magnet = nativeArtMoveMagnet(drag.startDocument, movingIds, point.x - drag.startPoint.x, point.y - drag.startPoint.y, tolerance);
+    return magnet ? { point: { x: point.x + magnet.offset.x, y: point.y + magnet.offset.y }, join: magnet.join } : { point };
+  }, []);
+
+  const objectDragDocument = useCallback((drag: ObjectDragState, rawPoint: ClientPoint): ChemDraftDocument => {
+    const point = objectDragMagnet(drag, rawPoint).point;
     const dx = point.x - drag.startPoint.x;
     const dy = point.y - drag.startPoint.y;
     return drag.groupObjectIds && drag.groupObjectIds.length > 1
@@ -14688,14 +14708,17 @@ export function MainWindow({
           x: drag.startObjectX + dx,
           y: drag.startObjectY + dy
         });
-  }, []);
+  }, [objectDragMagnet]);
 
   const objectDragDelta = useCallback((drag: ObjectDragState, point: ClientPoint): ClientPoint => {
     drag.moveDeltaResolver ??= documentObjectMoveDeltaResolver(drag.startDocument, drag.objectId, drag.groupObjectIds);
     return drag.moveDeltaResolver(point.x - drag.startPoint.x, point.y - drag.startPoint.y);
   }, []);
 
-  const previewObjectDrag = useCallback((drag: ObjectDragState, point: ClientPoint) => {
+  const previewObjectDrag = useCallback((drag: ObjectDragState, rawPoint: ClientPoint) => {
+    const magnet = objectDragMagnet(drag, rawPoint);
+    const point = magnet.point;
+    showArtJoinMarks(magnet.join ? [magnet.join] : []);
     markFrame("previewObjectDrag", () => {
       const previewObjectIds = graphicObjectIdsForCssDragPreview(drag);
       const delta = previewObjectIds ? { x: point.x - drag.startPoint.x, y: point.y - drag.startPoint.y }
@@ -14744,7 +14767,7 @@ export function MainWindow({
         arrowPreviewObjects
       });
     });
-  }, [objectDragDelta, objectDragDocument, scheduleObjectTransformPreview]);
+  }, [objectDragDelta, objectDragDocument, objectDragMagnet, scheduleObjectTransformPreview, showArtJoinMarks]);
 
   const graphicCornerRadiusDocumentFromDrag = useCallback((drag: GraphicCornerRadiusDragState, point: ClientPoint): ChemDraftDocument => {
     const object = findDocumentObject(drag.startDocument, drag.objectId);
@@ -14789,7 +14812,7 @@ export function MainWindow({
     drag.latestPoint = point;
     const editPoint = nativeGraphicPathEditPointFromProjectedDrag(drag.workingDocument, drag.objectId, point);
     const snap = graphicPathEditSnap(drag, editPoint);
-    setArtEndpointSnapMarks(snap.snapped ? [snap.point] : []);
+    showArtJoinMarks(snap.snapped ? [snap.point] : []);
     const nextDocument = graphicPathEditDocumentFromDrag(drag, point);
     drag.workingDocument = nextDocument;
     replacePresentDocument(nextDocument);
@@ -15094,6 +15117,7 @@ export function MainWindow({
 
   const commitObjectDrag = useCallback((drag: ObjectDragState, point: ClientPoint): boolean => {
     const moved = objectDragDocument(drag, point);
+    showArtJoinMarks([]);
     clearObjectTransformPreview(drag.pointerId);
     if (moved === drag.startDocument) {
       replacePresentDocument(drag.startDocument);
@@ -15102,7 +15126,7 @@ export function MainWindow({
 
     commitDocumentHistoryFrom(drag.startDocument, moved);
     return true;
-  }, [clearObjectTransformPreview, commitDocumentHistoryFrom, objectDragDocument, replacePresentDocument]);
+  }, [clearObjectTransformPreview, commitDocumentHistoryFrom, objectDragDocument, replacePresentDocument, showArtJoinMarks]);
 
   const commitGraphicCornerRadius = useCallback((drag: GraphicCornerRadiusDragState, point: ClientPoint): boolean => {
     const edited = graphicCornerRadiusDocumentFromDrag(drag, point);
@@ -15116,7 +15140,7 @@ export function MainWindow({
   }, [commitDocumentHistoryFrom, graphicCornerRadiusDocumentFromDrag, replacePresentDocument]);
 
   const commitGraphicPathEdit = useCallback((drag: GraphicPathEditDragState, point: ClientPoint): boolean => {
-    setArtEndpointSnapMarks([]);
+    showArtJoinMarks([]);
     const edited = drag.workingDocument === drag.startDocument
       ? graphicPathEditDocumentFromDrag(drag, point)
       : drag.workingDocument;
@@ -15712,12 +15736,13 @@ export function MainWindow({
     const drag = objectDragRef.current;
     if (drag?.pointerId === event.pointerId) {
       objectDragRef.current = null;
+      showArtJoinMarks([]);
       clearObjectTransformPreview(event.pointerId);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
     }
-  }, [clearObjectTransformPreview]);
+  }, [clearObjectTransformPreview, showArtJoinMarks]);
 
   const clearGraphicCornerRadiusDrag = useCallback((event: ObjectPointerEvent) => {
     const drag = graphicCornerRadiusDragRef.current;
@@ -15738,7 +15763,7 @@ export function MainWindow({
     const drag = graphicPathEditDragRef.current;
     if (drag?.pointerId === event.pointerId) {
       graphicPathEditDragRef.current = null;
-      setArtEndpointSnapMarks([]);
+      showArtJoinMarks([]);
       const page = pageRef.current;
       if (page?.hasPointerCapture(event.pointerId)) {
         page.releasePointerCapture(event.pointerId);

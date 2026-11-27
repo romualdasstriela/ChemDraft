@@ -3,7 +3,9 @@ import { applyPatches, type ChemDraftDocument, type GraphicObject } from "@chemd
 import {
   applyNativeArtLineToolAtPoint,
   createNewDrawingDocument,
-  nativeArtEndpointSnap
+  moveDocumentObjects,
+  nativeArtEndpointSnap,
+  nativeArtMoveMagnet
 } from "./documentWorkflow";
 
 function withLine(document: ChemDraftDocument, start: { x: number; y: number }, end: { x: number; y: number }, commandId = "tool.art.line") {
@@ -35,6 +37,43 @@ describe("joining line and arrow ends", () => {
     const { document, id } = withLine(createNewDrawingDocument(), { x: 100, y: 100 }, { x: 200, y: 100 });
     const rotated = applyPatches(document, [{ op: "updateObject", objectId: id, changes: { rotation: 30 } as Partial<GraphicObject> }]);
     expect(nativeArtEndpointSnap(rotated, { x: 200, y: 100 }, 6)).toBeUndefined();
+  });
+
+  it("pulls a moved line's end onto another line's end, like a magnet", () => {
+    const first = withLine(createNewDrawingDocument(), { x: 100, y: 100 }, { x: 200, y: 100 });
+    const second = withLine(first.document, { x: 300, y: 300 }, { x: 400, y: 300 });
+    // Moving the second line by (-97, -203) leaves its start 3 px from the first line's end (200,100).
+    const magnet = nativeArtMoveMagnet(second.document, [second.id], -97, -203, 6)!;
+    expect(magnet.join).toEqual({ x: 200, y: 100 });
+    expect(magnet.offset.x).toBeCloseTo(-3, 6);
+    expect(magnet.offset.y).toBeCloseTo(3, 6);
+    // Applying the nudged move, the ends touch exactly; the lines stay two objects.
+    const moved = moveDocumentObjects(second.document, [second.id], -97 + magnet.offset.x, -203 + magnet.offset.y);
+    const lines = moved.pages[0]!.objects.filter((object): object is GraphicObject => object.type === "graphic");
+    expect(lines).toHaveLength(2);
+    expect(lines.find((line) => line.id === second.id)!.data.lineStart).toEqual({ x: 200, y: 100 });
+  });
+
+  it("lands a moved line's end anywhere along another line, and another line's end on a moved line's side", () => {
+    const first = withLine(createNewDrawingDocument(), { x: 100, y: 100 }, { x: 200, y: 100 });
+    const second = withLine(first.document, { x: 150, y: 300 }, { x: 150, y: 400 });
+    // The second line's top (150,300) moved up by 196 sits 4 px below the middle of the first line.
+    const tee = nativeArtMoveMagnet(second.document, [second.id], 0, -196, 6)!;
+    expect(tee.join).toEqual({ x: 150, y: 100 });
+    expect(tee.offset).toEqual({ x: 0, y: -4 });
+    // Moving the first line instead: the second line's top end lands on the moved line's side.
+    const side = nativeArtMoveMagnet(second.document, [first.id], 0, 197, 6)!;
+    expect(side.join).toEqual({ x: 150, y: 300 });
+    expect(side.offset.y).toBeCloseTo(3, 6);
+  });
+
+  it("prefers joining end to end over landing on a side, and leaves far lines alone", () => {
+    const first = withLine(createNewDrawingDocument(), { x: 100, y: 100 }, { x: 200, y: 100 });
+    const second = withLine(first.document, { x: 400, y: 400 }, { x: 500, y: 400 });
+    // The moved start is 2 px from the side point (197,100) but 3.6 px from the end (200,100).
+    const magnet = nativeArtMoveMagnet(second.document, [second.id], 197 - 400, 102 - 400, 6)!;
+    expect(magnet.join).toEqual({ x: 200, y: 100 });
+    expect(nativeArtMoveMagnet(second.document, [second.id], 0, 0, 6)).toBeUndefined();
   });
 
   it("draws a new line from a snapped end so the two touch exactly", () => {

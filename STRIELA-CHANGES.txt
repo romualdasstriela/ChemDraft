@@ -450,6 +450,11 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      button is down. The same works when dragging an end handle of an existing line or arrow.
    - With the line or arrow tool, pressing on an existing line still picks that line up (to
      reshape or move it), so start the new line in empty space and finish it at the other end.
+   - Moving lines and arrows attract like magnets: when an end of a moved line comes within
+     8 screen pixels of another line, arrow or arc (its end, or anywhere along a straight
+     one), or another line's end comes that close to the moved line, the move is nudged so
+     they touch exactly, with the same small circle at the join. End-to-end joins win over
+     landing on a side. They stay separate objects.
 
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
@@ -535,3 +540,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Save Style... in Drawn Structure Settings; Default style menu in Preferences > Style
 (next)  Drawn Structure Settings: Save Style in the tab column; default values with nothing selected
 (next)  Line and arrow ends snap to other ends, with a circle marking the join
+(next)  Moved lines and arrows snap onto nearby lines like magnets

@@ -2538,6 +2538,85 @@ export function nativeArtEndpointSnap(
   return best?.point;
 }
 
+/** A line-family graphic's join geometry: its two ends, and whether the path between is straight. */
+function artJoinGeometry(object: DocumentObject): { start: PagePoint; end: PagePoint; straight: boolean } | undefined {
+  if (object.type !== "graphic" || Math.abs(object.rotation ?? 0) > 1e-9) return undefined;
+  const points = graphicPathEditPoints(object);
+  if (!points) return undefined;
+  return { start: points.start, end: points.end, straight: points.pathKind === "line" || points.pathKind === "wavy" };
+}
+
+function nearestPointOnSegment(point: PagePoint, a: PagePoint, b: PagePoint): PagePoint {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared <= 1e-12 ? 0 : clamp(((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared, 0, 1);
+  return { x: a.x + dx * t, y: a.y + dy * t };
+}
+
+export interface NativeArtMoveMagnet {
+  /** Added to the move so the lines touch exactly. */
+  offset: PagePoint;
+  /** Where they touch. */
+  join: PagePoint;
+}
+
+/**
+ * Lines and arrows being moved attract like magnets: when an end of a moved line comes within
+ * `tolerance` of another line, arrow or arc — its end or anywhere along a straight one — or an end
+ * of another comes that close to a moved straight line, the move is nudged so they touch exactly.
+ * The objects stay separate; only the move changes. End-to-end joins are preferred over landing on
+ * a line's side when both are in reach. `dx`/`dy` is the move so far; undefined when nothing is close.
+ */
+export function nativeArtMoveMagnet(
+  document: ChemDraftDocument,
+  movingObjectIds: readonly string[],
+  dx: number,
+  dy: number,
+  tolerance: number
+): NativeArtMoveMagnet | undefined {
+  const moving = new Set(movingObjectIds);
+  const objects = selectionPage(document).objects;
+  const shift = (point: PagePoint) => ({ x: point.x + dx, y: point.y + dy });
+  const moved = objects.filter((object) => moving.has(object.id)).flatMap((object) => {
+    const geometry = artJoinGeometry(object);
+    return geometry ? [{ ...geometry, start: shift(geometry.start), end: shift(geometry.end) }] : [];
+  });
+  if (moved.length === 0) return undefined;
+  const others = objects.filter((object) => !moving.has(object.id)).flatMap((object) => artJoinGeometry(object) ?? []);
+
+  let best: { offset: PagePoint; join: PagePoint; score: number } | undefined;
+  const consider = (from: PagePoint, to: PagePoint, endToEnd: boolean) => {
+    const distance = Math.hypot(to.x - from.x, to.y - from.y);
+    if (distance > tolerance) return;
+    // An end meeting an end wins over an end meeting a side, unless the side is much closer.
+    const score = endToEnd ? distance * 0.5 : distance;
+    if (!best || score < best.score) {
+      best = { offset: { x: to.x - from.x, y: to.y - from.y }, join: { x: to.x, y: to.y }, score };
+    }
+  };
+  for (const line of moved) {
+    for (const end of [line.start, line.end]) {
+      for (const other of others) {
+        consider(end, other.start, true);
+        consider(end, other.end, true);
+        if (other.straight) consider(end, nearestPointOnSegment(end, other.start, other.end), false);
+      }
+    }
+  }
+  // Another line's end landing on the side of a moved straight line.
+  for (const other of others) {
+    for (const end of [other.start, other.end]) {
+      for (const line of moved) {
+        if (!line.straight) continue;
+        const onMoved = nearestPointOnSegment(end, line.start, line.end);
+        consider(onMoved, end, false);
+      }
+    }
+  }
+  const found = best as { offset: PagePoint; join: PagePoint; score: number } | undefined;
+  return found ? { offset: found.offset, join: found.join } : undefined;
+}
+
 export function nativeGraphicPathEditPoints(object: GraphicObject): NativeGraphicPathEditPoints | undefined {
   return graphicPathEditPoints(object);
 }
