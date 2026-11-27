@@ -444,6 +444,13 @@ Every push to this branch builds a "ChemDraft (dev)" Windows installer in GitHub
      CH2 in a caption matches R2 on a structure: on the page, while editing and in every export.
      A line after one ending in a subscript keeps its normal spacing.
 
+17j. Joining lines and arrows
+   - A line or arrow drawn so that its end comes within 8 screen pixels of another line's,
+     arrow's or arc's end joins it exactly, and a small circle marks the join while the mouse
+     button is down. The same works when dragging an end handle of an existing line or arrow.
+   - With the line or arrow tool, pressing on an existing line still picks that line up (to
+     reshape or move it), so start the new line in empty space and finish it at the other end.
+
 18. Downloads for other users
    - Pushing a tag named ChemDraft_RS-v<date> (for example ChemDraft_RS-v2026.11.16) builds the Windows
      installer and publishes it as a pre-release on this fork's Releases page, with
@@ -527,3 +534,4 @@ f9c1489 Draw bare letter labels without the ? query mark
 (next)  Preferences > Style shows the default style in cm; Drawn Structure Settings in cm and pt
 (next)  Save Style... in Drawn Structure Settings; Default style menu in Preferences > Style
 (next)  Drawn Structure Settings: Save Style in the tab column; default values with nothing selected
+(next)  Line and arrow ends snap to other ends, with a circle marking the join

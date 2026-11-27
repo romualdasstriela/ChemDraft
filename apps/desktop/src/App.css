@@ -5786,6 +5786,21 @@ textarea:focus-visible,
   outline-offset: 3px;
 }
 
+/* Where a line or arrow being drawn joins another's end exactly: a small ring, the same size at
+   every zoom, centred on the joined point. */
+.art-endpoint-snap-mark {
+  position: absolute;
+  z-index: 101;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--cd-accent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--cd-accent) 18%, transparent);
+  pointer-events: none;
+}
+
 .selection-marquee {
   position: absolute;
   z-index: 100;

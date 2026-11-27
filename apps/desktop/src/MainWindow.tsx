@@ -101,6 +101,7 @@ import {
 } from "@chemdraft/chem-core";
 import { APP_NEW_STRUCTURE_STYLE_PRESET, APP_NEW_TEXT_STYLE } from "./appStyle";
 import { DEFAULT_STYLE_STORAGE_KEY, STYLE_LIBRARY_STORAGE_KEY, resolveDefaultStylePreset, saveStyleToLibrary } from "./styleLibrary";
+import { ART_ENDPOINT_SNAP_SCREEN_PX, nativeArtEndpointSnap } from "./documentWorkflow";
 import { abbreviationDefinitionFromNickname, nicknameGraphFromDrawing, tryNativeSingleBondGraphSmiles } from "@chemdraft/document-workflow-core";
 import { atomLabelDraftDocumentUnchanged, createAtomLabelDraftRollback, documentOwnsAtomLabelDraft, recordAtomLabelDraftRollback, restoreAtomLabelDraft, type AtomLabelDraftState } from "./atomLabelDraft";
 import type { EditorSaveResult } from "@chemdraft/editor-adapter";
@@ -1056,6 +1057,8 @@ type NativePlacementDragState = {
   /** Pointer path (page coords) accumulated across the drag for the flexible chain. */
   chainPath?: ClientPoint[];
   artLineCommandId?: string;
+  /** The line or arrow's tail was pressed at another's end and starts exactly there. */
+  artLineStartSnapped?: boolean;
   dragging: boolean;
   altKey: boolean;
 };
@@ -1696,7 +1699,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "11.27.10.30-opus";
+const CURRENT_BUILD_STAMP = "11.27.13.50-opus";
 export { APP_NEW_STRUCTURE_STYLE_PRESET, APP_NEW_TEXT_STYLE };
 
 /** Called once when the app's document window loads (App.tsx), before anything is drawn. */
@@ -2617,6 +2620,9 @@ export function MainWindow({
   const [freeformNativeBond, setFreeformNativeBond] = useState<FreeformNativeBondPreview | undefined>();
   const [nativeDoubleBondSidePreview, setNativeDoubleBondSidePreview] = useState<NativeDoubleBondSidePreview | undefined>();
   const [graphicCornerRadiusReadout, setGraphicCornerRadiusReadout] = useState<GraphicCornerRadiusReadoutState | undefined>();
+  // Where a line or arrow being drawn or edited joins another's end exactly: a small circle shows
+  // each such point while the pointer is down.
+  const [artEndpointSnapMarks, setArtEndpointSnapMarks] = useState<readonly ClientPoint[]>([]);
   const [objectRotateReadout, setObjectRotateReadout] = useState<ObjectRotateReadoutState | undefined>();
   const [projectedPlaneTiltReadout, setProjectedPlaneTiltReadout] = useState<ProjectedPlaneTiltReadoutState | undefined>();
   const [rotationInput, setRotationInput] = useState<RotationInputState | undefined>();
@@ -12833,6 +12839,7 @@ export function MainWindow({
       return;
     }
     nativePlacementDragRef.current = null;
+    setArtEndpointSnapMarks([]);
     releaseGesturePointer(drag.pointerId);
     replacePresentDocument(drag.startDocument);
   }, [releaseGesturePointer, replacePresentDocument]);
@@ -14038,6 +14045,8 @@ export function MainWindow({
       | { kind: "art-line"; commandId: string }
   ): boolean => {
     const startDocument = documentRef.current;
+    // A line or arrow pressed at another's end starts exactly there.
+    const artLineStart = placement.kind === "art-line" ? snapArtEndpoint(startDocument, point) : undefined;
     const placementDocument = placement.kind === "template"
       ? applyNativeTemplateToolAtPoint(startDocument, point, placement.templateId)
       : placement.kind === "arrow"
@@ -14045,7 +14054,7 @@ export function MainWindow({
         : placement.kind === "chain"
           ? applyNativeChainTool(startDocument, point, undefined, placement.anchor)
           : placement.kind === "art-line"
-            ? applyNativeArtLineToolDefaultAtPoint(startDocument, point, placement.commandId)
+            ? applyNativeArtLineToolDefaultAtPoint(startDocument, artLineStart?.point ?? point, placement.commandId)
             : withActiveBondToolOrder(
               startDocument,
               applySingleBondToolAtPoint(startDocument, point, {
@@ -14067,8 +14076,9 @@ export function MainWindow({
       startDocument,
       placementDocument,
       objectId,
-      startPoint: point,
+      startPoint: artLineStart?.point ?? point,
       latestPoint: point,
+      artLineStartSnapped: artLineStart?.snapped === true,
       bondStyle: placement.kind === "single-bond" ? placement.bondStyle : undefined,
       templateId: placement.kind === "template" ? placement.templateId : undefined,
       arrowKind: placement.kind === "arrow" ? placement.arrowKind : undefined,
@@ -14443,10 +14453,22 @@ export function MainWindow({
     const drag = nativePlacementDragRef.current;
     if (drag?.pointerId === event.pointerId) {
       nativePlacementDragRef.current = null;
+      setArtEndpointSnapMarks([]);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
     }
+  }, []);
+
+  /** `point`, or the end of another line or arrow within snapping reach of it (8 screen px). */
+  const snapArtEndpoint = useCallback((
+    document: ChemDraftDocument,
+    point: ClientPoint,
+    excludeObjectIds?: ReadonlySet<string>
+  ): { point: ClientPoint; snapped: boolean } => {
+    const tolerance = ART_ENDPOINT_SNAP_SCREEN_PX / Math.max(0.05, viewportRef.current.scale);
+    const snapped = nativeArtEndpointSnap(document, point, tolerance, excludeObjectIds);
+    return snapped ? { point: snapped, snapped: true } : { point, snapped: false };
   }, []);
 
   const nativePlacementDocumentFromDrag = useCallback((
@@ -14463,7 +14485,9 @@ export function MainWindow({
     if (drag.kind === "art-line" && drag.artLineCommandId) {
       // Art lines/arrows regenerate from the start document: the press point is the tail and the
       // pointer sets the head, so length and angle follow the drag (identical to ChemDraw's arrow).
-      return applyNativeArtLineToolAtPoint(drag.startDocument, drag.startPoint, point, drag.artLineCommandId);
+      // A head released at another line's end joins it exactly.
+      const head = snapArtEndpoint(drag.startDocument, point).point;
+      return applyNativeArtLineToolAtPoint(drag.startDocument, drag.startPoint, head, drag.artLineCommandId);
     }
     if (drag.kind === "single-bond") {
       return aimNativeSingleBondPlacement(drag.placementDocument, drag.objectId, drag.startPoint, point, drag.altKey);
@@ -14501,14 +14525,20 @@ export function MainWindow({
       drag.startPoint,
       snapPlacementDegrees(nativePlacementRotationDegrees(drag.startPoint, point), drag.altKey)
     );
-  }, []);
+  }, [snapArtEndpoint]);
 
   const previewNativePlacementDrag = useCallback((drag: NativePlacementDragState, point: ClientPoint) => {
     drag.latestPoint = point;
+    if (drag.kind === "art-line") {
+      // Mark each end that joins another line exactly: the tail (snapped on press) and the head.
+      const head = snapArtEndpoint(drag.startDocument, point);
+      setArtEndpointSnapMarks([...(drag.artLineStartSnapped ? [drag.startPoint] : []), ...(head.snapped ? [head.point] : [])]);
+    }
     replacePresentDocument(nativePlacementDocumentFromDrag(drag, point));
-  }, [nativePlacementDocumentFromDrag, replacePresentDocument]);
+  }, [nativePlacementDocumentFromDrag, replacePresentDocument, snapArtEndpoint]);
 
   const commitNativePlacementDrag = useCallback((drag: NativePlacementDragState, releasePoint: ClientPoint): boolean => {
+    setArtEndpointSnapMarks([]);
     const point = drag.kind === "arrow" || drag.kind === "art-line" ? releasePoint : drag.latestPoint;
     const placed = drag.dragging
       ? nativePlacementDocumentFromDrag(drag, point, { preview: false })
@@ -14742,14 +14772,24 @@ export function MainWindow({
     replacePresentDocument(nextDocument);
   }, [graphicCornerRadiusDocumentFromDrag, replacePresentDocument]);
 
+  // An end handle dragged onto another line's end joins it exactly (the line's own other end is
+  // left out). Other handles (a bend, a node) move freely.
+  const graphicPathEditSnap = useCallback((drag: GraphicPathEditDragState, editPoint: ClientPoint) =>
+    drag.handle === "start" || drag.handle === "end"
+      ? snapArtEndpoint(drag.workingDocument, editPoint, new Set([drag.objectId]))
+      : { point: editPoint, snapped: false }, [snapArtEndpoint]);
+
   const graphicPathEditDocumentFromDrag = useCallback((drag: GraphicPathEditDragState, point: ClientPoint): ChemDraftDocument => {
     const preparedDocument = prepareGraphicPathForDirectEdit(drag.workingDocument, drag.objectId);
     const editPoint = nativeGraphicPathEditPointFromProjectedDrag(preparedDocument, drag.objectId, point);
-    return updateNativeGraphicPathHandle(preparedDocument, drag.objectId, drag.handle, editPoint);
-  }, []);
+    return updateNativeGraphicPathHandle(preparedDocument, drag.objectId, drag.handle, graphicPathEditSnap(drag, editPoint).point);
+  }, [graphicPathEditSnap]);
 
   const previewGraphicPathEdit = useCallback((drag: GraphicPathEditDragState, point: ClientPoint) => {
     drag.latestPoint = point;
+    const editPoint = nativeGraphicPathEditPointFromProjectedDrag(drag.workingDocument, drag.objectId, point);
+    const snap = graphicPathEditSnap(drag, editPoint);
+    setArtEndpointSnapMarks(snap.snapped ? [snap.point] : []);
     const nextDocument = graphicPathEditDocumentFromDrag(drag, point);
     drag.workingDocument = nextDocument;
     replacePresentDocument(nextDocument);
@@ -15076,6 +15116,7 @@ export function MainWindow({
   }, [commitDocumentHistoryFrom, graphicCornerRadiusDocumentFromDrag, replacePresentDocument]);
 
   const commitGraphicPathEdit = useCallback((drag: GraphicPathEditDragState, point: ClientPoint): boolean => {
+    setArtEndpointSnapMarks([]);
     const edited = drag.workingDocument === drag.startDocument
       ? graphicPathEditDocumentFromDrag(drag, point)
       : drag.workingDocument;
@@ -15697,6 +15738,7 @@ export function MainWindow({
     const drag = graphicPathEditDragRef.current;
     if (drag?.pointerId === event.pointerId) {
       graphicPathEditDragRef.current = null;
+      setArtEndpointSnapMarks([]);
       const page = pageRef.current;
       if (page?.hasPointerCapture(event.pointerId)) {
         page.releasePointerCapture(event.pointerId);
@@ -21025,6 +21067,7 @@ export function MainWindow({
                     pageHeight={activePage.height}
                   />
                 ) : null}
+                {artEndpointSnapMarks.length > 0 ? <ArtEndpointSnapOverlay points={artEndpointSnapMarks} /> : null}
                 {selectionMarquee ? (
                   <SelectionMarqueeOverlay
                     startPoint={selectionMarquee.startPoint}
@@ -24462,6 +24505,26 @@ function NativeTemplateGhostOverlay({
         ) : null;
       })}
     </svg>
+  );
+}
+
+/** A small circle on each point where a line or arrow being drawn joins another's end exactly. */
+export function ArtEndpointSnapOverlay({ points }: { points: readonly ClientPoint[] }) {
+  return (
+    <>
+      {points.map((point, index) => (
+        <div
+          key={`${index}-${point.x}-${point.y}`}
+          className="art-endpoint-snap-mark"
+          data-art-endpoint-snap="true"
+          aria-hidden="true"
+          style={{
+            left: `calc(${point.x}px * var(--page-scale))`,
+            top: `calc(${point.y}px * var(--page-scale))`
+          }}
+        />
+      ))}
+    </>
   );
 }
 

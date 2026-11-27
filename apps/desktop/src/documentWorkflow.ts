@@ -2508,6 +2508,36 @@ export function applyNativeArtLineToolDefaultAtPoint(
   );
 }
 
+/** How near (in screen pixels) a line or arrow end must come to another's to join it exactly. */
+export const ART_ENDPOINT_SNAP_SCREEN_PX = 8;
+
+/**
+ * The end of another line, arrow or arc within `tolerance` page units of `point`, to join it
+ * exactly: drawing a new line from or to it, or dragging an end handle onto it. Unrotated
+ * open-stroke graphics only (their end points are page points); `excludeObjectIds` leaves out the
+ * graphic being edited. Undefined when nothing is that close.
+ */
+export function nativeArtEndpointSnap(
+  document: ChemDraftDocument,
+  point: PagePoint,
+  tolerance: number,
+  excludeObjectIds: ReadonlySet<string> = new Set()
+): PagePoint | undefined {
+  let best: { point: PagePoint; distance: number } | undefined;
+  for (const object of selectionPage(document).objects) {
+    if (object.type !== "graphic" || excludeObjectIds.has(object.id) || Math.abs(object.rotation ?? 0) > 1e-9) continue;
+    const points = graphicPathEditPoints(object);
+    if (!points) continue;
+    for (const end of [points.start, points.end]) {
+      const gap = Math.hypot(end.x - point.x, end.y - point.y);
+      if (gap <= tolerance && (!best || gap < best.distance)) {
+        best = { point: { x: end.x, y: end.y }, distance: gap };
+      }
+    }
+  }
+  return best?.point;
+}
+
 export function nativeGraphicPathEditPoints(object: GraphicObject): NativeGraphicPathEditPoints | undefined {
   return graphicPathEditPoints(object);
 }
